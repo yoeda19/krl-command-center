@@ -1,0 +1,213 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ================================================================
+   CSS DESIGN TOKENS — KRL Parts Command Center
+   Theme: Clean White Professional (Enterprise SaaS)
+   ================================================================ */
+
+/* ── Light Theme (Default) ── */
+:root, .light {
+  --color-background: #eceef4;
+  --color-background-metallic: #f4f6fa;
+  --color-surface: #f9fbfd;
+  --color-surface-dim: #e4e8f1;
+  --color-surface-bright: #ffffff;
+  --color-surface-container-lowest: #f3f5fa;
+  --color-surface-container-low: #edf0f6;
+  --color-surface-container: #e3e7f2;
+  --color-surface-container-high: #d8dee9;
+  --color-surface-container-highest: #cbd5e1;
+  --color-surface-raised: #f9fbfd;
+  --color-on-surface: #0f1623;
+  --color-on-surface-variant: #4b5675;
+  --color-outline: #8a93ab;
+  --color-outline-variant: #cbd5e1;
+  --color-steel-border: #cbd5e1;
+  --color-primary: #1d4ed8;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #d8dee9;
+  --color-on-primary-container: #0f172a;
+  --color-secondary: #2563eb;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #e2e8f0;
+  --color-on-secondary-container: #1e293b;
+  --color-tertiary: #0891b2;
+  --color-on-tertiary: #ffffff;
+  --color-error: #dc2626;
+  --color-on-error: #ffffff;
+  --color-error-container: #fee2e2;
+  --color-on-error-container: #7f1d1d;
+  --color-inverse-surface: #1e2433;
+  --color-inverse-on-surface: #f0f2f7;
+  --color-on-background: #0f1623;
+  --color-led-red: #ef4444;
+  --color-led-amber: #f59e0b;
+  --color-led-green: #16a34a;
+}
+
+/* ── Dark Theme ── */
+.dark {
+  --color-background: #0d1117;
+  --color-background-metallic: #161b22;
+  --color-surface: #0d1117;
+  --color-surface-dim: #0d1117;
+  --color-surface-bright: #21262d;
+  --color-surface-container-lowest: #090d12;
+  --color-surface-container-low: #13181f;
+  --color-surface-container: #161b22;
+  --color-surface-container-high: #1c2230;
+  --color-surface-container-highest: #21293a;
+  --color-surface-raised: #161b22;
+  --color-on-surface: #e6edf3;
+  --color-on-surface-variant: #8b949e;
+  --color-outline: #484f58;
+  --color-outline-variant: #2d333b;
+  --color-steel-border: #21262d;
+  --color-primary: #4f9cf9;
+  --color-on-primary: #0d1117;
+  --color-primary-container: #0d2244;
+  --color-on-primary-container: #93c5fd;
+  --color-secondary: #4f9cf9;
+  --color-on-secondary: #0d1117;
+  --color-secondary-container: #0d2244;
+  --color-on-secondary-container: #93c5fd;
+  --color-tertiary: #22d3ee;
+  --color-on-tertiary: #0d1117;
+  --color-error: #f85149;
+  --color-on-error: #0d1117;
+  --color-error-container: #3d0c0c;
+  --color-on-error-container: #fca5a5;
+  --color-inverse-surface: #e6edf3;
+  --color-inverse-on-surface: #0d1117;
+  --color-on-background: #e6edf3;
+  --color-led-red: #f85149;
+  --color-led-amber: #e3b341;
+  --color-led-green: #3fb950;
+}
+
+
+/* ================================================================
+   BASE STYLES
+   ================================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-on-background);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* ================================================================
+   COMPONENT CLASSES
+   ================================================================ */
+
+.led-indicator {
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.led-red {
+  background-color: var(--color-led-red);
+  box-shadow: 0 0 8px var(--color-led-red), 0 0 16px rgba(255,68,68,0.25);
+}
+.led-amber {
+  background-color: var(--color-led-amber);
+  box-shadow: 0 0 8px var(--color-led-amber), 0 0 16px rgba(255,191,0,0.25);
+}
+.led-green {
+  background-color: var(--color-led-green);
+  box-shadow: 0 0 8px var(--color-led-green), 0 0 16px rgba(0,255,127,0.25);
+}
+
+.tactile-card {
+  background-color: var(--color-surface-raised);
+  border: 1px solid var(--color-steel-border);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  transition: all 0.2s ease;
+}
+.tactile-card:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.skeuomorphic-btn {
+  background-color: var(--color-on-surface);
+  color: var(--color-background);
+  transition: all 0.15s ease;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.skeuomorphic-btn:active {
+  transform: translateY(0px);
+  opacity: 0.95;
+}
+.skeuomorphic-btn:hover {
+  opacity: 0.9;
+}
+
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-track { background: var(--color-background); }
+::-webkit-scrollbar-thumb { background: var(--color-steel-border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-secondary); }
+
+.sidebar-transition { transition: width 0.28s cubic-bezier(0.4,0,0.2,1); }
+.content-transition { transition: margin-left 0.28s cubic-bezier(0.4,0,0.2,1); }
+
+.page-enter { animation: pageEnter 0.3s ease-out; }
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.data-table tbody tr {
+  border-bottom: 1px solid var(--color-steel-border);
+  transition: background-color 0.12s;
+}
+.data-table tbody tr:hover { background-color: var(--color-surface-container-high) !important; }
+
+.badge-kritis { background-color: rgba(220,38,38,0.12); border: 1px solid rgba(220,38,38,0.35); color: var(--color-led-red); }
+.badge-waspada { background-color: rgba(217,119,6,0.12); border: 1px solid rgba(217,119,6,0.35); color: var(--color-led-amber); }
+.badge-aman { background-color: rgba(22,163,74,0.12); border: 1px solid rgba(22,163,74,0.35); color: var(--color-led-green); }
+
+.nav-active {
+  border-left: 3px solid var(--color-on-surface);
+  background-color: var(--color-surface-container-high);
+  color: var(--color-on-surface);
+  font-weight: 700;
+}
+.nav-inactive {
+  border-left: 3px solid transparent;
+  color: var(--color-on-surface-variant);
+}
+.nav-inactive:hover {
+  background-color: var(--color-surface-container);
+  color: var(--color-on-surface);
+}
+
+/* Noise texture overlay — dark theme only */
+.dark body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--color-secondary) !important;
+  box-shadow: 0 0 0 2px rgba(233,195,73,0.15);
+}
+.light input:focus, .light select:focus, .light textarea:focus {
+  box-shadow: 0 0 0 2px rgba(53,122,189,0.15);
+}
+
+::selection { background-color: var(--color-secondary); color: var(--color-on-secondary); }
