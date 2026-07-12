@@ -38,7 +38,7 @@ export default function TopBar({ collapsed, theme, onThemeToggle, currentPath }:
       {/* Left */}
       <div className="flex items-center gap-3">
         <h2 className="text-sm font-bold tracking-[0.12em] uppercase" style={{ color: 'var(--color-on-surface)' }}>
-          KRL Parts Command Center
+          PRISMA
         </h2>
         {pageTitle && (
           <span

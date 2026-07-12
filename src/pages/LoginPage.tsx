@@ -94,7 +94,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               <rect x="9" y="17" width="18" height="2.5" rx="1.25" fill="white" opacity="0.5"/>
               <rect x="9" y="23" width="18" height="2.5" rx="1.25" fill="white" opacity="0.5"/>
             </svg>
-            <span className="font-black text-base" style={{ color: '#1a1f2e' }}>KRL Command Center</span>
+            <span className="font-black text-base" style={{ color: '#1a1f2e' }}>PRISMA</span>
           </div>
 
           <h2 className="text-2xl font-black mb-1" style={{ color: '#1a1f2e' }}>Masuk ke Sistem</h2>
