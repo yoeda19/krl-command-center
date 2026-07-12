@@ -2,9 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import PageWrapper from '../components/layout/PageWrapper';
 import ExportButton from '../components/ui/ExportButton';
 import ReactECharts from 'echarts-for-react';
-import { getCriticalStockData } from '../services/supabaseService';
+import { getCriticalStockData, getMaintenanceBomConfig } from '../services/supabaseService';
 import { supabase } from '../lib/supabaseClient';
-import type { CriticalStockItem } from '../types';
+import type { CriticalStockItem, MaintenanceBomConfig } from '../types';
 
 interface AnomalyItem {
   nomor_material: string;
@@ -75,13 +75,16 @@ export default function AnomalyStockPage() {
   const [showDeviation, setShowDeviation] = useState(false);
   const [chartMode, setChartMode] = useState<'line' | 'bar'>('line');
   const [selectedWarehouse, setSelectedWarehouse] = useState<string>('SEMUA');
+  const [isChartFullScreen, setIsChartFullScreen] = useState(false);
   const [tolerancePlus, setTolerancePlus] = useState<number>(15);
   const [toleranceMinus, setToleranceMinus] = useState<number>(15);
 
   // Transaction history modal states
   const [selectedTxMonth, setSelectedTxMonth] = useState<MonthRangeItem | null>(null);
-  const [txModalData, setTxModalData] = useState<{ tanggal: string; qty: number; gudang: string; order_no: string; description: string }[]>([]);
+  const [txModalData, setTxModalData] = useState<{ tanggal: string; qty: number; gudang: string; order_no: string; description: string; status: 'AMAN' | 'ANOMALI'; statusReason?: string }[]>([]);
   const [loadingTxModal, setLoadingTxModal] = useState(false);
+  const [modalFilter, setModalFilter] = useState<'SEMUA' | 'ANOMALI' | 'AMAN'>('SEMUA');
+  const [bomList, setBomList] = useState<MaintenanceBomConfig[]>([]);
 
   // Deteksi tema light/dark secara reaktif
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -108,8 +111,12 @@ export default function AnomalyStockPage() {
   useEffect(() => {
     async function load() {
       try {
-        const cData = await getCriticalStockData();
+        const [cData, bData] = await Promise.all([
+          getCriticalStockData(),
+          getMaintenanceBomConfig()
+        ]);
         setCriticalData(cData);
+        setBomList(bData);
         if (cData.length > 0 && !selectedMaterial) {
           setSelectedMaterial(cData[0].nomor_material);
         }
@@ -484,7 +491,9 @@ export default function AnomalyStockPage() {
       }
     }
     
-    // 3. Map
+    // 3. Map with BOM verification rules
+    const materialBoms = bomList.filter(b => b.nomor_material === referenceItem.nomor_material);
+
     const mapped = hist.map(h => {
       const GUDANG_LABEL_MAP: Record<string, string> = {
         'C009': 'OH Manggarai (C009)',
@@ -494,24 +503,118 @@ export default function AnomalyStockPage() {
         'C008': 'Depo Bogor (C008)',
         'C013': 'Gudang Pusat (C013)',
       };
+      
+      const description = h.order_no ? (ordersMap.get(h.order_no) || `Pemeliharaan ${referenceItem.nama_material}`) : '—';
+      
+      // Determine status from BOM configuration
+      let status: 'AMAN' | 'ANOMALI' = 'AMAN';
+      let statusReason = '';
+
+      // Detect car type: TC, M1, M2, T6, T
+      let detectedCarType: 'TC' | 'M1' | 'M2' | 'T6' | 'T' | null = null;
+      if (/\bM1\b/i.test(description)) detectedCarType = 'M1';
+      else if (/\bM2\b/i.test(description)) detectedCarType = 'M2';
+      else if (/\bTC\b/i.test(description)) detectedCarType = 'TC';
+      else if (/\bT6\b/i.test(description)) detectedCarType = 'T6';
+      else if (/\bT\b/i.test(description)) detectedCarType = 'T';
+
+      // Detect maintenance type from description
+      let detectedType = null;
+      const typeMatch = description.match(/\b(P1|P3|P6|P12|P24|P48)\b/i);
+      if (typeMatch) detectedType = typeMatch[1].toUpperCase();
+
+      let activeBom = null;
+      if (detectedType) {
+        activeBom = materialBoms.find(b => b.tipe_perawatan.toUpperCase() === detectedType);
+      }
+      if (!activeBom && materialBoms.length > 0) {
+        activeBom = materialBoms[0];
+      }
+
+      if (detectedCarType) {
+        if (activeBom) {
+          let limit = 0;
+          if (detectedCarType === 'M1') limit = activeBom.qty_m1 ?? 0;
+          else if (detectedCarType === 'M2') limit = activeBom.qty_m2 ?? 0;
+          else if (detectedCarType === 'TC') limit = activeBom.qty_tc ?? 0;
+          else if (detectedCarType === 'T6') limit = activeBom.qty_t6 ?? 0;
+          else if (detectedCarType === 'T') limit = activeBom.qty_t ?? 0;
+
+          if (limit > 0) {
+            if (h.qty > limit) {
+              status = 'ANOMALI';
+              statusReason = `Qty penyerapan (${h.qty}) melebihi standar BOM ${detectedCarType} (${limit} unit)`;
+            } else {
+              status = 'AMAN';
+            }
+          } else {
+            status = 'ANOMALI';
+            statusReason = `Jenis kereta ${detectedCarType} tidak dialokasikan di BOM`;
+          }
+        } else {
+          // No BOM configuration found for this material
+          if (h.qty > 32) {
+            status = 'ANOMALI';
+            statusReason = `Qty penyerapan (${h.qty}) melebihi default standar (32 unit)`;
+          } else {
+            status = 'AMAN';
+          }
+        }
+      } else {
+        // No car type detected in description.
+        // Compare against maximum configured qty of any car type in BOM, fallback to 32.
+        let limit = 32;
+        if (activeBom) {
+          limit = Math.max(
+            activeBom.qty_standar ?? 0,
+            activeBom.qty_m1 ?? 0,
+            activeBom.qty_m2 ?? 0,
+            activeBom.qty_tc ?? 0,
+            activeBom.qty_t6 ?? 0,
+            activeBom.qty_t ?? 0
+          );
+          if (limit === 0) limit = 32;
+        }
+        if (h.qty > limit) {
+          status = 'ANOMALI';
+          statusReason = `Qty penyerapan (${h.qty}) melebihi batas maksimum BOM (${limit} unit)`;
+        } else {
+          status = 'AMAN';
+        }
+      }
+
       return {
         tanggal: h.tanggal || '—',
         qty: h.qty,
         gudang: GUDANG_LABEL_MAP[h.gudang || ''] || h.gudang || '—',
         order_no: h.order_no || '—',
-        description: h.order_no ? (ordersMap.get(h.order_no) || `Pemeliharaan ${referenceItem.nama_material}`) : '—',
+        description,
+        status,
+        statusReason
       };
     });
     
     setTxModalData(mapped);
+    setModalFilter('SEMUA');
     setLoadingTxModal(false);
   };
+
+  const filteredTxData = useMemo(() => {
+    if (modalFilter === 'AMAN') return txModalData.filter(d => d.status === 'AMAN');
+    if (modalFilter === 'ANOMALI') return txModalData.filter(d => d.status === 'ANOMALI');
+    return txModalData;
+  }, [txModalData, modalFilter]);
 
   if (loading) {
     return (
       <PageWrapper fullWidth>
-        <div className="flex items-center justify-center h-96">
-          <span className="text-sm font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>Memuat analisis deviasi & proyeksi...</span>
+        <div className="flex flex-col items-center justify-center min-h-[70vh] gap-4">
+          <div className="w-16 h-16 animate-pulse">
+            <img src="/logo.svg" alt="PRISMA Logo" className="w-full h-full object-contain" />
+          </div>
+          <span className="text-sm font-medium animate-pulse" style={{ color: 'var(--color-on-surface-variant)' }}>
+            Memuat data...
+          </span>
         </div>
       </PageWrapper>
     );
@@ -524,17 +627,29 @@ export default function AnomalyStockPage() {
       {/* Grid Layout for Charts on Large Screens */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
         
-        {/* CHART 1: Grafik Proyeksi Penyerapan (dari CriticalStockPage) */}
-        <div className="lg:col-span-2 tactile-card rounded-lg overflow-hidden flex flex-col" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+        {/* CHART 1: Grafik Penyerapan Stok Anomali */}
+        <div
+          className={`lg:col-span-2 tactile-card rounded-lg overflow-hidden flex flex-col ${isChartFullScreen ? 'fixed inset-0 z-50 p-6 flex flex-col justify-between' : ''}`}
+          style={isChartFullScreen ? {
+            backgroundColor: 'var(--color-background)',
+            borderColor: 'var(--color-steel-border)',
+            width: '100vw',
+            height: '100vh',
+            overflowY: 'auto'
+          } : {
+            backgroundColor: 'var(--color-background-metallic)',
+            borderColor: 'var(--color-steel-border)'
+          }}
+        >
           <div className="p-5 border-b flex flex-col gap-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
             <div className="flex flex-wrap justify-between items-center gap-4">
               <div>
-                <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Proyeksi Penyerapan</h3>
+                <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Penyerapan Stok Anomali</h3>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
                   Komparasi Rencana vs Aktual — <b>{referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})</b>
                 </p>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 {/* 1. Filter Material */}
                 <select
                   value={selectedMaterial || ''}
@@ -602,6 +717,25 @@ export default function AnomalyStockPage() {
                 >
                   {showDeviation ? 'SEMBUNYIKAN DEVIASI' : 'TAMPILKAN DEVIASI'}
                 </button>
+
+                <button
+                  onClick={() => setIsChartFullScreen(!isChartFullScreen)}
+                  className="p-1.5 rounded border transition-all flex items-center justify-center hover:opacity-80"
+                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                  title={isChartFullScreen ? "Kecilkan Tampilan" : "Perbesar Tampilan (Full Screen)"}
+                >
+                  {isChartFullScreen ? (
+                    /* Minimize icon */
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m0 0V3m0 6l-6-6m6 18v-6m0 0H9m6 0l-6 6" />
+                    </svg>
+                  ) : (
+                    /* Maximize icon */
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6m0 0v6m0-6L14 10M9 21H3m0 0v-6m0 6l7-7" />
+                    </svg>
+                  )}
+                </button>
               </div>
             </div>
 
@@ -651,7 +785,7 @@ export default function AnomalyStockPage() {
             </div>
           </div>
 
-          <div style={{ height: 480 }}>
+          <div style={{ height: isChartFullScreen ? 'calc(100vh - 180px)' : 480 }}>
             <ReactECharts
               option={{
                 backgroundColor: 'transparent',
@@ -1130,7 +1264,6 @@ export default function AnomalyStockPage() {
             <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
           </div>
         </div>
-
       </div>
       {/* Modal Riwayat Transaksi */}
       {selectedTxMonth && (
@@ -1141,7 +1274,7 @@ export default function AnomalyStockPage() {
             {/* Modal Header */}
             <div className="p-4 border-b flex justify-between items-center" 
                  style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-              <div>
+               <div>
                 <h3 className="font-extrabold text-lg" style={{ color: 'var(--color-on-surface)' }}>
                   Riwayat Transaksi Penyerapan
                 </h3>
@@ -1162,31 +1295,57 @@ export default function AnomalyStockPage() {
             </div>
 
             {/* Modal Body */}
-            <div className="p-5">
+            <div className="p-5 flex flex-col gap-4">
+              {/* Filter Tabs in Modal */}
+              {!loadingTxModal && txModalData.length > 0 && (
+                <div className="flex gap-2 border-b pb-3" style={{ borderColor: 'var(--color-steel-border)' }}>
+                  {[
+                    { key: 'SEMUA', label: `Semua (${txModalData.length})` },
+                    { key: 'AMAN', label: `Aman (${txModalData.filter(d => d.status === 'AMAN').length})` },
+                    { key: 'ANOMALI', label: `Anomali (${txModalData.filter(d => d.status === 'ANOMALI').length})` }
+                  ].map(f => (
+                    <button
+                      key={f.key}
+                      onClick={() => setModalFilter(f.key as any)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        modalFilter === f.key
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'hover:bg-black/5 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {loadingTxModal ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3">
-                  <span className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--color-primary)' }} />
-                  <span className="text-xs font-bold" style={{ color: 'var(--color-on-surface-variant)' }}>
-                    Memuat riwayat transaksi SAP...
+                <div className="flex flex-col items-center justify-center py-16 gap-4">
+                  <div className="w-14 h-14 animate-pulse">
+                    <img src="/logo.svg" alt="PRISMA Logo" className="w-full h-full object-contain" />
+                  </div>
+                  <span className="text-xs font-bold animate-pulse" style={{ color: 'var(--color-on-surface-variant)' }}>
+                    Memuat data...
                   </span>
                 </div>
-              ) : txModalData.length === 0 ? (
+              ) : filteredTxData.length === 0 ? (
                 <div className="text-center py-12 text-xs font-bold" style={{ color: 'var(--color-on-surface-variant)' }}>
-                  Tidak ada data transaksi penyerapan pada periode ini.
+                  Tidak ada data transaksi penyerapan pada kategori ini.
                 </div>
               ) : (
                 <div className="overflow-x-auto overflow-y-auto max-h-[380px] border rounded" style={{ borderColor: 'var(--color-steel-border)' }}>
                   <table className="w-full text-left border-collapse data-table">
                     <thead className="sticky top-0 z-10 shadow-sm">
                       <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                        {['Tanggal', 'Nomor Order', 'Deskripsi Order', 'Qty', ...(selectedWarehouse === 'SEMUA' ? ['Gudang'] : [])].map(h => (
+                        {['Tanggal', 'Nomor Order', 'Deskripsi Order', 'Qty', ...(selectedWarehouse === 'SEMUA' ? ['Gudang'] : []), 'Status'].map(h => (
                           <th key={h} className="px-3 py-2.5 text-[10px] font-black tracking-widest uppercase first:text-left text-right last:text-center"
                             style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {txModalData.map((row, i) => {
+                      {filteredTxData.map((row, i) => {
+                        const isAnomaly = row.status === 'ANOMALI';
                         return (
                           <tr key={i} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
                             <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-on-surface)' }}>{row.tanggal}</td>
@@ -1196,6 +1355,21 @@ export default function AnomalyStockPage() {
                             {selectedWarehouse === 'SEMUA' && (
                               <td className="px-3 py-2.5 text-xs text-center font-bold" style={{ color: 'var(--color-on-surface-variant)' }}>{row.gudang}</td>
                             )}
+                            <td className="px-3 py-2.5 text-center">
+                              <div className="relative group inline-block">
+                                <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap cursor-help ${
+                                  isAnomaly ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'
+                                }`}>
+                                  {row.status}
+                                </span>
+                                {isAnomaly && row.statusReason && (
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 hidden group-hover:block z-50 p-2 text-[10px] leading-relaxed rounded-lg border shadow-xl bg-slate-900 border-slate-700 text-white font-medium text-center">
+                                    {row.statusReason}
+                                    <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-slate-900" />
+                                  </div>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}

@@ -879,9 +879,10 @@ export async function saveAdminParameter(param: AdminParameter, adminEmail: stri
     .from('ideal_stock_configurations')
     .select('*')
     .eq('nomor_material', param.nomor_material)
-    .single();
+    .maybeSingle();
 
   const originalIdeal = existingConfig?.ideal_qty_manual ?? 0;
+  const originalFormula = existingConfig?.use_formula_calculation ?? false;
 
   await supabase
     .from('ideal_stock_configurations')
@@ -891,16 +892,41 @@ export async function saveAdminParameter(param: AdminParameter, adminEmail: stri
       use_formula_calculation: param.use_formula
     });
 
-  // Catat Audit Log
+  // Get original lead time from procurement_progress
+  const { data: existingProg } = await supabase
+    .from('procurement_progress')
+    .select('plan_lead_time')
+    .eq('nomor_material', param.nomor_material)
+    .maybeSingle();
+  const originalLeadTime = existingProg?.plan_lead_time ?? 0;
+
+  // Update lead time in procurement_progress
+  await supabase
+    .from('procurement_progress')
+    .update({ plan_lead_time: param.lead_time_hari })
+    .eq('nomor_material', param.nomor_material);
+
+  // Compare and build log details
+  const changedFields: string[] = [];
   if (originalIdeal !== param.ideal_qty) {
+    changedFields.push(`ideal_qty: ${originalIdeal} -> ${param.ideal_qty}`);
+  }
+  if (originalFormula !== param.use_formula) {
+    changedFields.push(`use_formula: ${originalFormula} -> ${param.use_formula}`);
+  }
+  if (originalLeadTime !== param.lead_time_hari) {
+    changedFields.push(`lead_time_hari: ${originalLeadTime} -> ${param.lead_time_hari}`);
+  }
+
+  if (changedFields.length > 0) {
     await addAuditLog({
       nomor_material: param.nomor_material,
-      parameter_name: 'ideal_qty_manual',
-      original_value: String(originalIdeal),
-      new_value: String(param.ideal_qty),
+      parameter_name: 'Update Parameter Material',
+      original_value: `Ideal: ${originalIdeal}, Formula: ${originalFormula}, LeadTime: ${originalLeadTime}`,
+      new_value: changedFields.join(', ').slice(0, 250),
       admin_email: adminEmail,
       admin_name: adminName,
-      modul: 'Panel Parameter Admin'
+      modul: 'Parameter Material'
     });
   }
 }

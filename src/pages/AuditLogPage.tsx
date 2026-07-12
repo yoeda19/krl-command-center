@@ -58,8 +58,13 @@ export default function AuditLogPage() {
   if (loading) {
     return (
       <PageWrapper fullWidth>
-        <div className="flex items-center justify-center h-96">
-          <span className="text-sm font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>Memuat data...</span>
+        <div className="flex flex-col items-center justify-center min-h-[70vh] gap-4">
+          <div className="w-16 h-16 animate-pulse">
+            <img src="/logo.svg" alt="PRISMA Logo" className="w-full h-full object-contain" />
+          </div>
+          <span className="text-sm font-medium animate-pulse" style={{ color: 'var(--color-on-surface-variant)' }}>
+            Memuat data...
+          </span>
         </div>
       </PageWrapper>
     );
@@ -173,12 +178,12 @@ export default function AuditLogPage() {
                   <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material ?? '—'}</td>
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface)' }}>{row.parameter_name}</td>
                   <td className="px-4 py-3">
-                    <span className="text-[10px] px-2 py-0.5 rounded" style={{ backgroundColor: 'rgba(220,38,38,0.1)', color: 'var(--color-led-red)' }}>
+                    <span className="text-[10px] px-2 py-0.5 rounded border font-mono" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
                       {row.original_value || '(kosong)'}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-[10px] px-2 py-0.5 rounded" style={{ backgroundColor: 'rgba(22,163,74,0.1)', color: 'var(--color-led-green)' }}>
+                    <span className="text-[10px] px-2 py-0.5 rounded border font-mono" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>
                       {row.new_value}
                     </span>
                   </td>

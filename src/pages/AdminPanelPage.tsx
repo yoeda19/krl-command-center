@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import PageWrapper from '../components/layout/PageWrapper';
 import {
-  getAdminParameters, saveAdminParameter, getMonthlyPlans, saveMonthlyPlans,
+  getAdminParameters, saveAdminParameter, getMonthlyPlans, saveMonthlyPlans, addAuditLog,
   getProcurementData, addProcurement, updateProcurement, deleteProcurement,
   getMaintenanceSchedule, addMaintenanceSchedule, updateMaintenanceSchedule, deleteMaintenanceSchedule,
   getWorkOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
@@ -294,9 +294,23 @@ export default function AdminPanelPage() {
     setConfirmModal({
       message: 'Hapus konfigurasi kebutuhan material standar untuk tipe perawatan ini?',
       onConfirm: async () => {
+        const originalItem = bomList.find(b => b.id === id);
         const { error } = await deleteMaintenanceBomConfig(id);
         if (error) showError(error);
         else {
+          const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
+          const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
+          if (originalItem) {
+            await addAuditLog({
+              nomor_material: originalItem.nomor_material,
+              parameter_name: `Hapus BOM ${originalItem.tipe_perawatan}`,
+              original_value: `Qty: ${originalItem.qty_standar}`,
+              new_value: 'DELETED',
+              admin_email: email,
+              admin_name: name,
+              modul: 'BOM Standar Perawatan'
+            });
+          }
           setBomList(prev => prev.filter(b => b.id !== id));
           showSuccess('BOM config deleted successfully.');
         }
@@ -423,8 +437,8 @@ export default function AdminPanelPage() {
   const handleSave = async () => {
     if (!editValues) return;
     try {
-      const email = localStorage.getItem('krl_admin_email') || 'rifaldi.emon@krl.co.id';
-      const name = localStorage.getItem('krl_admin_name') || 'M. Rifaldi';
+      const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
+      const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
       await Promise.all([saveAdminParameter(editValues, email, name), saveMonthlyPlans(monthlyPlans)]);
       setParams(prev => prev.map(p => p.nomor_material === editingId ? { ...p, ...editValues } : p));
       setEditingId(null); setEditValues(null); setMonthlyPlans([]);
@@ -470,9 +484,30 @@ export default function AdminPanelPage() {
   const handleSavePO = async () => {
     setPOLoading(true);
     try {
+      const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
+      const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
       if (editingPO) {
+        const originalItem = procureList.find(p => p.id === editingPO.id);
+        const changedFields: string[] = [];
+        if (originalItem) {
+          Object.keys(editingPO).forEach(k => {
+            const key = k as keyof ProcurementItem;
+            if (String(originalItem[key]) !== String(editingPO[key])) {
+              changedFields.push(`${key}: ${originalItem[key]} -> ${editingPO[key]}`);
+            }
+          });
+        }
         const { error } = await updateProcurement(editingPO.id, editingPO);
         if (error) { showError(`Gagal update: ${error}`); return; }
+        await addAuditLog({
+          nomor_material: editingPO.nomor_material,
+          parameter_name: `Update PO #${editingPO.id}`,
+          original_value: originalItem ? `PO: ${originalItem.nomor_po}, Status: ${originalItem.status}` : '-',
+          new_value: changedFields.join(', ').slice(0, 250) || 'No change',
+          admin_email: email,
+          admin_name: name,
+          modul: 'Progress PO & Transit'
+        });
         setProcureList(prev => prev.map(p => p.id === editingPO.id ? editingPO : p));
         setEditingPO(null);
         showSuccess(`Progress PO #${editingPO.id} (${editingPO.nomor_material}) berhasil diperbarui.`);
@@ -482,6 +517,15 @@ export default function AdminPanelPage() {
         }
         const { error } = await addProcurement(newPO as Omit<ProcurementItem, 'id' | 'actual_lead_time' | 'tanggal_penerimaan_barang'>);
         if (error) { showError(`Gagal menyimpan: ${error}`); return; }
+        await addAuditLog({
+          nomor_material: newPO.nomor_material,
+          parameter_name: 'Tambah PO Baru',
+          original_value: null,
+          new_value: `PO: ${newPO.nomor_po}, Vendor: ${newPO.vendor}, Qty: ${newPO.jumlah_dipesan}`,
+          admin_email: email,
+          admin_name: name,
+          modul: 'Progress PO & Transit'
+        });
         const freshData = await getProcurementData();
         setProcureList(freshData);
         setNewPO(emptyPO());
@@ -500,6 +544,17 @@ export default function AdminPanelPage() {
         const { error } = await deleteProcurement(item.id);
         if (error) { showError(`Gagal hapus: ${error}`); }
         else {
+          const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
+          const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
+          await addAuditLog({
+            nomor_material: item.nomor_material,
+            parameter_name: `Hapus PO #${item.id}`,
+            original_value: `PO: ${item.nomor_po}, Vendor: ${item.vendor}, Qty: ${item.jumlah_dipesan}`,
+            new_value: 'DELETED',
+            admin_email: email,
+            admin_name: name,
+            modul: 'Progress PO & Transit'
+          });
           setProcureList(prev => prev.filter(p => p.id !== item.id));
           showSuccess(`Data pengadaan ${item.nomor_material} berhasil dihapus.`);
         }
@@ -513,15 +568,45 @@ export default function AdminPanelPage() {
     const data = editingSchedule ?? newSchedule;
     if (!data.nomor_rangkaian) { showError('Pilih rangkaian terlebih dahulu.'); return; }
     try {
+      const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
+      const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
       if (editingSchedule) {
+        const originalItem = schedules.find(s => s.id === editingSchedule.id);
+        const changedFields: string[] = [];
+        if (originalItem) {
+          Object.keys(editingSchedule).forEach(k => {
+            const key = k as keyof MaintenanceSchedule;
+            if (String(originalItem[key]) !== String(editingSchedule[key])) {
+              changedFields.push(`${key}: ${originalItem[key]} -> ${editingSchedule[key]}`);
+            }
+          });
+        }
         const { error } = await updateMaintenanceSchedule(editingSchedule.id, editingSchedule);
         if (error) { showError(error); return; }
+        await addAuditLog({
+          nomor_material: null,
+          parameter_name: `Update Jadwal #${editingSchedule.id}`,
+          original_value: originalItem ? `Rangkaian: ${originalItem.nomor_rangkaian}, Tipe: ${originalItem.tipe_perawatan}, Status: ${originalItem.status_pelaksanaan}` : '-',
+          new_value: changedFields.join(', ').slice(0, 250) || 'No change',
+          admin_email: email,
+          admin_name: name,
+          modul: 'Perawatan KRL'
+        });
         setSchedules(prev => prev.map(s => s.id === editingSchedule.id ? editingSchedule : s));
         setEditingSchedule(null);
         showSuccess('Jadwal perawatan berhasil diperbarui.');
       } else {
         const { error } = await addMaintenanceSchedule(newSchedule);
         if (error) { showError(error); return; }
+        await addAuditLog({
+          nomor_material: null,
+          parameter_name: 'Tambah Jadwal Perawatan',
+          original_value: null,
+          new_value: `Rangkaian: ${newSchedule.nomor_rangkaian}, Tipe: ${newSchedule.tipe_perawatan}, Tgl: ${newSchedule.tanggal_rencana}`,
+          admin_email: email,
+          admin_name: name,
+          modul: 'Perawatan KRL'
+        });
         const fresh = await getMaintenanceSchedule();
         setSchedules(fresh);
         setNewSchedule(emptySchedule());
@@ -537,9 +622,21 @@ export default function AdminPanelPage() {
     setConfirmModal({
       message: 'Hapus jadwal rencana perawatan ini? Data work order terkait mungkin tidak terhapus otomatis.',
       onConfirm: async () => {
+        const originalItem = schedules.find(s => s.id === id);
         const { error } = await deleteMaintenanceSchedule(id);
         if (error) showError(error);
         else {
+          const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
+          const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
+          await addAuditLog({
+            nomor_material: null,
+            parameter_name: `Hapus Jadwal #${id}`,
+            original_value: originalItem ? `Rangkaian: ${originalItem.nomor_rangkaian}, Tipe: ${originalItem.tipe_perawatan}` : '-',
+            new_value: 'DELETED',
+            admin_email: email,
+            admin_name: name,
+            modul: 'Perawatan KRL'
+          });
           setSchedules(prev => prev.filter(s => s.id !== id));
           showSuccess('Jadwal perawatan berhasil dihapus.');
         }
@@ -555,9 +652,30 @@ export default function AdminPanelPage() {
       return;
     }
     try {
+      const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
+      const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
       if (editingWO) {
+        const originalItem = workOrdersList.find(w => w.id === editingWO.id);
+        const changedFields: string[] = [];
+        if (originalItem) {
+          Object.keys(editingWO).forEach(k => {
+            const key = k as keyof WorkOrder;
+            if (String(originalItem[key]) !== String(editingWO[key])) {
+              changedFields.push(`${key}: ${originalItem[key]} -> ${editingWO[key]}`);
+            }
+          });
+        }
         const { error } = await updateWorkOrder(editingWO.id, editingWO);
         if (error) { showError(error); return; }
+        await addAuditLog({
+          nomor_material: editingWO.nomor_material,
+          parameter_name: `Update Work Order #${editingWO.id}`,
+          original_value: originalItem ? `WO: ${originalItem.nomor_wo}, Qty: ${originalItem.qty_reservasi}, Status: ${originalItem.status_pemenuhan}` : '-',
+          new_value: changedFields.join(', ').slice(0, 250) || 'No change',
+          admin_email: email,
+          admin_name: name,
+          modul: 'Perawatan KRL'
+        });
         const fresh = await getWorkOrders();
         setWorkOrdersList(fresh);
         setEditingWO(null);
@@ -565,6 +683,15 @@ export default function AdminPanelPage() {
       } else {
         const { error } = await addWorkOrder(newWO);
         if (error) { showError(error); return; }
+        await addAuditLog({
+          nomor_material: newWO.nomor_material,
+          parameter_name: 'Tambah Work Order Baru',
+          original_value: null,
+          new_value: `WO: ${newWO.nomor_wo}, Qty: ${newWO.qty_reservasi}, Schedule ID: ${newWO.schedule_id}`,
+          admin_email: email,
+          admin_name: name,
+          modul: 'Perawatan KRL'
+        });
         const fresh = await getWorkOrders();
         setWorkOrdersList(fresh);
         setNewWO(emptyWO());
@@ -580,9 +707,21 @@ export default function AdminPanelPage() {
     setConfirmModal({
       message: 'Apakah Anda yakin ingin menghapus reservasi Work Order ini?',
       onConfirm: async () => {
+        const originalItem = workOrdersList.find(w => w.id === id);
         const { error } = await deleteWorkOrder(id);
         if (error) showError(error);
         else {
+          const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
+          const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
+          await addAuditLog({
+            nomor_material: originalItem?.nomor_material || null,
+            parameter_name: `Hapus Work Order #${id}`,
+            original_value: originalItem ? `WO: ${originalItem.nomor_wo}, Qty: ${originalItem.qty_reservasi}` : '-',
+            new_value: 'DELETED',
+            admin_email: email,
+            admin_name: name,
+            modul: 'Perawatan KRL'
+          });
           setWorkOrdersList(prev => prev.filter(w => w.id !== id));
           showSuccess('Work Order berhasil dihapus.');
         }
@@ -822,8 +961,13 @@ export default function AdminPanelPage() {
   if (loading) {
     return (
       <PageWrapper fullWidth>
-        <div className="flex items-center justify-center h-96">
-          <span className="text-sm font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>Memuat data...</span>
+        <div className="flex flex-col items-center justify-center min-h-[70vh] gap-4">
+          <div className="w-16 h-16 animate-pulse">
+            <img src="/logo.svg" alt="PRISMA Logo" className="w-full h-full object-contain" />
+          </div>
+          <span className="text-sm font-medium animate-pulse" style={{ color: 'var(--color-on-surface-variant)' }}>
+            Memuat data...
+          </span>
         </div>
       </PageWrapper>
     );
@@ -1581,9 +1725,30 @@ export default function AdminPanelPage() {
             return;
           }
           try {
+            const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
+            const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
             if (editingBOM) {
+              const originalItem = bomList.find(b => b.id === editingBOM.id);
+              const changedFields: string[] = [];
+              if (originalItem) {
+                Object.keys(editingBOM).forEach(k => {
+                  const key = k as keyof MaintenanceBomConfig;
+                  if (String(originalItem[key]) !== String(editingBOM[key])) {
+                    changedFields.push(`${key}: ${originalItem[key]} -> ${editingBOM[key]}`);
+                  }
+                });
+              }
               const { error } = await updateMaintenanceBomConfig(editingBOM.id, editingBOM);
               if (error) { showError(error); return; }
+              await addAuditLog({
+                nomor_material: editingBOM.nomor_material,
+                parameter_name: `Update BOM ${type}`,
+                original_value: originalItem ? `Qty: ${originalItem.qty_standar}, TC:${originalItem.qty_tc ?? 0}, M1:${originalItem.qty_m1 ?? 0}, M2:${originalItem.qty_m2 ?? 0}` : '-',
+                new_value: changedFields.join(', ').slice(0, 250) || 'No change',
+                admin_email: email,
+                admin_name: name,
+                modul: 'BOM Standar Perawatan'
+              });
               const fresh = await getMaintenanceBomConfig();
               setBomList(fresh);
               setEditingBOM(null);
@@ -1591,6 +1756,15 @@ export default function AdminPanelPage() {
             } else {
               const { error } = await addMaintenanceBomConfig(payload);
               if (error) { showError(error); return; }
+              await addAuditLog({
+                nomor_material: payload.nomor_material,
+                parameter_name: `Tambah BOM ${type}`,
+                original_value: null,
+                new_value: `Qty: ${payload.qty_standar}, TC:${payload.qty_tc ?? 0}, M1:${payload.qty_m1 ?? 0}, M2:${payload.qty_m2 ?? 0}, T6:${payload.qty_t6 ?? 0}, T:${payload.qty_t ?? 0}`,
+                admin_email: email,
+                admin_name: name,
+                modul: 'BOM Standar Perawatan'
+              });
               const fresh = await getMaintenanceBomConfig();
               setBomList(fresh);
               setNewBOM({ tipe_perawatan: type as TipePerawatan, nomor_material: '', qty_standar: 1, qty_tc: 0, qty_m1: 0, qty_m2: 0, qty_t6: 0, qty_t: 0, compat_seri_kereta: '', compat_propulsi: '' });

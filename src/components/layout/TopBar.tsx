@@ -26,6 +26,12 @@ export default function TopBar({ collapsed, theme, onThemeToggle, currentPath }:
   const sidebarWidth = collapsed ? 64 : 260;
   const pageTitle = pageLabels[currentPath] ?? '';
 
+  const authStr = localStorage.getItem('krl_auth');
+  const user = authStr ? JSON.parse(authStr) : { name: 'Dev Admin', email: 'dev@prisma.co.id', role: 'Admin' };
+  const initials = user.name
+    ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+    : 'DA';
+
   return (
     <header
       className="fixed top-0 right-0 z-30 flex justify-between items-center h-16 px-4 border-b"
@@ -39,12 +45,9 @@ export default function TopBar({ collapsed, theme, onThemeToggle, currentPath }:
     >
       {/* Left */}
       <div className="flex-1 flex items-center gap-3">
-        <h2 className="text-sm font-bold tracking-[0.12em] uppercase" style={{ color: 'var(--color-on-surface)' }}>
-          PRISMA
-        </h2>
         {pageTitle && (
           <span
-            className="hidden md:inline text-[11px] font-bold tracking-widest uppercase px-2.5 py-0.5 rounded"
+            className="text-[11px] font-bold tracking-widest uppercase px-2.5 py-0.5 rounded"
             style={{ backgroundColor: 'var(--color-surface-container)', color: 'var(--color-on-surface-variant)', border: '1px solid var(--color-steel-border)' }}
           >
             {pageTitle}
@@ -87,11 +90,11 @@ export default function TopBar({ collapsed, theme, onThemeToggle, currentPath }:
               className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border"
               style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
             >
-              YM
+              {initials}
             </div>
             <div className="hidden md:block text-left">
-              <p className="text-xs font-bold leading-tight" style={{ color: 'var(--color-on-surface)' }}>Yuda Maulana</p>
-              <p className="text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>Admin</p>
+              <p className="text-xs font-bold leading-tight" style={{ color: 'var(--color-on-surface)' }}>{user.name}</p>
+              <p className="text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>{user.role || 'Admin'}</p>
             </div>
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="hidden md:block" style={{ color: 'var(--color-on-surface-variant)' }}>
               <polyline points="6 9 12 15 18 9"/>
@@ -111,16 +114,16 @@ export default function TopBar({ collapsed, theme, onThemeToggle, currentPath }:
                       className="w-10 h-10 rounded-full flex items-center justify-center font-black border"
                       style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                     >
-                      YM
+                      {initials}
                     </div>
                     <div>
-                      <p className="text-sm font-bold" style={{ color: 'var(--color-on-surface)' }}>Yuda Maulana</p>
-                      <p className="text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>yuda.maulana@krl.co.id</p>
+                      <p className="text-sm font-bold" style={{ color: 'var(--color-on-surface)' }}>{user.name}</p>
+                      <p className="text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>{user.email}</p>
                       <span
                         className="inline-block text-[9px] font-black tracking-widest uppercase px-2.5 py-0.5 rounded-full mt-1 border"
                         style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                       >
-                        Administrator
+                        {user.role || 'Administrator'}
                       </span>
                     </div>
                   </div>

@@ -47,9 +47,13 @@ export default function TrainCompositionPage() {
   if (loading) {
     return (
       <PageWrapper fullWidth>
-        <div className="h-4" />
-        <div className="flex items-center justify-center h-96">
-          <span className="text-sm font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>Memuat data...</span>
+        <div className="flex flex-col items-center justify-center min-h-[70vh] gap-4">
+          <div className="w-16 h-16 animate-pulse">
+            <img src="/logo.svg" alt="PRISMA Logo" className="w-full h-full object-contain" />
+          </div>
+          <span className="text-sm font-medium animate-pulse" style={{ color: 'var(--color-on-surface-variant)' }}>
+            Memuat data...
+          </span>
         </div>
       </PageWrapper>
     );

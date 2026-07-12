@@ -57,6 +57,8 @@ export default function StockAgingPage() {
   const [searchText, setSearchText] = useState(materialParam || '');
   const [restockSearchText, setRestockSearchText] = useState(materialParam || '');
   const [selectedRestockMaterial, setSelectedRestockMaterial] = useState<string>('');
+  const [isHeatmapFullScreen, setIsHeatmapFullScreen] = useState(false);
+  const [heatmapCellHeight, setHeatmapCellHeight] = useState<number>(36);
 
   useEffect(() => {
     async function loadData() {
@@ -126,9 +128,11 @@ export default function StockAgingPage() {
   const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
   const textStyleColor = isDark ? '#ffffff' : '#000000';
 
+  const displayHeatmapList = isHeatmapFullScreen ? filtered : filtered.slice(0, 10);
+
   const heatmapData = (() => {
     const data: any[] = [];
-    filtered.forEach((material, yIndex) => {
+    displayHeatmapList.forEach((material, yIndex) => {
       warehousesList.forEach((wh, xIndex) => {
         let stockVal = 0;
         let planVal = 0;
@@ -189,8 +193,13 @@ export default function StockAgingPage() {
   if (loading) {
     return (
       <PageWrapper fullWidth>
-        <div className="flex items-center justify-center h-96">
-          <span className="text-sm font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>Memuat data...</span>
+        <div className="flex flex-col items-center justify-center min-h-[70vh] gap-4">
+          <div className="w-16 h-16 animate-pulse">
+            <img src="/logo.svg" alt="PRISMA Logo" className="w-full h-full object-contain" />
+          </div>
+          <span className="text-sm font-medium animate-pulse" style={{ color: 'var(--color-on-surface-variant)' }}>
+            Memuat data...
+          </span>
         </div>
       </PageWrapper>
     );
@@ -322,13 +331,71 @@ export default function StockAgingPage() {
       </div>
 
       {/* Heatmap Section */}
-      <div className="tactile-card rounded-lg overflow-hidden mt-4">
-        <div className="p-4 border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-          <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Sebaran Stok</h3>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Tingkat stok material di seluruh gudang</p>
+      <div
+        className={`tactile-card rounded-lg overflow-hidden mt-4 ${isHeatmapFullScreen ? 'fixed inset-0 z-50 p-6 flex flex-col justify-between' : ''}`}
+        style={isHeatmapFullScreen ? {
+          backgroundColor: 'var(--color-background)',
+          borderColor: 'var(--color-steel-border)',
+          width: '100vw',
+          height: '100vh',
+          overflowY: 'auto'
+        } : {}}
+      >
+        <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+          <div>
+            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Sebaran Stok</h3>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+              Tingkat stok material di seluruh gudang{!isHeatmapFullScreen && filtered.length > 10 && ' (Menampilkan 10 teratas, klik Layar Penuh untuk semua)'}
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {isHeatmapFullScreen && (
+              <div className="flex items-center gap-2 border rounded p-1" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
+                <span className="text-[10px] font-bold px-1.5" style={{ color: 'var(--color-on-surface)' }}>Ukuran Sel:</span>
+                <button
+                  onClick={() => setHeatmapCellHeight(prev => Math.max(20, prev - 4))}
+                  className="px-2 py-0.5 rounded text-[10px] font-black hover:opacity-85 border"
+                  style={{ backgroundColor: 'var(--color-surface-container)', color: 'var(--color-on-surface)', borderColor: 'var(--color-steel-border)' }}
+                  title="Kecilkan Sel"
+                >
+                  A-
+                </button>
+                <span className="text-[10px] font-bold w-7 text-center" style={{ color: 'var(--color-on-surface)' }}>{heatmapCellHeight}px</span>
+                <button
+                  onClick={() => setHeatmapCellHeight(prev => Math.min(60, prev + 4))}
+                  className="px-2 py-0.5 rounded text-[10px] font-black hover:opacity-85 border"
+                  style={{ backgroundColor: 'var(--color-surface-container)', color: 'var(--color-on-surface)', borderColor: 'var(--color-steel-border)' }}
+                  title="Besarkan Sel"
+                >
+                  A+
+                </button>
+              </div>
+            )}
+            <button
+              onClick={() => {
+                if (isHeatmapFullScreen) {
+                  setHeatmapCellHeight(36);
+                }
+                setIsHeatmapFullScreen(!isHeatmapFullScreen);
+              }}
+              className="p-1.5 rounded border transition-all flex items-center justify-center hover:opacity-80"
+              style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+              title={isHeatmapFullScreen ? "Kecilkan Tampilan" : "Perbesar Tampilan (Full Screen)"}
+            >
+              {isHeatmapFullScreen ? (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m0 0V3m0 6l-6-6m6 18v-6m0 0H9m6 0l-6 6" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6m0 0v6m0-6L14 10M9 21H3m0 0v-6m0 6l7-7" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
-        <div className="p-4" style={{ backgroundColor: 'var(--color-background)' }}>
-          {filtered.length === 0 ? (
+        <div className="p-4 flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--color-background)' }}>
+          {displayHeatmapList.length === 0 ? (
             <div className="text-center py-8 text-xs text-gray-500">Tidak ada data untuk heatmap.</div>
           ) : (
             <ReactECharts
@@ -338,7 +405,7 @@ export default function StockAgingPage() {
                   position: 'top',
                   formatter: (p: any) => {
                     const xName = warehousesList[p.data.value[0]];
-                    const materialItem = filtered[p.data.value[1]];
+                    const materialItem = displayHeatmapList[p.data.value[1]];
                     const yName = materialItem ? `${materialItem.nomor_material} - ${materialItem.nama_material}` : '';
                     const stock = p.data.value[2];
                     const plan = p.data.value[3];
@@ -361,7 +428,7 @@ export default function StockAgingPage() {
                 },
                 yAxis: {
                   type: 'category',
-                  data: filtered.map(d => d.nama_material),
+                  data: displayHeatmapList.map(d => d.nama_material),
                   splitArea: { show: true },
                   axisLabel: { color: textStyleColor, fontSize: 9, fontWeight: 'bold' },
                   axisLine: { lineStyle: { color: '#374151' } }
@@ -398,7 +465,7 @@ export default function StockAgingPage() {
                 }]
               }}
               notMerge={true}
-              style={{ height: Math.max(300, filtered.length * 36 + 80) }}
+              style={{ height: Math.max(300, displayHeatmapList.length * heatmapCellHeight + 80) }}
               opts={{ renderer: 'svg' }}
             />
           )}

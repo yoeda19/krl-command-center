@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import PageWrapper from '../components/layout/PageWrapper';
 import ExportButton from '../components/ui/ExportButton';
-import { getMaintenanceSchedule, getWorkOrders, getFleetMetrics, getMaintenanceBomConfig, getRealSAPTrains, getAllEquipment } from '../services/supabaseService';
+import { getMaintenanceSchedule, getWorkOrders, getFleetMetrics, getMaintenanceBomConfig, getRealSAPTrains, getAllEquipment, getProcurementData } from '../services/supabaseService';
 import { formatTanggal } from '../utils/calculations';
-import type { PropulsiType, SeriKereta, TipePerawatan, PelaksanaanStatus, PemenuhStatus, FleetMetrics, MaintenanceSchedule, WorkOrder, MaintenanceBomConfig } from '../types';
+import type { PropulsiType, SeriKereta, TipePerawatan, PelaksanaanStatus, PemenuhStatus, FleetMetrics, MaintenanceSchedule, WorkOrder, MaintenanceBomConfig, ProcurementItem } from '../types';
 
 const statusCfg: Record<PelaksanaanStatus, { bg: string; text: string; border: string }> = {
   'Rencana':        { bg: 'rgba(96,165,250,0.12)',  text: '#60a5fa',               border: 'rgba(96,165,250,0.28)' },
@@ -60,6 +60,11 @@ export default function WorkOrderPage() {
   const [filterSeriKereta, setFilterSeriKereta]   = useState<SeriKereta | 'Semua'>('Semua');
   const [filterTipe, setFilterTipe]               = useState<TipePerawatan | 'Semua'>('Semua');
   const [filterWOStatus, setFilterWOStatus]       = useState<PemenuhStatus | 'Semua'>('Semua');
+  const [filterWOMaterial, setFilterWOMaterial]   = useState<string>('Semua');
+  const [filterWOMonth, setFilterWOMonth]         = useState<number>(6); // Juli
+  const [filterWOYear, setFilterWOYear]           = useState<number>(2026);
+  const [filterMode, setFilterMode]               = useState<'monthly' | 'accumulative'>('monthly');
+  const [procurementList, setProcurementList]     = useState<ProcurementItem[]>([]);
   const [validasiMsg, setValidasiMsg]             = useState<{ text: string; ok: boolean } | null>(null);
 
   const [filterMonth, setFilterMonth] = useState<number>(6); // Juli (0-indexed)
@@ -70,13 +75,14 @@ export default function WorkOrderPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [sData, wData, fMetrics, bData, trainData, eqData] = await Promise.all([
+        const [sData, wData, fMetrics, bData, trainData, eqData, pData] = await Promise.all([
           getMaintenanceSchedule(),
           getWorkOrders(),
           getFleetMetrics(),
           getMaintenanceBomConfig(),
           getRealSAPTrains(),
-          getAllEquipment()
+          getAllEquipment(),
+          getProcurementData()
         ]);
         setScheduleList(sData);
         setWoList(wData);
@@ -84,6 +90,7 @@ export default function WorkOrderPage() {
         setBomConfigs(bData);
         setTotalTrainsCount(trainData.length);
         setAllEquipment(eqData);
+        setProcurementList(pData);
       } catch (err) {
         console.error('Error loading work order page data:', err);
       } finally {
@@ -99,10 +106,6 @@ export default function WorkOrderPage() {
     const matchTipe     = filterTipe === 'Semua' || row.tipe_perawatan === filterTipe;
     return matchPropulsi && matchKereta && matchTipe;
   });
-
-  const filteredWO = woList.filter(row =>
-    filterWOStatus === 'Semua' || row.status_pemenuhan === filterWOStatus
-  );
 
   const getRequiredBomQty = (nomor_rangkaian: string, bom: MaintenanceBomConfig) => {
     // Check compatibility first
@@ -158,6 +161,109 @@ export default function WorkOrderPage() {
     return formulaTotal === 0 ? bom.qty_standar : formulaTotal;
   };
 
+  // Generate dynamic reservations based on scheduled plans in the active month
+  const activeMonthReservations = scheduleList
+    .filter(sched => {
+      if (!sched.tanggal_rencana) return false;
+      const d = new Date(sched.tanggal_rencana);
+      return d.getMonth() === filterWOMonth && d.getFullYear() === filterWOYear;
+    })
+    .flatMap(sched => {
+      const boms = bomConfigs.filter(b => b.tipe_perawatan === sched.tipe_perawatan);
+      return boms.map(bom => {
+        const requiredQty = getRequiredBomQty(sched.nomor_rangkaian, bom);
+        if (requiredQty === 0) return null;
+        return {
+          id: `${sched.id}-${bom.id}`,
+          nomor_wo: `WO-${sched.id.toString().slice(-6)}`,
+          nomor_rangkaian: sched.nomor_rangkaian,
+          seri_kereta: sched.seri_kereta,
+          propulsi: sched.jenis_propulsi,
+          tipe_perawatan: sched.tipe_perawatan,
+          tanggal_rencana: sched.tanggal_rencana,
+          nomor_material: bom.nomor_material,
+          nama_material: bom.nama_material,
+          qty_reservasi: requiredQty,
+          current_stock: bom.current_stock ?? 0,
+          status_pemenuhan: (bom.current_stock ?? 0) >= requiredQty ? 'Fulfilled' : 'Outstanding'
+        };
+      }).filter((x): x is NonNullable<typeof x> => x !== null);
+    });
+
+  // Accumulative data
+  const accumulativeData = Array.from(new Set(bomConfigs.map(b => b.nomor_material))).map(matNo => {
+    const config = bomConfigs.find(b => b.nomor_material === matNo);
+    const name = config?.nama_material ?? '—';
+    const currentStock = config?.current_stock ?? 0;
+    
+    // Sum required qty across all schedules
+    let totalRequired = 0;
+    scheduleList.forEach(sched => {
+      const bom = bomConfigs.find(b => b.nomor_material === matNo && b.tipe_perawatan === sched.tipe_perawatan);
+      if (bom) {
+        totalRequired += getRequiredBomQty(sched.nomor_rangkaian, bom);
+      }
+    });
+
+    // Sum incoming POs (outstanding progress)
+    const incomingPO = procurementList
+      .filter(p => p.nomor_material === matNo && p.status !== 'Tiba di Gudang')
+      .reduce((sum, p) => sum + (p.jumlah_dipesan ?? 0), 0);
+
+    const netProjection = currentStock - totalRequired + incomingPO;
+    const status_pemenuhan = netProjection >= 0 ? 'Fulfilled' : 'Outstanding';
+
+    return {
+      id: matNo,
+      nomor_material: matNo,
+      nama_material: name,
+      current_stock: currentStock,
+      qty_reservasi: totalRequired, // Used as 'Total Kebutuhan'
+      incoming_po: incomingPO,
+      net_projection: netProjection,
+      status_pemenuhan
+    };
+  });
+
+  // Filter reservations by selected material and status depending on active mode
+  const filteredByMaterial = filterWOMaterial === 'Semua' 
+    ? activeMonthReservations 
+    : activeMonthReservations.filter(r => r.nomor_material === filterWOMaterial);
+
+  const accumulativeFiltered = filterWOMaterial === 'Semua'
+    ? accumulativeData
+    : accumulativeData.filter(r => r.nomor_material === filterWOMaterial);
+
+  const filteredWO = filterMode === 'monthly'
+    ? filteredByMaterial.filter(row => filterWOStatus === 'Semua' || row.status_pemenuhan === filterWOStatus)
+    : accumulativeFiltered.filter(row => filterWOStatus === 'Semua' || row.status_pemenuhan === filterWOStatus);
+
+  // Extract unique materials that appear in active mode for dropdown filter
+  const uniqueMaterials = Array.from(new Set(
+    (filterMode === 'monthly' ? activeMonthReservations : accumulativeData).map(r => JSON.stringify({
+      nomor_material: r.nomor_material,
+      nama_material: r.nama_material
+    }))
+  )).map(s => JSON.parse(s) as { nomor_material: string; nama_material: string });
+
+  // Calculate total requirement for active material
+  const totalRequiredInMonth = filteredByMaterial.reduce((acc, r) => acc + r.qty_reservasi, 0);
+  const activeMaterialBom = bomConfigs.find(b => b.nomor_material === filterWOMaterial);
+  const activeMaterialStock = activeMaterialBom?.current_stock ?? 0;
+  const activeMaterialName = activeMaterialBom?.nama_material ?? '';
+
+  const totalOutstanding = filterMode === 'monthly'
+    ? activeMonthReservations.filter(r => r.status_pemenuhan === 'Outstanding').reduce((acc, r) => acc + r.qty_reservasi, 0)
+    : accumulativeData.filter(r => r.net_projection < 0).reduce((acc, r) => acc + Math.abs(r.net_projection), 0);
+
+  const totalFulfilled = filterMode === 'monthly'
+    ? activeMonthReservations.filter(r => r.status_pemenuhan === 'Fulfilled').reduce((acc, r) => acc + r.qty_reservasi, 0)
+    : accumulativeData.filter(r => r.net_projection >= 0).reduce((acc, r) => acc + r.net_projection, 0);
+
+  const grandTotalRequired = filterMode === 'monthly'
+    ? activeMonthReservations.reduce((acc, r) => acc + r.qty_reservasi, 0)
+    : accumulativeData.reduce((acc, r) => acc + r.qty_reservasi, 0);
+
   const demoValidasi = () => {
     // Cari apakah ada jadwal aktif yang stok material standar (BOM)-nya tidak mencukupi
     const outstandingBoms = scheduleList.filter(sched => {
@@ -212,8 +318,13 @@ export default function WorkOrderPage() {
   if (loading) {
     return (
       <PageWrapper fullWidth>
-        <div className="flex items-center justify-center h-96">
-          <span className="text-sm font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>Memuat data...</span>
+        <div className="flex flex-col items-center justify-center min-h-[70vh] gap-4">
+          <div className="w-16 h-16 animate-pulse">
+            <img src="/logo.svg" alt="PRISMA Logo" className="w-full h-full object-contain" />
+          </div>
+          <span className="text-sm font-medium animate-pulse" style={{ color: 'var(--color-on-surface-variant)' }}>
+            Memuat data...
+          </span>
         </div>
       </PageWrapper>
     );
@@ -608,9 +719,76 @@ export default function WorkOrderPage() {
 
       {/* Work Orders Detail */}
       <div className="tactile-card rounded-lg overflow-hidden">
-        <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-          <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Reservasi Material</h3>
-          <div className="flex items-center gap-2">
+        <div className="p-4 border-b flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+          <div>
+            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Reservasi Material</h3>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Kebutuhan material berdasarkan rencana perawatan bulanan</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Mode Toggle Button Group */}
+            <span className="text-xs font-bold mr-1" style={{ color: 'var(--color-on-surface-variant)' }}>Mode:</span>
+            <div className="flex border rounded overflow-hidden mr-2" style={{ borderColor: 'var(--color-steel-border)' }}>
+              <button
+                onClick={() => setFilterMode('monthly')}
+                className="px-3 py-1 text-xs font-black transition-colors"
+                style={{
+                  backgroundColor: filterMode === 'monthly' ? 'var(--color-on-surface)' : 'var(--color-surface-container-high)',
+                  color: filterMode === 'monthly' ? 'var(--color-background)' : 'var(--color-on-surface-variant)'
+                }}
+              >
+                Bulanan
+              </button>
+              <button
+                onClick={() => setFilterMode('accumulative')}
+                className="px-3 py-1 text-xs font-black transition-colors"
+                style={{
+                  backgroundColor: filterMode === 'accumulative' ? 'var(--color-on-surface)' : 'var(--color-surface-container-high)',
+                  color: filterMode === 'accumulative' ? 'var(--color-background)' : 'var(--color-on-surface-variant)'
+                }}
+              >
+                Akumulatif
+              </button>
+            </div>
+
+            {/* Dropdown Month and Year Filter for Reservasi (Only shown in monthly mode) */}
+            {filterMode === 'monthly' && (
+              <>
+                <span className="text-xs animate-fade-in" style={{ color: 'var(--color-on-surface-variant)' }}>Periode:</span>
+                <select value={filterWOMonth} onChange={e => setFilterWOMonth(Number(e.target.value))}
+                  className="rounded px-2.5 py-1 text-xs border animate-fade-in"
+                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>
+                  {['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'].map((m, idx) => (
+                    <option key={m} value={idx}>{m}</option>
+                  ))}
+                </select>
+                <select value={filterWOYear} onChange={e => setFilterWOYear(Number(e.target.value))}
+                  className="rounded px-2.5 py-1 text-xs border mr-2 animate-fade-in"
+                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>
+                  {[2026, 2027, 2028, 2029, 2030].map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </>
+            )}
+
+            {/* Dropdown Material Filter */}
+            <span className="text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>Suku Cadang:</span>
+            <select
+              value={filterWOMaterial}
+              onChange={e => setFilterWOMaterial(e.target.value)}
+              className="rounded px-2.5 py-1 text-xs border max-w-[200px]"
+              style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+            >
+              <option value="Semua">Semua Suku Cadang</option>
+              {uniqueMaterials.map(m => (
+                <option key={m.nomor_material} value={m.nomor_material}>
+                  {m.nomor_material} - {m.nama_material}
+                </option>
+              ))}
+            </select>
+
+            <div className="w-px h-6" style={{ backgroundColor: 'var(--color-steel-border)' }} />
+
             {(['Semua', 'Outstanding', 'Fulfilled'] as const).map(s => (
               <button key={s} onClick={() => setFilterWOStatus(s)}
                 className="px-3 py-1 rounded-full text-[11px] font-black tracking-wider border transition-all"
@@ -620,68 +798,188 @@ export default function WorkOrderPage() {
                   borderColor: filterWOStatus === s ? 'var(--color-on-surface)' : 'var(--color-steel-border)',
                 }}>{s}</button>
             ))}
-            <ExportButton data={filteredWO as unknown as Record<string, unknown>[]} filename="work_order_material" columns={exportColsWO} />
+            <ExportButton
+              data={filteredWO as unknown as Record<string, unknown>[]}
+              filename={filterMode === 'monthly' ? "reservasi_material_bulanan" : "rekap_kebutuhan_akumulatif"}
+              columns={
+                filterMode === 'monthly'
+                  ? [
+                      { key: 'nomor_rangkaian',  header: 'Nomor Rangkaian' },
+                      { key: 'propulsi',         header: 'Propulsi' },
+                      { key: 'seri_kereta',      header: 'Seri Kereta' },
+                      { key: 'nomor_material',   header: 'Kode Material' },
+                      { key: 'nama_material',    header: 'Nama Material' },
+                      { key: 'qty_reservasi',    header: 'Qty Reservasi' },
+                      { key: 'current_stock',    header: 'Stok Saat Ini' },
+                      { key: 'status_pemenuhan', header: 'Status Pemenuhan' },
+                    ]
+                  : [
+                      { key: 'nomor_material',   header: 'Kode Material' },
+                      { key: 'nama_material',    header: 'Nama Material' },
+                      { key: 'current_stock',    header: 'Stok Sekarang' },
+                      { key: 'qty_reservasi',    header: 'Total Kebutuhan' },
+                      { key: 'incoming_po',      header: 'Incoming PO' },
+                      { key: 'net_projection',   header: 'Net Proyeksi' },
+                      { key: 'status_pemenuhan', header: 'Status Kelayakan' },
+                    ]
+              }
+            />
           </div>
         </div>
-        <div className="overflow-x-auto">
+
+        {/* Dynamic Month/Material Summary Panel */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 border-b animate-fade-in" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background)' }}>
+          {filterWOMaterial === 'Semua' ? (
+            <>
+              <div className="tactile-card rounded-lg p-3 flex flex-col justify-center" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+                <span className="text-[9px] font-black uppercase tracking-wider mb-1" style={{ color: 'var(--color-on-surface-variant)' }}>
+                  {filterMode === 'monthly' ? 'Total Kebutuhan Bulan Ini' : 'Total Kebutuhan Kumulatif'}
+                </span>
+                <span className="text-lg font-black" style={{ color: 'var(--color-secondary)' }}>{grandTotalRequired} Unit</span>
+                <span className="text-[10px] mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Akumulasi semua suku cadang</span>
+              </div>
+              <div className="tactile-card rounded-lg p-3 flex flex-col justify-center" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+                <span className="text-[9px] font-black uppercase tracking-wider mb-1" style={{ color: 'var(--color-on-surface-variant)' }}>Total Defisit (Outstanding)</span>
+                <span className="text-lg font-black" style={{ color: 'var(--color-led-red)' }}>{totalOutstanding} Unit</span>
+                <span className="text-[10px] mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Kekurangan stok di masa depan</span>
+              </div>
+              <div className="tactile-card rounded-lg p-3 flex flex-col justify-center" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+                <span className="text-[9px] font-black uppercase tracking-wider mb-1" style={{ color: 'var(--color-on-surface-variant)' }}>Total Terpenuhi (Fulfilled)</span>
+                <span className="text-lg font-black" style={{ color: 'var(--color-led-green)' }}>{totalFulfilled} Unit</span>
+                <span className="text-[10px] mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Stok aman / surplus</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="tactile-card rounded-lg p-3 flex flex-col justify-center" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+                <span className="text-[9px] font-black uppercase tracking-wider mb-1" style={{ color: 'var(--color-on-surface-variant)' }}>Suku Cadang Terpilih</span>
+                <span className="text-xs font-bold truncate" style={{ color: 'var(--color-on-surface)' }}>{activeMaterialName || filterWOMaterial}</span>
+                <span className="text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>Kode: {filterWOMaterial}</span>
+              </div>
+              <div className="tactile-card rounded-lg p-3 flex flex-col justify-center" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+                <span className="text-[9px] font-black uppercase tracking-wider mb-1" style={{ color: 'var(--color-on-surface-variant)' }}>Total Kebutuhan</span>
+                <span className="text-lg font-black" style={{ color: 'var(--color-secondary)' }}>{totalRequiredInMonth} Unit</span>
+                <span className="text-[10px] mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>{filterMode === 'monthly' ? 'Bulan terpilih' : 'Semua rencana'}</span>
+              </div>
+              <div className="tactile-card rounded-lg p-3 flex flex-col justify-center" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+                <span className="text-[9px] font-black uppercase tracking-wider mb-1" style={{ color: 'var(--color-on-surface-variant)' }}>Stok Tersedia di Gudang</span>
+                <span className="text-lg font-black animate-pulse" style={{ color: activeMaterialStock >= totalRequiredInMonth ? 'var(--color-led-green)' : 'var(--color-led-red)' }}>
+                  {activeMaterialStock} Unit
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '250px', minHeight: '200px' }}>
           <table className="w-full text-left border-collapse min-w-[800px] data-table">
             <thead>
               <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                {['No. WO','Rangkaian','Propulsi','Seri Kereta','Kode Material','Nama Material','Qty Reservasi','Stok Saat Ini','Status Kecukupan','Status Pemenuhan','Aksi'].map(h => (
+                {(filterMode === 'monthly'
+                  ? ['Rangkaian','Propulsi','Seri Kereta','Kode Material','Nama Material','Qty Reservasi','Stok Saat Ini','Status Kecukupan','Status Pemenuhan','Aksi']
+                  : ['Kode Material','Nama Material','Stok Sekarang','Total Kebutuhan','Incoming PO','Net Proyeksi','Status Kelayakan','Aksi']
+                ).map(h => (
                   <th key={h} className="px-4 py-3 text-[11px] font-black tracking-widest uppercase whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filteredWO.map((row, i) => {
-                const fCfg = fulfillCfg[row.status_pemenuhan];
-                const pCfg = propulsiCfg(row.propulsi);
                 const currentStock = row.current_stock ?? 0;
-                const isSufficient = currentStock >= row.qty_reservasi;
-                
-                return (
-                  <tr key={row.id} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
-                    <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-secondary)' }}>{row.nomor_wo}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_rangkaian}</td>
-                    <td className="px-4 py-3"><span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: pCfg.bg, color: pCfg.text }}>{row.propulsi}</span></td>
-                    <td className="px-4 py-3"><span className="text-[10px] font-bold px-2 py-0.5 rounded border" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)', backgroundColor: 'var(--color-surface-container-high)' }}>{row.seri_kereta}</span></td>
-                    <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>
-                      <Link to={`/critical-stock?material=${encodeURIComponent(row.nomor_material)}`} className="hover:underline">
-                        {row.nomor_material}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
-                    <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.qty_reservasi} unit</td>
-                    <td className="px-4 py-3 text-xs font-bold" style={{ color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)' }}>
-                      {currentStock} unit
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                        style={{
-                          backgroundColor: isSufficient ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)',
-                          color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)',
-                          border: isSufficient ? '1px solid rgba(22,163,74,0.3)' : '1px solid rgba(220,38,38,0.3)'
-                        }}>
-                        {isSufficient ? 'Cukup' : 'Kurang'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3"><span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: fCfg.bg, color: fCfg.text }}>{row.status_pemenuhan}</span></td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1.5">
-                        <Link to={`/critical-stock?material=${encodeURIComponent(row.nomor_material)}`}
-                          className="text-[9px] font-bold px-2 py-1 rounded border transition-all hover:opacity-80"
-                          style={{ backgroundColor: 'rgba(220,38,38,0.08)', borderColor: 'rgba(220,38,38,0.3)', color: 'var(--color-led-red)' }}>
-                          Stok
+
+                if (filterMode === 'monthly') {
+                  const fCfg = fulfillCfg[row.status_pemenuhan];
+                  const pCfg = propulsiCfg(row.propulsi ?? '—');
+                  const isSufficient = currentStock >= row.qty_reservasi;
+
+                  return (
+                    <tr key={row.id} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
+                      <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_rangkaian}</td>
+                      <td className="px-4 py-3"><span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: pCfg.bg, color: pCfg.text }}>{row.propulsi}</span></td>
+                      <td className="px-4 py-3"><span className="text-[10px] font-bold px-2 py-0.5 rounded border" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)', backgroundColor: 'var(--color-surface-container-high)' }}>{row.seri_kereta}</span></td>
+                      <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>
+                        <Link to={`/critical-stock?material=${encodeURIComponent(row.nomor_material)}`} className="hover:underline">
+                          {row.nomor_material}
                         </Link>
-                        <Link to={`/progress-po?material=${encodeURIComponent(row.nomor_material)}`}
-                          className="text-[9px] font-bold px-2 py-1 rounded border transition-all hover:opacity-80"
-                          style={{ backgroundColor: 'rgba(37,99,235,0.08)', borderColor: 'rgba(37,99,235,0.3)', color: '#60a5fa' }}>
-                          PO
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
+                      <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.qty_reservasi} unit</td>
+                      <td className="px-4 py-3 text-xs font-bold" style={{ color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)' }}>
+                        {currentStock} unit
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          style={{
+                            backgroundColor: isSufficient ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)',
+                            color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)',
+                            border: isSufficient ? '1px solid rgba(22,163,74,0.3)' : '1px solid rgba(220,38,38,0.3)'
+                          }}>
+                          {isSufficient ? 'Cukup' : 'Kurang'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3"><span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: fCfg.bg, color: fCfg.text }}>{row.status_pemenuhan}</span></td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1.5">
+                          <Link to={`/critical-stock?material=${encodeURIComponent(row.nomor_material)}`}
+                            className="text-[9px] font-bold px-2 py-1 rounded border transition-all hover:opacity-80"
+                            style={{ backgroundColor: 'rgba(220,38,38,0.08)', borderColor: 'rgba(220,38,38,0.3)', color: 'var(--color-led-red)' }}>
+                            Stok
+                          </Link>
+                          <Link to={`/progress-po?material=${encodeURIComponent(row.nomor_material)}`}
+                            className="text-[9px] font-bold px-2 py-1 rounded border transition-all hover:opacity-80"
+                            style={{ backgroundColor: 'rgba(37,99,235,0.08)', borderColor: 'rgba(37,99,235,0.3)', color: '#60a5fa' }}>
+                            PO
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                } else {
+                  const totalRequired = row.qty_reservasi ?? 0;
+                  const incomingPO = (row as any).incoming_po ?? 0;
+                  const netProj = (row as any).net_projection ?? 0;
+                  const isSufficient = netProj >= 0;
+
+                  return (
+                    <tr key={row.id} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
+                      <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>
+                        <Link to={`/critical-stock?material=${encodeURIComponent(row.nomor_material)}`} className="hover:underline">
+                          {row.nomor_material}
                         </Link>
-                      </div>
-                    </td>
-                  </tr>
-                );
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
+                      <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{currentStock} unit</td>
+                      <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-secondary)' }}>{totalRequired} unit</td>
+                      <td className="px-4 py-3 text-xs font-bold" style={{ color: '#60a5fa' }}>{incomingPO} unit</td>
+                      <td className="px-4 py-3 text-xs font-bold" style={{ color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)' }}>
+                        {netProj} unit
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                          style={{
+                            backgroundColor: isSufficient ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)',
+                            color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)',
+                            border: isSufficient ? '1px solid rgba(22,163,74,0.3)' : '1px solid rgba(220,38,38,0.3)'
+                          }}>
+                          {isSufficient ? 'Cukup' : `Kurang [Order: ${Math.abs(netProj)} unit]`}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1.5">
+                          <Link to={`/critical-stock?material=${encodeURIComponent(row.nomor_material)}`}
+                            className="text-[9px] font-bold px-2 py-1 rounded border transition-all hover:opacity-80"
+                            style={{ backgroundColor: 'rgba(220,38,38,0.08)', borderColor: 'rgba(220,38,38,0.3)', color: 'var(--color-led-red)' }}>
+                            Stok
+                          </Link>
+                          <Link to={`/progress-po?material=${encodeURIComponent(row.nomor_material)}`}
+                            className="text-[9px] font-bold px-2 py-1 rounded border transition-all hover:opacity-80"
+                            style={{ backgroundColor: 'rgba(37,99,235,0.08)', borderColor: 'rgba(37,99,235,0.3)', color: '#60a5fa' }}>
+                            PO
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                }
               })}
             </tbody>
           </table>

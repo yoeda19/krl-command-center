@@ -46,11 +46,31 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     e.preventDefault();
     setLoading(true);
     setTimeout(() => {
-      localStorage.setItem('krl_auth', JSON.stringify({ 
-        email: username || 'yuda.maulana@krl.co.id', 
-        name: 'Yuda Maulana', 
+      let finalEmail = username.trim();
+      let finalName = '';
+      
+      if (finalEmail.includes('@')) {
+        const parts = finalEmail.split('@');
+        finalName = parts[0].split('.')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+      } else {
+        finalName = finalEmail.split('.')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        finalEmail = `${finalEmail.toLowerCase()}@krl.co.id`;
+      }
+
+      const authData = { 
+        email: finalEmail || 'dev@prisma.co.id', 
+        name: finalName || 'Dev Admin', 
         role: 'Admin' 
-      }));
+      };
+
+      localStorage.setItem('krl_auth', JSON.stringify(authData));
+      localStorage.setItem('krl_admin_email', authData.email);
+      localStorage.setItem('krl_admin_name', authData.name);
+
       onLogin?.();
       navigate('/critical-stock');
     }, 1200);

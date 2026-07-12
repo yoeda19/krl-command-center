@@ -311,6 +311,7 @@ export default function CriticalStockPage() {
   const [searchText, setSearchText] = useState(materialParam || '');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(materialParam);
   const [showChartWithPO, setShowChartWithPO] = useState(false);
+  const [isChartFullScreen, setIsChartFullScreen] = useState(false);
 
   const [totalTrains, setTotalTrains] = useState(0);
   const [inMaintenanceCount, setInMaintenanceCount] = useState(0);
@@ -715,8 +716,13 @@ export default function CriticalStockPage() {
   if (loading) {
     return (
       <PageWrapper fullWidth>
-        <div className="flex items-center justify-center h-96">
-          <span className="text-sm font-medium" style={{ color: 'var(--color-on-surface-variant)' }}>Memuat data...</span>
+        <div className="flex flex-col items-center justify-center min-h-[70vh] gap-4">
+          <div className="w-16 h-16 animate-pulse">
+            <img src="/logo.svg" alt="PRISMA Logo" className="w-full h-full object-contain" />
+          </div>
+          <span className="text-sm font-medium animate-pulse" style={{ color: 'var(--color-on-surface-variant)' }}>
+            Memuat data...
+          </span>
         </div>
       </PageWrapper>
     );
@@ -732,11 +738,23 @@ export default function CriticalStockPage() {
         {/* LEFT COLUMN: Absorption Chart & Critical Stock Table (Spans 2 columns) */}
         <div className="xl:col-span-2 space-y-6">
           {/* ECharts — Area Chart Proyeksi Penyerapan */}
-          <div className="tactile-card rounded-lg overflow-hidden" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+          <div
+            className={`tactile-card rounded-lg overflow-hidden ${isChartFullScreen ? 'fixed inset-0 z-50 p-6 flex flex-col justify-between' : ''}`}
+            style={isChartFullScreen ? {
+              backgroundColor: 'var(--color-background)',
+              borderColor: 'var(--color-steel-border)',
+              width: '100vw',
+              height: '100vh',
+              overflowY: 'auto'
+            } : {
+              backgroundColor: 'var(--color-background-metallic)',
+              borderColor: 'var(--color-steel-border)'
+            }}
+          >
             <div className="p-5 border-b flex flex-col gap-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
               <div className="flex flex-wrap justify-between items-center gap-4">
                 <div>
-                  <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Proyeksi Penyerapan</h3>
+                  <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Penyerapan Stok Kritis</h3>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
                     Komparasi Rencana vs Aktual — <b>{referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})</b>
                   </p>
@@ -772,6 +790,25 @@ export default function CriticalStockPage() {
                       </option>
                     ))}
                   </select>
+
+                  <button
+                    onClick={() => setIsChartFullScreen(!isChartFullScreen)}
+                    className="p-1.5 rounded border transition-all flex items-center justify-center hover:opacity-80"
+                    style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                    title={isChartFullScreen ? "Kecilkan Tampilan" : "Perbesar Tampilan (Full Screen)"}
+                  >
+                    {isChartFullScreen ? (
+                      /* Minimize icon */
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m0 0V3m0 6l-6-6m6 18v-6m0 0H9m6 0l-6 6" />
+                      </svg>
+                    ) : (
+                      /* Maximize icon */
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6m0 0v6m0-6L14 10M9 21H3m0 0v-6m0 6l7-7" />
+                      </svg>
+                    )}
+                  </button>
                 </div>
               </div>
 
@@ -1285,7 +1322,7 @@ export default function CriticalStockPage() {
                   },
                 ],
               }}
-              style={{ height: 570, backgroundColor: 'var(--color-background-metallic)' }}
+              style={{ height: isChartFullScreen ? 'calc(100vh - 180px)' : 570, backgroundColor: 'var(--color-background-metallic)' }}
               opts={{ renderer: 'canvas' }}
             />
           </div>
