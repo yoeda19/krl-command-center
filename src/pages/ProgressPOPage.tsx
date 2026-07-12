@@ -252,18 +252,7 @@ export default function ProgressPOPage() {
   return (
     <PageWrapper fullWidth>
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-black flex items-center gap-2" style={{ color: 'var(--color-on-surface)' }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-secondary)' }}>
-            <rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/>
-            <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
-          </svg>
-          Progres PO &amp; Transit
-        </h2>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-on-surface-variant)' }}>
-          Pemantauan status pengadaan barang
-        </p>
-      </div>
+      <div className="h-4" />
 
       {/* Status Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">

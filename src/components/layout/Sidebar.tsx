@@ -69,6 +69,7 @@ const navItems = [
   { path: '/slow-moving',   icon: Icons.slowMoving,    label: 'Analisa Usia Stok' },
   { path: '/progress-po',   icon: Icons.progressPO,    label: 'Progres PO & Transit' },
   { path: '/work-order',    icon: Icons.workOrder,     label: 'Perawatan KRL' },
+  { path: '/composition',   icon: Icons.train,         label: 'Komposisi Rangkaian' },
   { path: '/admin-panel',   icon: Icons.adminPanel,    label: 'Panel Admin' },
   { path: '/audit-log',     icon: Icons.auditLog,      label: 'Log Audit' },
 ];
@@ -95,23 +96,22 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         style={{ borderColor: 'var(--color-steel-border)', padding: collapsed ? '0 16px' : '0 20px' }}
       >
         <div
-          className="flex items-center justify-center rounded-lg shrink-0"
+          className="flex items-center justify-center rounded-lg shrink-0 overflow-hidden"
           style={{
-            width: 34, height: 34,
-            backgroundColor: 'var(--color-surface-container-high)',
+            width: 34,
+            height: 34,
             border: '1px solid var(--color-steel-border)',
-            color: 'var(--color-on-surface)',
           }}
         >
-          {Icons.train}
+          <img src="/logo.svg" alt="PRISMA Logo" className="w-full h-full object-cover" />
         </div>
         {!collapsed && (
           <div className="overflow-hidden whitespace-nowrap">
             <p className="font-bold text-sm leading-tight" style={{ color: 'var(--color-on-surface)' }}>
-              KRL Command
+              PRISMA
             </p>
             <p className="text-[9px] font-bold tracking-[0.15em] uppercase" style={{ color: 'var(--color-on-surface-variant)' }}>
-              Material Procurement
+              Material Analysis
             </p>
           </div>
         )}

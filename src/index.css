@@ -167,8 +167,14 @@ body {
 }
 
 .data-table tbody tr {
-  border-bottom: 1px solid var(--color-steel-border);
   transition: background-color 0.12s;
+}
+.data-table tbody td {
+  border-right: 1px solid var(--color-steel-border);
+  border-bottom: 1px solid var(--color-steel-border);
+}
+.data-table tbody td:last-child {
+  border-right: none;
 }
 .data-table tbody tr:hover { background-color: var(--color-surface-container-high) !important; }
 

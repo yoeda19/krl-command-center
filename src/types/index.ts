@@ -186,6 +186,7 @@ export interface MaintenanceBomConfig {
   nama_material?: string;
   satuan?: string;
   current_stock?: number;
+  stocks?: Record<string, number> | null;
 }
 
 export interface WorkOrder {

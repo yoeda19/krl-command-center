@@ -8,6 +8,7 @@ import AnomalyStockPage from './pages/AnomalyStockPage';
 import ProgressPOPage from './pages/ProgressPOPage';
 import StockAgingPage from './pages/StockAgingPage';
 import WorkOrderPage from './pages/WorkOrderPage';
+import TrainCompositionPage from './pages/TrainCompositionPage';
 import AdminPanelPage from './pages/AdminPanelPage';
 import AuditLogPage from './pages/AuditLogPage';
 import type { ThemeMode } from './types';
@@ -47,6 +48,7 @@ function ProtectedLayout({ theme, onThemeToggle, collapsed, onToggle }: Protecte
           <Route path="/progress-po"   element={<ProgressPOPage />} />
           <Route path="/slow-moving"   element={<StockAgingPage />} />
           <Route path="/work-order"    element={<WorkOrderPage />} />
+          <Route path="/composition"   element={<TrainCompositionPage />} />
           <Route path="/admin-panel"   element={<AdminPanelPage />} />
           <Route path="/audit-log"     element={<AuditLogPage />} />
           <Route path="*"              element={<Navigate to="/critical-stock" replace />} />

@@ -12,7 +12,7 @@ export default function StatusBadge({ status }: { status: any }) {
 
   return (
     <div className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full ${cls}`}>
-      <span className="text-[10px] font-black tracking-widest uppercase">{status === 'BELUM PO' ? 'BELUM PO' : status}</span>
+      <span className="text-[10px] font-black tracking-widest uppercase">{status === 'BELUM PO' ? 'NO PO' : status}</span>
     </div>
   );
 }

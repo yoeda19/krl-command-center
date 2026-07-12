@@ -4,9 +4,11 @@ import type { ThemeMode } from '../../types';
 
 const pageLabels: Record<string, string> = {
   '/critical-stock': 'Availability Stok',
+  '/anomaly-stock': 'Anomali Stok',
   '/progress-po': 'Progres PO & Transit',
   '/slow-moving': 'Analisa Usia Stok',
   '/work-order': 'Perawatan KRL',
+  '/composition': 'Komposisi Rangkaian',
   '/admin-panel': 'Panel Admin',
   '/audit-log': 'Log Audit',
 };
@@ -36,7 +38,7 @@ export default function TopBar({ collapsed, theme, onThemeToggle, currentPath }:
       }}
     >
       {/* Left */}
-      <div className="flex items-center gap-3">
+      <div className="flex-1 flex items-center gap-3">
         <h2 className="text-sm font-bold tracking-[0.12em] uppercase" style={{ color: 'var(--color-on-surface)' }}>
           PRISMA
         </h2>

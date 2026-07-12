@@ -225,22 +225,30 @@ export default function AdminPanelPage() {
       }
     }
 
-    const lvl1 = allEquipment.find(e => e.level === 1 && e.name === nomor_rangkaian);
+    const cleanNum = nomor_rangkaian.split('-')[0].trim();
+    const lvl1 = allEquipment.find(e => e.level === 1 && (e.name === nomor_rangkaian || e.name === cleanNum));
     if (!lvl1) return bom.qty_standar;
     const children = allEquipment.filter(e => e.level === 2 && e.parent_id === lvl1.id);
     if (children.length === 0) return bom.qty_standar;
 
     let countTC = 0, countM1 = 0, countM2 = 0, countT6 = 0, countT = 0;
     children.forEach(c => {
-      const parts = c.name.split('/');
-      if (parts.length > 1) {
-        const type = parts[1].trim().toUpperCase();
-        if (type.includes('TC')) countTC++;
-        else if (type.includes('M1')) countM1++;
-        else if (type.includes('M2')) countM2++;
-        else if (type.includes('T6')) countT6++;
-        else if (type.startsWith('T')) countT++;
+      let type = '';
+      if (c.name.includes('/')) {
+        const parts = c.name.split('/');
+        type = parts[parts.length - 1].trim().toUpperCase();
+      } else if (c.name.includes('-')) {
+        const parts = c.name.split('-');
+        type = parts[parts.length - 1].trim().toUpperCase();
+      } else {
+        type = c.name.trim().toUpperCase();
       }
+
+      if (type.includes('TC')) countTC++;
+      else if (type.includes('M1')) countM1++;
+      else if (type.includes('M2')) countM2++;
+      else if (type.includes('T6')) countT6++;
+      else if (type.includes('T')) countT++;
     });
 
     const qtyTC = bom.qty_tc ?? 0;
@@ -824,20 +832,6 @@ export default function AdminPanelPage() {
   return (
     <PageWrapper fullWidth>
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-black flex items-center gap-2" style={{ color: 'var(--color-on-surface)' }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-secondary)' }}>
-            <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
-            <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
-            <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
-            <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
-          </svg>
-          Panel Admin
-        </h2>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-on-surface-variant)' }}>
-          Pengaturan parameter, rencana penyerapan, pengadaan, dan perawatan
-        </p>
-      </div>
 
       {/* Tabs */}
       <div className="flex border-b" style={{ borderColor: 'var(--color-steel-border)' }}>
@@ -1214,7 +1208,7 @@ export default function AdminPanelPage() {
                       else setNewSchedule(prev => ({ ...prev, dipo: e.target.value }));
                     }}
                     className={inputCls} style={inputStyle}>
-                    {['Depo Depok', 'Depo Bukit Duri', 'Depo Bogor', 'Depo Manggarai'].map(d => <option key={d}>{d}</option>)}
+                    {['Depo Depok', 'Depo Bukit Duri', 'Depo Bogor', 'Depo Manggarai', 'Overhaul Manggarai'].map(d => <option key={d}>{d}</option>)}
                   </select>
                 </Field>
               </div>
@@ -1343,21 +1337,29 @@ export default function AdminPanelPage() {
       {selectedScheduleForBOM && (() => {
         const sched = selectedScheduleForBOM;
         const boms = bomList.filter(b => b.tipe_perawatan === sched.tipe_perawatan);
-        const lvl1 = allEquipment.find(e => e.level === 1 && e.name === sched.nomor_rangkaian);
+        const cleanNum = sched.nomor_rangkaian.split('-')[0].trim();
+        const lvl1 = allEquipment.find(e => e.level === 1 && (e.name === sched.nomor_rangkaian || e.name === cleanNum));
         const children = lvl1 ? allEquipment.filter(e => e.level === 2 && e.parent_id === lvl1.id) : [];
 
         // Count cars by type
         let countTC = 0, countM1 = 0, countM2 = 0, countT6 = 0, countT = 0;
         children.forEach(c => {
-          const parts = c.name.split('/');
-          if (parts.length > 1) {
-            const type = parts[1].trim().toUpperCase();
-            if (type.includes('TC')) countTC++;
-            else if (type.includes('M1')) countM1++;
-            else if (type.includes('M2')) countM2++;
-            else if (type.includes('T6')) countT6++;
-            else if (type.startsWith('T')) countT++;
+          let type = '';
+          if (c.name.includes('/')) {
+            const parts = c.name.split('/');
+            type = parts[parts.length - 1].trim().toUpperCase();
+          } else if (c.name.includes('-')) {
+            const parts = c.name.split('-');
+            type = parts[parts.length - 1].trim().toUpperCase();
+          } else {
+            type = c.name.trim().toUpperCase();
           }
+
+          if (type.includes('TC')) countTC++;
+          else if (type.includes('M1')) countM1++;
+          else if (type.includes('M2')) countM2++;
+          else if (type.includes('T6')) countT6++;
+          else if (type.includes('T')) countT++;
         });
 
         return (
@@ -1376,13 +1378,13 @@ export default function AdminPanelPage() {
                 </button>
               </div>
 
-              {/* Rincian Gerbong Aset */}
+              {/* Rincian Kereta Aset */}
               <div className="p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
                 style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
                 <div>
-                  <p className="text-xs font-black uppercase tracking-wider text-secondary mb-1" style={{ color: 'var(--color-secondary)' }}>Susunan Gerbong Aktif (Level 2)</p>
+                  <p className="text-xs font-black uppercase tracking-wider text-secondary mb-1" style={{ color: 'var(--color-secondary)' }}>Susunan Kereta Aktif</p>
                   <p className="text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>
-                    Terdeteksi <b>{children.length}</b> gerbong terdaftar di master asset untuk rangkaian <b>{sched.nomor_rangkaian}</b>.
+                    Terdeteksi <b>{children.length}</b> kereta terdaftar di master asset untuk rangkaian <b>{sched.nomor_rangkaian}</b>.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs font-bold font-mono">
@@ -1399,7 +1401,7 @@ export default function AdminPanelPage() {
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                      {['Kode Material', 'Nama Material', 'Satuan', 'Rumus Gerbong', 'Qty Kebutuhan', 'Stok Gudang', 'Status'].map(h => (
+                      {['Kode Material', 'Nama Material', 'Satuan', 'Rumus Kereta', 'Qty Kebutuhan', 'Stok Gudang', 'Status'].map(h => (
                         <th key={h} className="p-2.5 font-bold uppercase tracking-wider" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
                       ))}
                     </tr>
@@ -1407,7 +1409,9 @@ export default function AdminPanelPage() {
                   <tbody>
                     {boms.map(bom => {
                       const reqQty = getRequiredBomQty(sched.nomor_rangkaian, bom);
-                      const currentStock = bom.current_stock ?? 0;
+                      const currentStock = bom.stocks && sched.dipo && (sched.dipo in bom.stocks)
+                        ? (bom.stocks[sched.dipo] ?? 0)
+                        : (bom.current_stock ?? 0);
                       const isSufficient = currentStock >= reqQty;
                       const hasFormula = bom.qty_tc || bom.qty_m1 || bom.qty_m2 || bom.qty_t6 || bom.qty_t;
 
@@ -1642,9 +1646,9 @@ export default function AdminPanelPage() {
                   </Field>
                 </div>
 
-                {/* Formula Gerbong */}
+                {/* Formula Kereta */}
                 <div className="border-t pt-3" style={{ borderColor: 'var(--color-steel-border)' }}>
-                  <p className="text-[11px] font-bold mb-2 opacity-80" style={{ color: 'var(--color-on-surface)' }}>Rumus Dinamis per Gerbong (TC / M1 / M2 / T6 / T) — Opsional</p>
+                  <p className="text-[11px] font-bold mb-2 opacity-80" style={{ color: 'var(--color-on-surface)' }}>Rumus Dinamis per Kereta (TC / M1 / M2 / T6 / T) — Opsional</p>
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                     {[
                       { key: 'qty_tc', label: 'Qty TC' },
@@ -1654,7 +1658,12 @@ export default function AdminPanelPage() {
                       { key: 'qty_t',  label: 'Qty T' },
                     ].map(f => (
                       <Field key={f.key} label={f.label}>
-                        <input type="number" value={(editingBOM ?? newBOM)[f.key as keyof Omit<MaintenanceBomConfig, 'id' | 'nama_material' | 'satuan' | 'current_stock'>] ?? 0}
+                        <input type="number" 
+                          value={(() => {
+                            const valObj = (editingBOM ?? newBOM);
+                            const val = valObj[f.key as keyof typeof valObj];
+                            return typeof val === 'number' ? val : 0;
+                          })()}
                           onChange={e => {
                             const val = Math.max(0, +e.target.value);
                             if (editingBOM) setEditingBOM(prev => prev ? { ...prev, [f.key]: val } : prev);
@@ -1665,7 +1674,7 @@ export default function AdminPanelPage() {
                     ))}
                   </div>
                   <p className="text-[10px] mt-2 opacity-50 italic">
-                    *Isi 0 jika gerbong bersangkutan tidak menggunakan material ini. Jika semua 0, sistem menggunakan Qty Standar Rangkaian.
+                    *Isi 0 jika kereta bersangkutan tidak menggunakan material ini. Jika semua 0, sistem menggunakan Qty Standar Rangkaian.
                   </p>
                 </div>
 

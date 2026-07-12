@@ -122,22 +122,30 @@ export default function WorkOrderPage() {
       }
     }
 
-    const lvl1 = allEquipment.find(e => e.level === 1 && e.name === nomor_rangkaian);
+    const cleanNum = nomor_rangkaian.split('-')[0].trim();
+    const lvl1 = allEquipment.find(e => e.level === 1 && (e.name === nomor_rangkaian || e.name === cleanNum));
     if (!lvl1) return bom.qty_standar;
     const children = allEquipment.filter(e => e.level === 2 && e.parent_id === lvl1.id);
     if (children.length === 0) return bom.qty_standar;
 
     let countTC = 0, countM1 = 0, countM2 = 0, countT6 = 0, countT = 0;
     children.forEach(c => {
-      const parts = c.name.split('/');
-      if (parts.length > 1) {
-        const type = parts[1].trim().toUpperCase();
-        if (type.includes('TC')) countTC++;
-        else if (type.includes('M1')) countM1++;
-        else if (type.includes('M2')) countM2++;
-        else if (type.includes('T6')) countT6++;
-        else if (type.startsWith('T')) countT++;
+      let type = '';
+      if (c.name.includes('/')) {
+        const parts = c.name.split('/');
+        type = parts[parts.length - 1].trim().toUpperCase();
+      } else if (c.name.includes('-')) {
+        const parts = c.name.split('-');
+        type = parts[parts.length - 1].trim().toUpperCase();
+      } else {
+        type = c.name.trim().toUpperCase();
       }
+
+      if (type.includes('TC')) countTC++;
+      else if (type.includes('M1')) countM1++;
+      else if (type.includes('M2')) countM2++;
+      else if (type.includes('T6')) countT6++;
+      else if (type.includes('T')) countT++;
     });
 
     const qtyTC = bom.qty_tc ?? 0;
@@ -214,17 +222,7 @@ export default function WorkOrderPage() {
   return (
     <PageWrapper fullWidth>
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-black flex items-center gap-2" style={{ color: 'var(--color-on-surface)' }}>
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-secondary)' }}>
-            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-          </svg>
-          Perawatan KRL
-        </h2>
-        <p className="text-sm mt-1" style={{ color: 'var(--color-on-surface-variant)' }}>
-          Jadwal perawatan berkala armada KRL
-        </p>
-      </div>
+      <div className="h-4" />
 
       {/* Fleet KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

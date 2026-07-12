@@ -627,9 +627,17 @@ export async function getMaintenanceSchedule(): Promise<MaintenanceSchedule[]> {
 }
 
 export async function addMaintenanceSchedule(schedule: Omit<MaintenanceSchedule, 'id'>): Promise<{ error: string | null }> {
+  // Fetch max ID to bypass out-of-sync PostgreSQL sequence
+  const { data: maxData } = await supabase
+    .from('maintenance_schedule')
+    .select('id')
+    .order('id', { ascending: false })
+    .limit(1);
+  const nextId = maxData && maxData.length > 0 ? maxData[0].id + 1 : 1;
+
   const { error } = await supabase
     .from('maintenance_schedule')
-    .insert([schedule]);
+    .insert([{ ...schedule, id: nextId }]);
   return { error: error?.message ?? null };
 }
 
@@ -728,13 +736,25 @@ export async function getRealSAPTrains(): Promise<{ id: string; name: string; mo
   return data;
 }
 
-export async function getAllEquipment(): Promise<{ id: string; parent_id: string | null; level: number; name: string }[]> {
-  const { data, error } = await supabase
-    .from('equipment_master')
-    .select('id, parent_id, level, name')
-    .order('name', { ascending: true });
-  if (error || !data) return [];
-  return data as { id: string; parent_id: string | null; level: number; name: string }[];
+export async function getAllEquipment(): Promise<{ id: string; parent_id: string | null; level: number; name: string; model_no?: string | null }[]> {
+  let allData: any[] = [];
+  let from = 0;
+  const limit = 1000;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('equipment_master')
+      .select('id, parent_id, level, name, model_no')
+      .order('name', { ascending: true })
+      .range(from, from + limit - 1);
+
+    if (error || !data || data.length === 0) break;
+    allData = [...allData, ...data];
+    if (data.length < limit) break;
+    from += limit;
+  }
+
+  return allData as { id: string; parent_id: string | null; level: number; name: string; model_no?: string | null }[];
 }
 
 export async function getRealSAPOrders(): Promise<{ order_no: string; description: string }[]> {
@@ -758,7 +778,7 @@ export async function getMaintenanceBomConfig(): Promise<MaintenanceBomConfig[]>
 
   const { data: matData } = await supabase
     .from('master_materials')
-    .select('nomor_material, nama_material, satuan, total_stock');
+    .select('nomor_material, nama_material, satuan, total_stock, pst, dpk, dpkt, dbkd, dbkdt, omri, omrit, dbgr, dbgrt, dmri, dmrit');
 
   return bomData.map(bom => {
     const mat = matData?.find(m => m.nomor_material === bom.nomor_material);
@@ -767,6 +787,14 @@ export async function getMaintenanceBomConfig(): Promise<MaintenanceBomConfig[]>
       nama_material: mat?.nama_material ?? '—',
       satuan: mat?.satuan ?? 'PCS',
       current_stock: mat ? Number(mat.total_stock) : 0,
+      stocks: mat ? {
+        'Gudang Pusat': Number(mat.pst || 0),
+        'Depo Depok': Number(mat.dpk || 0) + Number(mat.dpkt || 0),
+        'Depo Bukit Duri': Number(mat.dbkd || 0) + Number(mat.dbkdt || 0),
+        'Overhaul Manggarai': Number(mat.omri || 0) + Number(mat.omrit || 0),
+        'Depo Bogor': Number(mat.dbgr || 0) + Number(mat.dbgrt || 0),
+        'Depo Manggarai': Number(mat.dmri || 0) + Number(mat.dmrit || 0),
+      } : null
     } as MaintenanceBomConfig;
   });
 }

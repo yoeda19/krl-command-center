@@ -8,6 +8,10 @@ import ExportButton from '../components/ui/ExportButton';
 import { getCriticalStockData, getFleetMetrics, getRealSAPTrains, getMaintenanceSchedule, getProcurementData } from '../services/supabaseService';
 import type { CriticalStockItem, FleetMetrics, MaintenanceSchedule, ProcurementItem } from '../types';
 
+const getStatusPlanColor = (status: string) => {
+  return 'var(--color-on-surface-variant)';
+};
+
 // Label 12 bulan terakhir relatif
 function buildBulanLabels(): string[] {
   const BULAN_NAMES = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
@@ -720,28 +724,7 @@ export default function CriticalStockPage() {
 
   return (
     <PageWrapper fullWidth>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-black flex items-center gap-2" style={{ color: 'var(--color-on-surface)' }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-led-red)' }}>
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-            Availability Stok
-          </h2>
-          <p className="text-sm mt-1" style={{ color: 'var(--color-on-surface-variant)' }}>
-            Status stok real-time dan analisis kebutuhan
-          </p>
-        </div>
-        <div
-          className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold"
-          style={{ backgroundColor: 'rgba(220,38,38,0.12)', color: 'var(--color-led-red)', border: '1px solid rgba(220,38,38,0.3)' }}
-        >
-          <span className="led-indicator led-red" style={{ width: 8, height: 8 }} />
-          {filteredData.filter(d => (d as any).status_po === 'KRITIS' || (d as any).status_po === 'BELUM PO').length} Material Kritis
-        </div>
-      </div>
+      <div className="h-4" />
 
       {/* Main Dashboard Layout: 2-column grid for large screens */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-4">
@@ -1461,7 +1444,7 @@ export default function CriticalStockPage() {
           {(['KRITIS', 'WASPADA', 'AMAN', 'BELUM PO'] as const).map(s => (
             <label key={s} className="flex items-center gap-1.5 cursor-pointer">
               <input type="checkbox" checked={filterStatus.includes(s)} onChange={() => toggleStatus(s)} className="rounded" />
-              <span style={{ color: s === 'KRITIS' || s === 'BELUM PO' ? 'var(--color-led-red)' : s === 'WASPADA' ? 'var(--color-led-amber)' : 'var(--color-led-green)' }}>{s}</span>
+              <span style={{ color: s === 'KRITIS' || s === 'BELUM PO' ? 'var(--color-led-red)' : s === 'WASPADA' ? 'var(--color-led-amber)' : 'var(--color-led-green)' }}>{s === 'BELUM PO' ? 'NO PO' : s}</span>
             </label>
           ))}
         </div>
@@ -1556,20 +1539,22 @@ export default function CriticalStockPage() {
                         <div className="w-10 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-surface-container-highest)' }}>
                           <div className="h-full rounded-full" style={{ width: `${Math.min(100, row.pct_ketersediaan)}%`, backgroundColor: pctColor }} />
                         </div>
-                        <span className="font-bold text-[11px] w-8 text-right" style={{ color: pctColor }}>{row.pct_ketersediaan}%</span>
+                        <span className="font-bold text-[11px] w-8 text-right" style={{ color: 'var(--color-on-surface)' }}>{row.pct_ketersediaan}%</span>
                       </div>
                     </td>
                     <td className="px-2 py-2 text-[11px] text-right font-medium" style={{ color: 'var(--color-on-surface)' }}>{(row as any).plan_habis_label}</td>
                     
                     {/* Skenario Tanpa PO (Orange Tint) */}
                     <td className="px-2 py-2 text-[11px] text-center font-medium" style={{ color: 'var(--color-on-surface)', backgroundColor: 'rgba(217,119,6,0.02)' }}>{(row as any).koreksi_habis_no_po_label}</td>
-                    <td className="px-2 py-2 text-[11px] text-center font-bold" style={{ backgroundColor: 'rgba(217,119,6,0.02)', color: (row as any).gap_no_po < 0 ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>
+                    <td className="px-2 py-2 text-[11px] text-center font-bold" style={{ backgroundColor: 'rgba(217,119,6,0.02)', color: 'var(--color-on-surface)' }}>
                       {(row as any).gap_no_po > 0 ? '+' : ''}{(row as any).gap_no_po}
                     </td>
                     <td className="px-2 py-2 text-center" style={{ backgroundColor: 'rgba(217,119,6,0.02)' }}>
-                      <StatusBadge status={(row as any).status_no_po} />
+                      <span className="text-[8.5px] font-black tracking-normal uppercase whitespace-nowrap" style={{ color: getStatusPlanColor((row as any).status_no_po) }}>
+                        {(row as any).status_no_po}
+                      </span>
                     </td>
-                    <td className="px-2 py-2 text-[11px] text-center font-bold" style={{ backgroundColor: 'rgba(217,119,6,0.02)', color: (row as any).gap_to_po === null ? 'var(--color-on-surface-variant)' : (row as any).gap_to_po < 0 ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>
+                    <td className="px-2 py-2 text-[11px] text-center font-bold" style={{ backgroundColor: 'rgba(217,119,6,0.02)', color: (row as any).gap_to_po === null ? 'var(--color-on-surface-variant)' : 'var(--color-on-surface)' }}>
                       {(row as any).gap_to_po === null ? '-' : `${(row as any).gap_to_po > 0 ? '+' : ''}${(row as any).gap_to_po}`}
                     </td>
                     <td className="px-2 py-2 text-center" style={{ backgroundColor: 'rgba(217,119,6,0.02)' }}>
@@ -1577,18 +1562,20 @@ export default function CriticalStockPage() {
                     </td>
 
                     {/* Skenario Dengan PO (Green Tint) */}
-                    <td className="px-2 py-2 text-[11px] text-center font-semibold" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: (row as any).po_kirim_label === '-' ? 'var(--color-on-surface-variant)' : 'var(--color-primary)' }}>
+                    <td className="px-2 py-2 text-[11px] text-center font-semibold" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: (row as any).po_kirim_label === '-' ? 'var(--color-on-surface-variant)' : 'var(--color-on-surface)' }}>
                       {(row as any).po_kirim_label}
                     </td>
                     <td className="px-2 py-2 text-[11px] text-center font-medium" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: 'var(--color-on-surface-variant)' }}>
                       {(row as any).jumlah_dipesan_label}
                     </td>
-                    <td className="px-2 py-2 text-[11px] text-center font-medium text-emerald-600" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: (row as any).koreksi_habis_with_po_label === '-' ? 'var(--color-on-surface-variant)' : 'var(--color-on-surface)' }}>{(row as any).koreksi_habis_with_po_label}</td>
-                    <td className="px-2 py-2 text-[11px] text-center font-bold" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: (row as any).gap_with_po < 0 ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>
+                    <td className="px-2 py-2 text-[11px] text-center font-medium" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: (row as any).koreksi_habis_with_po_label === '-' ? 'var(--color-on-surface-variant)' : 'var(--color-on-surface)' }}>{(row as any).koreksi_habis_with_po_label}</td>
+                    <td className="px-2 py-2 text-[11px] text-center font-bold" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: 'var(--color-on-surface)' }}>
                       {(row as any).gap_with_po > 0 ? '+' : ''}{(row as any).gap_with_po}
                     </td>
                     <td className="px-2 py-2 text-center" style={{ backgroundColor: 'rgba(16,185,129,0.02)' }}>
-                      <StatusBadge status={(row as any).status_with_po} />
+                      <span className="text-[8.5px] font-black tracking-normal uppercase whitespace-nowrap" style={{ color: getStatusPlanColor((row as any).status_with_po) }}>
+                        {(row as any).status_with_po}
+                      </span>
                     </td>
 
                     <td className="px-2 py-2 text-center text-[11px]">
