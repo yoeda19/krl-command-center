@@ -387,7 +387,7 @@ export default function WorkOrderPage() {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-on-surface-variant)' }}>
             <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
           </svg>
-          <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Jadwal Rencana Perawatan KRL</h3>
+          <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Rencana Perawatan</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse min-w-[800px] data-table">
@@ -427,6 +427,7 @@ export default function WorkOrderPage() {
             </tbody>
           </table>
         </div>
+        <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
       </div>
 
       {/* BOM Standard Requirements Section */}
@@ -436,7 +437,7 @@ export default function WorkOrderPage() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-secondary)' }}>
               <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
             </svg>
-            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Master BOM (Bill of Materials) Standar Perawatan</h3>
+            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Master BOM</h3>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs mr-1" style={{ color: 'var(--color-on-surface-variant)' }}>Pilih Perawatan:</span>
@@ -522,6 +523,7 @@ export default function WorkOrderPage() {
               </tbody>
             </table>
           </div>
+          <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
         </div>
       </div>
 
@@ -530,7 +532,7 @@ export default function WorkOrderPage() {
         {/* Pie Chart Pemenuhan WO */}
         <div className="tactile-card rounded-lg overflow-hidden">
           <div className="p-4 border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Status Pemenuhan Material WO</h3>
+            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Status Pemenuhan WO</h3>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Distribusi Outstanding vs Fulfilled</p>
           </div>
           <ReactECharts
@@ -572,7 +574,7 @@ export default function WorkOrderPage() {
         {/* Bar Chart Propulsi + Status */}
         <div className="tactile-card rounded-lg overflow-hidden">
           <div className="p-4 border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Armada Berdasarkan Status</h3>
+            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Status Armada</h3>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Distribusi kondisi armada KRL saat ini</p>
           </div>
           <ReactECharts
@@ -607,7 +609,7 @@ export default function WorkOrderPage() {
       {/* Work Orders Detail */}
       <div className="tactile-card rounded-lg overflow-hidden">
         <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-          <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Reservasi Material Work Order</h3>
+          <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Reservasi Material</h3>
           <div className="flex items-center gap-2">
             {(['Semua', 'Outstanding', 'Fulfilled'] as const).map(s => (
               <button key={s} onClick={() => setFilterWOStatus(s)}
@@ -684,6 +686,7 @@ export default function WorkOrderPage() {
             </tbody>
           </table>
         </div>
+        <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
       </div>
     </PageWrapper>
   );

@@ -871,7 +871,7 @@ export default function AdminPanelPage() {
         <>
           <div className="tactile-card rounded-lg overflow-hidden">
             <div className="p-4 border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-              <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Konfigurasi Parameter Material</h3>
+              <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Parameter Material</h3>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse min-w-[950px] data-table">
@@ -908,6 +908,7 @@ export default function AdminPanelPage() {
                 </tbody>
               </table>
             </div>
+            <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
           </div>
 
           {/* Edit Parameter Modal */}
@@ -1035,7 +1036,7 @@ export default function AdminPanelPage() {
           {/* Procurement List Table */}
           <div className="tactile-card rounded-lg overflow-hidden">
             <div className="p-4 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-              <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Daftar Proses Pengadaan</h3>
+              <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Proses Pengadaan</h3>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded ml-1" style={{ backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)' }}>
                 🔐 Hanya Admin
               </span>
@@ -1093,6 +1094,7 @@ export default function AdminPanelPage() {
                 </tbody>
               </table>
             </div>
+            <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
           </div>
         </>
       )}
@@ -1103,7 +1105,7 @@ export default function AdminPanelPage() {
       {activeTab === 'perawatan' && (
         <div className="space-y-6">
           <div className="flex justify-between items-center">
-            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Jadwal Rencana Perawatan KRL</h3>
+            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Rencana Perawatan</h3>
             {!showScheduleForm && !editingSchedule && (
               <button onClick={() => { setShowScheduleForm(true); setEditingSchedule(null); setNewSchedule(emptySchedule()); }}
                 className="skeuomorphic-btn px-4 py-1.5 rounded text-xs flex items-center gap-2">
@@ -1252,6 +1254,7 @@ export default function AdminPanelPage() {
                 </tbody>
               </table>
             </div>
+            <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
           </div>
         </div>
       )}
@@ -1293,7 +1296,7 @@ export default function AdminPanelPage() {
             {/* BOM Configurations summary table */}
             <div className="tactile-card rounded-lg overflow-hidden">
               <div className="p-4 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-                <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Matriks Master Kebutuhan BOM Standar</h3>
+                <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Master BOM</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse data-table">
@@ -1328,6 +1331,7 @@ export default function AdminPanelPage() {
                   </tbody>
                 </table>
               </div>
+              <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
             </div>
           </div>
         );

@@ -529,7 +529,7 @@ export default function AnomalyStockPage() {
           <div className="p-5 border-b flex flex-col gap-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
             <div className="flex flex-wrap justify-between items-center gap-4">
               <div>
-                <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Proyeksi Penyerapan Material Kritis</h3>
+                <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Proyeksi Penyerapan</h3>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
                   Komparasi Rencana vs Aktual — <b>{referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})</b>
                 </p>
@@ -824,7 +824,7 @@ export default function AnomalyStockPage() {
         {/* CHART 2: Radial Bar Chart (Nested Ring Chart) Perbandingan Anomali Gudang */}
         <div className="lg:col-span-1 tactile-card rounded-lg overflow-hidden flex flex-col" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
           <div className="p-5 border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-            <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Perbandingan Anomali Per Gudang</h3>
+            <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Perbandingan Anomali</h3>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
               Jumlah material terdeteksi anomali pada masing-masing Depo/Gudang
             </p>
@@ -980,7 +980,7 @@ export default function AnomalyStockPage() {
             <div className="tactile-card rounded-lg overflow-hidden flex flex-col flex-1">
               <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
                 <div>
-                  <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Rincian Deviasi Bulanan</h3>
+                  <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Rincian Deviasi</h3>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
                     Material: <b>{referenceItem.nomor_material} — {referenceItem.nama_material}</b> ({selectedWarehouse === 'SEMUA' ? 'Semua Gudang' : referenceItem.gudang_label})
                   </p>
@@ -1049,6 +1049,7 @@ export default function AnomalyStockPage() {
                   </tbody>
                 </table>
               </div>
+              <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
             </div>
           ) : (
             <div className="tactile-card rounded-lg p-6 text-center text-xs flex-1 flex items-center justify-center" style={{ color: 'var(--color-on-surface-variant)' }}>
@@ -1075,7 +1076,7 @@ export default function AnomalyStockPage() {
           <div className="tactile-card rounded-lg overflow-hidden flex flex-col flex-1">
             <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Daftar Analisis Deviasi Penyerapan</h3>
+                <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Analisis Deviasi</h3>
               </div>
               <ExportButton data={mainExportData as any} filename="anomaly_stock_analysis" columns={exportCols} />
             </div>
@@ -1126,6 +1127,7 @@ export default function AnomalyStockPage() {
                 </tbody>
               </table>
             </div>
+            <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
           </div>
         </div>
 

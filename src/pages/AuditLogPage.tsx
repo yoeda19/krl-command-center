@@ -196,6 +196,7 @@ export default function AuditLogPage() {
             </tbody>
           </table>
         </div>
+        <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
       </div>
     </PageWrapper>
   );

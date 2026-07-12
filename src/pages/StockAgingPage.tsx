@@ -221,7 +221,7 @@ export default function StockAgingPage() {
         {/* Pie Chart Aging */}
         <div className="tactile-card rounded-lg overflow-hidden">
           <div className="p-4 border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Kategori Aging Stok</h3>
+            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Kategori Aging</h3>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Proporsi kategori aging</p>
           </div>
           <ReactECharts
@@ -324,7 +324,7 @@ export default function StockAgingPage() {
       {/* Heatmap Section */}
       <div className="tactile-card rounded-lg overflow-hidden mt-4">
         <div className="p-4 border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-          <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Sebaran Stok per Gudang</h3>
+          <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Sebaran Stok</h3>
           <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Tingkat stok material di seluruh gudang</p>
         </div>
         <div className="p-4" style={{ backgroundColor: 'var(--color-background)' }}>
@@ -522,7 +522,7 @@ export default function StockAgingPage() {
         <div className="tactile-card rounded-lg overflow-hidden">
           <div className="p-4 border-b flex flex-wrap gap-2 items-center justify-between" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
             <div>
-              <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Jeda &amp; Volume Restock</h3>
+              <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Volume Restock</h3>
               <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Interval pemesanan dan kuantitas</p>
             </div>
             <div className="flex items-center gap-2">
@@ -713,6 +713,7 @@ export default function StockAgingPage() {
             </tbody>
           </table>
         </div>
+        <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
       </div>
     </PageWrapper>
   );

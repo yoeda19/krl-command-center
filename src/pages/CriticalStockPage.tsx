@@ -736,7 +736,7 @@ export default function CriticalStockPage() {
             <div className="p-5 border-b flex flex-col gap-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
               <div className="flex flex-wrap justify-between items-center gap-4">
                 <div>
-                  <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Proyeksi Penyerapan Material Kritis</h3>
+                  <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Proyeksi Penyerapan</h3>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
                     Komparasi Rencana vs Aktual — <b>{referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})</b>
                   </p>
@@ -1301,11 +1301,11 @@ export default function CriticalStockPage() {
             <KpiCard label="Dead Stock" value={countDeadStock} unit="Material" borderColor="#9ca3af" sparkData={[2, 2, 1, 1, 1, 1]} />
           </div>
 
-          {/* ECharts — Pie Chart Status Distribusi Ketersediaan */}
+          {/* ECharts — Pie Chart Status Distribusi */}
           <div className="tactile-card rounded-lg overflow-hidden">
             <div className="p-5 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
               <div>
-                <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Status Distribusi Ketersediaan</h3>
+                <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Status Distribusi</h3>
                 <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Persentase status material aman, waspada, dan kritis</p>
               </div>
             </div>
@@ -1458,7 +1458,7 @@ export default function CriticalStockPage() {
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
               <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
             </svg>
-            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Tabel Analisis Stok Kritis</h3>
+            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Analisis Stok</h3>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)' }}>
               {filteredData.length} material
             </span>
@@ -1597,6 +1597,7 @@ export default function CriticalStockPage() {
             </tbody>
           </table>
         </div>
+        <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
       </div>
     </PageWrapper>
   );
