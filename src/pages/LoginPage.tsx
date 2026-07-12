@@ -91,6 +91,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       >
         {/* Center Form Container (No card wrapper) */}
         <div className="relative z-10 my-auto w-full max-w-[320px] mx-auto">
+          {/* Logo KAI Commuter */}
+          <div className="flex justify-center mb-8">
+            <img src="/kai-commuter.png" alt="KAI Commuter Logo" className="h-14 object-contain" />
+          </div>
+
           <form onSubmit={handleLoginSubmit} className="space-y-5">
             {/* Username Input */}
             <div className="space-y-1.5">
