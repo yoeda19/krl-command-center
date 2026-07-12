@@ -1518,7 +1518,7 @@ export default function AdminPanelPage() {
             <p className="text-xs font-bold mb-1.5" style={{ color: 'var(--color-on-surface)' }}>Catatan Perawatan KRL:</p>
             <ul className="text-xs space-y-1" style={{ color: 'var(--color-on-surface-variant)' }}>
               <li>• Admin menginput jadwal pemeliharaan depo secara manual untuk fleksibilitas pengaturan jadwal harian.</li>
-              <li>• Data lokomotif dirujuk langsung dari master data `equipment_master` guna menjamin konsistensi nomor rangkaian.</li>
+              <li>• Data rangkaian dirujuk langsung dari database guna menjamin konsistensi nomor rangkaian.</li>
             </ul>
           </div>
         </div>
