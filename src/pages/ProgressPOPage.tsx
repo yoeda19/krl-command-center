@@ -669,6 +669,18 @@ export default function ProgressPOPage() {
             extraCssText: 'box-shadow: 0 8px 32px rgba(0,0,0,0.18); border-radius: 10px;',
             formatter: (params: any[]) => {
               const label = params[0]?.axisValue || '';
+              const parts = label.split(' → ');
+              const fromLabel = parts[0];
+              const toLabel = parts[1];
+
+              const fromDate = getMilestoneDate(fromLabel);
+              const toDate = toLabel === 'Berjalan' ? new Date().toISOString() : getMilestoneDate(toLabel);
+
+              const fromDateFormatted = fromDate ? formatTanggal(fromDate) : '—';
+              const toDateFormatted = toDate ? formatTanggal(toDate) : '—';
+
+              const headerText = `${fromLabel} (${fromDateFormatted}) → ${toLabel} (${toDateFormatted})`;
+
               const rows = params
                 .filter((p: any) => p.value !== null && p.value !== undefined)
                 .map((p: any) => {
@@ -679,7 +691,7 @@ export default function ProgressPOPage() {
                   const sName = p.seriesName === 'Durasi Jeda' ? 'Durasi Jeda' : 'Total Akumulatif';
                   return `<div style="display:flex;align-items:center;justify-content:space-between;gap:18px;padding:3px 0">${dot}<span style="color:${ct.tooltipSub};font-size:11px">${sName}</span><b style="color:${ct.tooltipText};font-size:12px;font-variant-numeric:tabular-nums">${val}</b></div>`;
                 }).join('');
-              return `<div style="font-size:10px;font-weight:800;color:${ct.tooltipSub};margin-bottom:8px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid ${ct.tooltipBorder};padding-bottom:6px">${label}</div>${rows}`;
+              return `<div style="font-size:10px;font-weight:800;color:${ct.tooltipSub};margin-bottom:8px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid ${ct.tooltipBorder};padding-bottom:6px">${headerText}</div>${rows}`;
             },
           },
           grid: {
@@ -857,24 +869,6 @@ export default function ProgressPOPage() {
                     <span className="text-[10px] text-slate-500 mt-1.5">
                       {maxGap ? `Proses: ${maxGap.step}` : 'Tidak ada data jeda'}
                     </span>
-                  </div>
-                </div>
-
-                {/* Milestone Dates Timeline Row */}
-                <div className="p-5 border rounded-xl shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
-                  <h5 className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3.5">Tanggal Rilis Setiap Tahap Proses</h5>
-                  <div className="flex flex-wrap justify-between gap-y-4 gap-x-2">
-                    {stepsList.map(step => {
-                      const date = getMilestoneDate(step);
-                      return (
-                        <div key={step} className="flex flex-col items-center flex-1 min-w-[90px] border-r last:border-r-0" style={{ borderColor: 'var(--color-steel-border)' }}>
-                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{step}</span>
-                          <span className="text-xs font-black mt-1.5 text-center px-1" style={{ color: date ? 'var(--color-on-surface)' : 'var(--color-on-surface-variant)' }}>
-                            {date ? formatTanggal(date) : '—'}
-                          </span>
-                        </div>
-                      );
-                    })}
                   </div>
                 </div>
 
