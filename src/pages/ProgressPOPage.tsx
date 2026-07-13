@@ -168,20 +168,20 @@ function PipelineCard({ item, onSelect }: { item: ProcurementItem; onSelect: (it
                     {step.realDate ? <CheckIcon /> : step.planDate ? 'Plan' : si + 1}
                   </div>
 
-                  {/* Custom Styled Tooltip */}
-                  <div className="absolute bottom-14 hidden group-hover:flex flex-col bg-gray-900 border border-gray-800 text-white rounded p-2.5 text-[10px] z-30 shadow-xl pointer-events-none left-1/2 -translate-x-1/2 min-w-[145px]"
+                  {/* Custom Styled Tooltip - dipindah ke bawah (top-16) agar tidak terpotong container atas */}
+                  <div className="absolute top-16 hidden group-hover:flex flex-col bg-gray-900 border border-gray-800 text-white rounded p-2.5 text-[10px] z-30 shadow-xl pointer-events-none left-1/2 -translate-x-1/2 min-w-[145px]"
                     style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.3))' }}>
                     <div className="font-bold text-gray-300 border-b border-gray-800 pb-1 mb-1">{step.label}</div>
                     <div className="text-gray-400">Status: <span className={step.realDate ? 'text-green-400 font-bold' : step.planDate ? 'text-amber-400 font-bold' : 'text-gray-400'}>{step.realDate ? 'Selesai' : step.planDate ? 'Direncanakan' : 'Belum'}</span></div>
                     {step.num && <div className="mt-1 font-mono text-[9px] text-blue-400 overflow-hidden text-ellipsis whitespace-nowrap max-w-[130px]" title={step.num}>No: {step.num}</div>}
                     {step.planDate && <div className="mt-0.5 text-amber-400">Rencana: {formatTanggal(step.planDate)}</div>}
                     {step.realDate && <div className="mt-0.5 text-green-400">Realisasi: {formatTanggal(step.realDate)}</div>}
-                    {/* Small triangle arrow */}
-                    <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 border-r border-b border-gray-800 rotate-45"></div>
+                    {/* Small triangle arrow - pointing up */}
+                    <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 border-l border-t border-gray-800 rotate-45"></div>
                   </div>
 
                   {/* Step label */}
-                  <span className="text-[9px] mt-1.5 text-center font-bold leading-tight"
+                  <span className="text-[10px] mt-1.5 text-center font-bold leading-tight"
                     style={{ color: step.realDate ? 'var(--color-on-surface)' : 'var(--color-on-surface-variant)', maxWidth: 78 }}>
                     {step.short}
                   </span>
@@ -189,10 +189,10 @@ function PipelineCard({ item, onSelect }: { item: ProcurementItem; onSelect: (it
                   {/* Plan/Realisasi Dates Under Node */}
                   <div className="flex flex-col items-center mt-1">
                     {step.planDate && (
-                      <span className="text-[8px] opacity-75 text-amber-500 font-mono mt-0.5">P: {formatTanggal(step.planDate)}</span>
+                      <span className="text-[10px] opacity-90 text-amber-500 font-semibold font-mono mt-0.5 whitespace-nowrap">P: {formatTanggal(step.planDate)}</span>
                     )}
                     {step.realDate && (
-                      <span className="text-[8px] text-green-500 font-bold font-mono mt-0.5">R: {formatTanggal(step.realDate)}</span>
+                      <span className="text-[10px] text-green-500 font-extrabold font-mono mt-0.5 whitespace-nowrap">R: {formatTanggal(step.realDate)}</span>
                     )}
                   </div>
                 </div>
