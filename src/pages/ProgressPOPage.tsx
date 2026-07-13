@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import PageWrapper from '../components/layout/PageWrapper';
 import ExportButton from '../components/ui/ExportButton';
+import ReactECharts from 'echarts-for-react';
 import { getProcurementData } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
 import type { ProcurementStatus, RisikoLevel, ProcurementItem } from '../types';
@@ -128,6 +129,14 @@ function PipelineCard({ item }: { item: ProcurementItem }) {
               Terlambat {actualLt! - item.plan_lead_time} hari
             </span>
           )}
+          {(item.publish_nod || item.tanggal_nod) && (
+            <button
+              onClick={() => setSelectedPO(item)}
+              className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 border border-blue-600/20 transition-all cursor-pointer whitespace-nowrap"
+            >
+              ANALISIS
+            </button>
+          )}
         </div>
       </div>
 
@@ -210,6 +219,7 @@ export default function ProgressPOPage() {
   const [filterVendor, setFilterVendor] = useState('Semua Vendor');
   const [searchText, setSearchText] = useState(materialParam || '');
   const [viewMode, setViewMode] = useState<'timeline' | 'table'>('table');
+  const [selectedPO, setSelectedPO] = useState<ProcurementItem | null>(null);
 
   useEffect(() => {
     async function loadData() {
@@ -503,15 +513,27 @@ export default function ProgressPOPage() {
                       
                       {/* 23. DURATION */}
                       <td className="px-3 py-3 text-xs font-bold text-center">
-                        {(() => {
-                          const start = row.publish_nod ? new Date(row.publish_nod) : null;
-                          const end = row.gr_release_date || row.tanggal_gr ? new Date(row.gr_release_date || row.tanggal_gr!) : new Date('2026-07-12');
-                          if (start) {
-                            const diffDays = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
-                            return `${diffDays} Hari`;
-                          }
-                          return '—';
-                        })()}
+                        <div className="flex flex-col items-center gap-1.5">
+                          <span>
+                            {(() => {
+                              const start = row.publish_nod || row.tanggal_nod ? new Date(row.publish_nod || row.tanggal_nod!) : null;
+                              const end = row.gr_release_date || row.tanggal_gr ? new Date(row.gr_release_date || row.tanggal_gr!) : new Date();
+                              if (start) {
+                                const diffDays = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+                                return `${diffDays} Hari`;
+                              }
+                              return '—';
+                            })()}
+                          </span>
+                          {(row.publish_nod || row.tanggal_nod) && (
+                            <button
+                              onClick={() => setSelectedPO(row)}
+                              className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 border border-blue-600/20 transition-all cursor-pointer whitespace-nowrap"
+                            >
+                              ANALISIS
+                            </button>
+                          )}
+                        </div>
                       </td>
                       
                       {/* 24. STATUS */}
@@ -533,10 +555,188 @@ export default function ProgressPOPage() {
                   <tr><td colSpan={25} className="px-4 py-8 text-center text-sm" style={{ color: 'var(--color-on-surface-variant)' }}>Tidak ada data.</td></tr>
                 )}
               </tbody>
-            </table>
+             </table>
           </div>
         </div>
       )}
+
+      {/* Modal Analisis Jeda Proses PO */}
+      {selectedPO && (() => {
+        const milestones = [
+          { label: 'NOD', date: selectedPO.publish_nod || selectedPO.tanggal_nod || null },
+          { label: 'Spektek', date: selectedPO.tech_spec_release_date || null },
+          { label: 'CTPE', date: selectedPO.rilis_evaluasi_ctpe || null },
+          { label: 'CTPP', date: selectedPO.rilis_evaluasi_ctpp || null },
+          { label: 'RAB', date: selectedPO.rilis_rab_logistik || null },
+          { label: 'PR', date: selectedPO.pr_release_date || selectedPO.tanggal_pr || null },
+          { label: 'PO', date: selectedPO.po_release_date || selectedPO.tanggal_po || null },
+          { label: 'GR', date: selectedPO.gr_release_date || selectedPO.tanggal_gr || null }
+        ].filter(m => m.date);
+
+        const gaps: { step: string; days: number; from: string; to: string }[] = [];
+        for (let i = 0; i < milestones.length - 1; i++) {
+          const start = new Date(milestones[i].date!);
+          const end = new Date(milestones[i+1].date!);
+          const diff = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+          gaps.push({
+            step: `${milestones[i].label} ➡️ ${milestones[i+1].label}`,
+            days: diff,
+            from: milestones[i].label,
+            to: milestones[i+1].label
+          });
+        }
+
+        // If PO is not GR yet, add an ongoing gap from the last milestone to today
+        const hasGR = milestones.some(m => m.label === 'GR');
+        if (!hasGR && milestones.length > 0) {
+          const last = milestones[milestones.length - 1];
+          const start = new Date(last.date!);
+          const end = new Date(); // today
+          const diff = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+          gaps.push({
+            step: `${last.label} ➡️ Berjalan`,
+            days: diff,
+            from: last.label,
+            to: 'Hari ini'
+          });
+        }
+
+        const maxGap = gaps.length > 0 ? gaps.reduce((max, g) => g.days > max.days ? g : max, gaps[0]) : null;
+
+        const chartOption = {
+          tooltip: {
+            trigger: 'axis',
+            formatter: '{b}: <b>{c} Hari</b>',
+            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            borderColor: '#334155',
+            textStyle: { color: '#f8fafc', fontSize: 11 }
+          },
+          grid: {
+            top: '12%',
+            bottom: '18%',
+            left: '10%',
+            right: '5%',
+            containLabel: true
+          },
+          xAxis: {
+            type: 'category',
+            data: gaps.map(g => g.step),
+            axisLabel: {
+              rotate: 25,
+              fontSize: 9,
+              color: 'var(--color-on-surface-variant)',
+              fontWeight: 'bold'
+            },
+            axisLine: { lineStyle: { color: 'var(--color-steel-border)' } }
+          },
+          yAxis: {
+            type: 'value',
+            name: 'Jeda (Hari)',
+            nameTextStyle: { fontSize: 9, color: 'var(--color-on-surface-variant)', fontWeight: 'bold' },
+            axisLabel: { fontSize: 9, color: 'var(--color-on-surface-variant)' },
+            splitLine: { lineStyle: { color: 'var(--color-steel-border)', type: 'dashed' } }
+          },
+          series: [
+            {
+              data: gaps.map(g => g.days),
+              type: 'bar',
+              barWidth: '35%',
+              itemStyle: {
+                color: (params: any) => {
+                  if (maxGap && params.value === maxGap.days) {
+                    return '#ef4444'; // Red for bottleneck
+                  }
+                  return '#3b82f6'; // Blue
+                },
+                borderRadius: [4, 4, 0, 0]
+              }
+            }
+          ]
+        };
+
+        const totalDays = (() => {
+          const start = selectedPO.publish_nod || selectedPO.tanggal_nod ? new Date(selectedPO.publish_nod || selectedPO.tanggal_nod!) : null;
+          const end = selectedPO.gr_release_date || selectedPO.tanggal_gr ? new Date(selectedPO.gr_release_date || selectedPO.tanggal_gr!) : new Date();
+          if (start) {
+            return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+          }
+          return 0;
+        })();
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="tactile-card rounded-lg overflow-hidden w-full max-w-3xl shadow-2xl flex flex-col animate-scale-up"
+                 style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
+              
+              {/* Modal Header */}
+              <div className="p-4 border-b flex justify-between items-center" 
+                   style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <div>
+                  <h3 className="font-extrabold text-lg" style={{ color: 'var(--color-on-surface)' }}>
+                    Analisis Durasi &amp; Jeda Proses PO
+                  </h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+                    Material: <b>{selectedPO.nomor_material} — {selectedPO.uraian_material}</b>
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setSelectedPO(null)}
+                  className="p-1.5 rounded-full hover:bg-black/10 transition-colors"
+                  style={{ color: 'var(--color-on-surface)' }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-5 flex flex-col gap-5">
+                {/* Stats row */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-xl border flex flex-col justify-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Total Hari Proses</span>
+                    <span className="text-2xl font-black text-blue-500">
+                      {totalDays} Hari
+                    </span>
+                    <span className="text-[10px] text-slate-500 mt-1">
+                      NOD: {formatTanggal(selectedPO.publish_nod || selectedPO.tanggal_nod) || '—'} s/d {selectedPO.gr_release_date || selectedPO.tanggal_gr ? `GR: ${formatTanggal(selectedPO.gr_release_date || selectedPO.tanggal_gr!)}` : 'Berjalan (Hari ini)'}
+                    </span>
+                  </div>
+
+                  <div className="p-4 rounded-xl border flex flex-col justify-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Jeda Terlama (Bottleneck)</span>
+                    <span className="text-2xl font-black text-red-500">
+                      {maxGap ? `${maxGap.days} Hari` : '—'}
+                    </span>
+                    <span className="text-[10px] text-slate-500 mt-1">
+                      {maxGap ? `Proses: ${maxGap.step}` : 'Tidak ada data jeda'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Chart */}
+                <div className="p-4 border rounded-xl" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                  <h5 className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Grafik Selisih Jeda Transisi (Hari)</h5>
+                  <div className="h-[260px]">
+                    <ReactECharts option={chartOption} style={{ height: '100%', width: '100%' }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-3 border-t flex justify-end gap-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container-high)' }}>
+                <button 
+                  onClick={() => setSelectedPO(null)}
+                  className="px-4 py-1.5 rounded text-xs font-extrabold skeuomorphic-btn transition-all"
+                >
+                  TUTUP
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </PageWrapper>
   );
 }
