@@ -98,7 +98,7 @@ function PipelineCard({ item, onSelect }: { item: ProcurementItem; onSelect: (it
     steps.push({ label: 'Review Logistik', short: 'Review Log', num: (item.review_logistic_status || null), date: null, active: !!item.review_logistic_status });
     steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), date: (item.pr_release_date || item.tanggal_pr || null), active: !!(item.pr_number || item.nomor_pr) });
     steps.push({ label: 'Approval', short: 'Approval', num: (item.approval_sap_status || null), date: null, active: !!item.approval_sap_status });
-    steps.push({ color: 'var(--color-on-surface-variant)', label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
+    steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
     steps.push({ label: 'GR', short: 'GR', num: item.nomor_gr, date: (item.gr_release_date || item.tanggal_gr || null), active: !!(item.gr_release_date || item.nomor_gr) });
   }
 
@@ -643,7 +643,11 @@ export default function ProgressPOPage() {
 
         let runningTotal = 0;
         const accumulativeDays = gaps.map(g => {
-               const chartOption = {
+          runningTotal += g.days;
+          return runningTotal;
+        });
+
+        const chartOption = {
           backgroundColor: 'transparent',
           animation: true,
           animationDuration: 800,
