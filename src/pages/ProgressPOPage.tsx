@@ -38,6 +38,7 @@ const exportCols = [
   { key: 'link_document_nod',       header: 'Link Document NOD' },
   { key: 'category',                header: 'Category' },
   { key: 'tech_spec_release_date',  header: 'Technical Specification Release Date' },
+  { key: 'rilis_evaluasi_ctpe',     header: 'Rilis Dokumen Evaluasi Ke CTPE' },
   { key: 'rilis_evaluasi_ctpp',     header: 'Rilis Dokumen Evaluasi Ke CTPP' },
   { key: 'rilis_rab_logistik',      header: 'Rilis RAB Ke Logistik' },
   { key: 'review_logistic_status',  header: 'REVIEW LOGISTIC/IF Under 500 JT RP' },
@@ -81,6 +82,7 @@ function PipelineCard({ item }: { item: ProcurementItem }) {
   if (isLelang) {
     steps.push({ label: 'NOD', short: 'NOD', num: item.nomor_nod, date: (item.publish_nod || item.tanggal_nod || null), active: !!(item.publish_nod || item.nomor_nod) });
     steps.push({ label: 'Spektek', short: 'Spektek', num: null, date: (item.tech_spec_release_date || null), active: !!item.tech_spec_release_date });
+    steps.push({ label: 'CTPE', short: 'CTPE', num: null, date: (item.rilis_evaluasi_ctpe || null), active: !!item.rilis_evaluasi_ctpe });
     steps.push({ label: 'CTPP', short: 'CTPP', num: null, date: (item.rilis_evaluasi_ctpp || null), active: !!item.rilis_evaluasi_ctpp });
     steps.push({ label: 'RAB', short: 'RAB', num: null, date: (item.rilis_rab_logistik || null), active: !!item.rilis_rab_logistik });
     steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), date: (item.pr_release_date || item.tanggal_pr || null), active: !!(item.pr_number || item.nomor_pr) });
@@ -341,7 +343,7 @@ export default function ProgressPOPage() {
                   {[
                     'NO', 'NOD', 'Progress', 'Proposed by', 'NOD Number', 'Publish NOD',
                     'RKAP/NON RKAP', 'Link Doc NOD', 'Category', 'Spektek Release',
-                    'Evaluasi CTPP', 'RAB ke Logistik', 'Review Logistic',
+                    'Evaluasi CTPE', 'Evaluasi CTPP', 'RAB ke Logistik', 'Review Logistic',
                     'PR Number', 'PR Release Date', 'Approval',
                     'Aanwijzing', 'Vendor', 'PO Number', 'PO Release Date',
                     'Goods Inspection', 'GR Release Date', 'Duration', 'Status', 'Cost'
@@ -430,17 +432,22 @@ export default function ProgressPOPage() {
                         {row.tech_spec_release_date ? formatTanggal(row.tech_spec_release_date) : '—'}
                       </td>
                       
-                      {/* 11. Rilis Dokumen Evaluasi Ke CTPP */}
+                      {/* 11. Rilis Dokumen Evaluasi Ke CTPE */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.rilis_evaluasi_ctpe ? formatTanggal(row.rilis_evaluasi_ctpe) : '—'}
+                      </td>
+                      
+                      {/* 12. Rilis Dokumen Evaluasi Ke CTPP */}
                       <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
                         {row.rilis_evaluasi_ctpp ? formatTanggal(row.rilis_evaluasi_ctpp) : '—'}
                       </td>
                       
-                      {/* 12. Rilis RAB Ke Logistik */}
+                      {/* 13. Rilis RAB Ke Logistik */}
                       <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
                         {row.rilis_rab_logistik ? formatTanggal(row.rilis_rab_logistik) : '—'}
                       </td>
                       
-                      {/* 13. REVIEW LOGISTIC/IF Under 500 JT RP */}
+                      {/* 14. REVIEW LOGISTIC/IF Under 500 JT RP */}
                       <td className="px-3 py-3 text-xs text-center">
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-300">
                           {row.review_logistic_status || 'SELESAI'}

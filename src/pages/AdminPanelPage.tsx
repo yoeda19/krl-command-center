@@ -67,6 +67,7 @@ const emptyPO = (): Partial<ProcurementItem> => ({
   link_document_nod: '',
   category: 'Suku Cadang Utama',
   tech_spec_release_date: null,
+  rilis_evaluasi_ctpe: null,
   rilis_evaluasi_ctpp: null,
   rilis_rab_logistik: null,
   review_logistic_status: 'SELESAI',
@@ -913,9 +914,12 @@ export default function AdminPanelPage() {
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 2 — Spesifikasi Teknis &amp; RAB
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5">
               <Field label="Spektek Release Date">
                 <input type="date" value={poData.tech_spec_release_date || ''} onChange={e => updatePOField('tech_spec_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+              </Field>
+              <Field label="Rilis Dokumen Evaluasi ke CTPE">
+                <input type="date" value={poData.rilis_evaluasi_ctpe || ''} onChange={e => updatePOField('rilis_evaluasi_ctpe', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
               <Field label="Rilis Dokumen Evaluasi ke CTPP">
                 <input type="date" value={poData.rilis_evaluasi_ctpp || ''} onChange={e => updatePOField('rilis_evaluasi_ctpp', e.target.value || null)} className={inputCls} style={inputStyle} />

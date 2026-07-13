@@ -110,6 +110,7 @@ export interface ProcurementItem {
   link_document_nod?: string | null;
   category?: string | null;
   tech_spec_release_date?: string | null;
+  rilis_evaluasi_ctpe?: string | null;
   rilis_evaluasi_ctpp?: string | null;
   rilis_rab_logistik?: string | null;
   review_logistic_status?: string | null;
