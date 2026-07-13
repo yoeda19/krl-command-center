@@ -603,52 +603,127 @@ export default function ProgressPOPage() {
 
         const maxGap = gaps.length > 0 ? gaps.reduce((max, g) => g.days > max.days ? g : max, gaps[0]) : null;
 
+        let runningTotal = 0;
+        const accumulativeDays = gaps.map(g => {
+          runningTotal += g.days;
+          return runningTotal;
+        });
+
         const chartOption = {
           tooltip: {
             trigger: 'axis',
-            formatter: '{b}: <b>{c} Hari</b>',
-            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+            axisPointer: {
+              type: 'shadow'
+            },
+            formatter: (params: any) => {
+              let html = `<div style="font-weight: bold; margin-bottom: 6px; color: #f8fafc; font-size: 11px;">${params[0].name}</div>`;
+              params.forEach((param: any) => {
+                const marker = param.marker;
+                const seriesName = param.seriesName === 'Durasi Jeda' ? 'Durasi Jeda' : 'Total Akumulatif';
+                html += `<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 10px; color: #cbd5e1; margin-top: 2px;">
+                  <span style="display: flex; align-items: center; gap: 4px;">${marker} ${seriesName}</span>
+                  <span style="font-weight: bold; color: #f8fafc;">${param.value} Hari</span>
+                </div>`;
+              });
+              return html;
+            },
+            backgroundColor: 'rgba(15, 23, 42, 0.95)',
             borderColor: '#334155',
-            textStyle: { color: '#f8fafc', fontSize: 11 }
+            borderWidth: 1,
+            textStyle: { color: '#f8fafc' },
+            padding: [8, 12]
           },
           grid: {
-            top: '12%',
+            top: '18%',
             bottom: '18%',
-            left: '10%',
-            right: '5%',
+            left: '6%',
+            right: '6%',
             containLabel: true
+          },
+          legend: {
+            data: ['Durasi Jeda', 'Total Akumulatif'],
+            textStyle: { color: 'var(--color-on-surface)', fontSize: 10, fontWeight: 'bold' },
+            top: '0%'
           },
           xAxis: {
             type: 'category',
             data: gaps.map(g => g.step),
             axisLabel: {
-              rotate: 25,
+              rotate: 15,
               fontSize: 9,
               color: 'var(--color-on-surface-variant)',
-              fontWeight: 'bold'
+              fontWeight: '600'
             },
-            axisLine: { lineStyle: { color: 'var(--color-steel-border)' } }
+            axisLine: { lineStyle: { color: 'var(--color-steel-border)' } },
+            axisTick: { show: false }
           },
-          yAxis: {
-            type: 'value',
-            name: 'Jeda (Hari)',
-            nameTextStyle: { fontSize: 9, color: 'var(--color-on-surface-variant)', fontWeight: 'bold' },
-            axisLabel: { fontSize: 9, color: 'var(--color-on-surface-variant)' },
-            splitLine: { lineStyle: { color: 'var(--color-steel-border)', type: 'dashed' } }
-          },
+          yAxis: [
+            {
+              type: 'value',
+              name: 'Jeda (Hari)',
+              nameTextStyle: { fontSize: 9, color: 'var(--color-on-surface-variant)', fontWeight: 'bold', padding: [0, 16, 0, 0] },
+              axisLabel: { fontSize: 9, color: 'var(--color-on-surface-variant)' },
+              splitLine: { lineStyle: { color: 'var(--color-steel-border)', type: 'dashed' } }
+            },
+            {
+              type: 'value',
+              name: 'Akumulatif (Hari)',
+              nameTextStyle: { fontSize: 9, color: 'var(--color-on-surface-variant)', fontWeight: 'bold', padding: [0, 0, 0, 16] },
+              axisLabel: { fontSize: 9, color: 'var(--color-on-surface-variant)' },
+              splitLine: { show: false }
+            }
+          ],
           series: [
             {
-              data: gaps.map(g => g.days),
+              name: 'Durasi Jeda',
               type: 'bar',
-              barWidth: '35%',
+              barWidth: '24%',
+              yAxisIndex: 0,
+              data: gaps.map(g => g.days),
               itemStyle: {
                 color: (params: any) => {
                   if (maxGap && params.value === maxGap.days) {
-                    return '#ef4444'; // Red for bottleneck
+                    return {
+                      type: 'linear',
+                      x: 0, y: 0, x2: 0, y2: 1,
+                      colorStops: [
+                        { offset: 0, color: '#ef4444' },
+                        { offset: 1, color: '#b91c1c' }
+                      ]
+                    };
                   }
-                  return '#3b82f6'; // Blue
+                  return {
+                    type: 'linear',
+                    x: 0, y: 0, x2: 0, y2: 1,
+                    colorStops: [
+                      { offset: 0, color: '#3b82f6' },
+                      { offset: 1, color: '#1d4ed8' }
+                    ]
+                  };
                 },
-                borderRadius: [4, 4, 0, 0]
+                borderRadius: [3, 3, 0, 0]
+              }
+            },
+            {
+              name: 'Total Akumulatif',
+              type: 'line',
+              yAxisIndex: 1,
+              smooth: true,
+              showSymbol: true,
+              symbol: 'circle',
+              symbolSize: 8,
+              data: accumulativeDays,
+              lineStyle: {
+                color: '#eab308',
+                width: 2.5,
+                shadowColor: 'rgba(234, 179, 8, 0.3)',
+                shadowBlur: 4,
+                shadowOffsetY: 2
+              },
+              itemStyle: {
+                color: '#eab308',
+                borderColor: '#ffffff',
+                borderWidth: 1.5
               }
             }
           ]
