@@ -137,6 +137,7 @@ export default function AdminPanelPage() {
   const [editingPO, setEditingPO] = useState<ProcurementItem | null>(null);
   const [newPO, setNewPO] = useState<Partial<ProcurementItem>>(emptyPO());
   const [poLoading, setPOLoading] = useState(false);
+  const [invalidStages, setInvalidStages] = useState<string[]>([]);
 
   // Perawatan tab state
   const [schedules, setSchedules] = useState<MaintenanceSchedule[]>([]);
@@ -545,11 +546,22 @@ export default function AdminPanelPage() {
 
   // ── Procurement tab handlers ─────────────────────────────
   const updatePOField = <K extends keyof ProcurementItem>(key: K, value: ProcurementItem[K]) => {
+    setInvalidStages([]);
     if (editingPO) {
       setEditingPO(prev => prev ? { ...prev, [key]: value } : prev);
     } else {
       setNewPO(prev => ({ ...prev, [key]: value }));
     }
+  };
+
+  const getCardStyle = (stageKey1: string, stageKey2?: string) => {
+    const isInvalid = invalidStages.includes(stageKey1) || (stageKey2 ? invalidStages.includes(stageKey2) : false);
+    return {
+      borderColor: isInvalid ? '#f43f5e' : 'var(--color-steel-border)',
+      backgroundColor: isInvalid ? 'rgba(251, 113, 133, 0.12)' : 'var(--color-surface-container)',
+      boxShadow: isInvalid ? '0 0 12px rgba(244, 63, 94, 0.15)' : 'none',
+      transition: 'all 0.3s ease'
+    };
   };
 
   const updateNewPOHarga = (field: 'harga_satuan' | 'jumlah_dipesan', val: number) => {
@@ -571,31 +583,32 @@ export default function AdminPanelPage() {
 
   const handleSavePO = async () => {
     // Validasi urutan tanggal
+    setInvalidStages([]);
     const poToValidate = editingPO || newPO;
     const validation = (() => {
       const costVal = poToValidate.cost ?? poToValidate.total_harga ?? 0;
       const isLelang = costVal >= 500000000;
       const steps = isLelang 
         ? [
-            { label: 'NOD / Publish NOD', date: poToValidate.publish_nod || poToValidate.tanggal_nod },
-            { label: 'Spektek Release', date: poToValidate.tech_spec_release_date },
-            { label: 'Evaluasi CTPE', date: poToValidate.rilis_evaluasi_ctpe },
-            { label: 'Evaluasi CTPP', date: poToValidate.rilis_evaluasi_ctpp },
-            { label: 'RAB Logistik', date: poToValidate.rilis_rab_logistik },
-            { label: 'PR Release', date: poToValidate.pr_release_date || poToValidate.tanggal_pr },
-            { label: 'Approval SAP', date: poToValidate.approval_sap_status },
-            { label: 'Aanwijzing', date: poToValidate.aanwijzing_date },
-            { label: 'PO Release / Tgl PO', date: poToValidate.po_release_date || poToValidate.tanggal_po },
-            { label: 'Goods Inspection', date: poToValidate.goods_inspection_status },
-            { label: 'GR Release / Tgl GR', date: poToValidate.gr_release_date || poToValidate.tanggal_gr },
+            { label: 'NOD / Publish NOD', date: poToValidate.publish_nod || poToValidate.tanggal_nod, stage: 'tahap1' },
+            { label: 'Spektek Release', date: poToValidate.tech_spec_release_date, stage: 'tahap2' },
+            { label: 'Evaluasi CTPE', date: poToValidate.rilis_evaluasi_ctpe, stage: 'tahap2' },
+            { label: 'Evaluasi CTPP', date: poToValidate.rilis_evaluasi_ctpp, stage: 'tahap2' },
+            { label: 'RAB Logistik', date: poToValidate.rilis_rab_logistik, stage: 'tahap3' },
+            { label: 'PR Release', date: poToValidate.pr_release_date || poToValidate.tanggal_pr, stage: 'tahap4' },
+            { label: 'Approval SAP', date: poToValidate.approval_sap_status, stage: 'tahap4' },
+            { label: 'Aanwijzing', date: poToValidate.aanwijzing_date, stage: 'tahap5' },
+            { label: 'PO Release / Tgl PO', date: poToValidate.po_release_date || poToValidate.tanggal_po, stage: 'tahap5' },
+            { label: 'Goods Inspection', date: poToValidate.goods_inspection_status, stage: 'tahap6' },
+            { label: 'GR Release / Tgl GR', date: poToValidate.gr_release_date || poToValidate.tanggal_gr, stage: 'tahap6' },
           ]
         : [
-            { label: 'NOD / Publish NOD', date: poToValidate.publish_nod || poToValidate.tanggal_nod },
-            { label: 'RAB Logistik', date: poToValidate.rilis_rab_logistik },
-            { label: 'PR Release', date: poToValidate.pr_release_date || poToValidate.tanggal_pr },
-            { label: 'Approval SAP', date: poToValidate.approval_sap_status },
-            { label: 'PO Release / Tgl PO', date: poToValidate.po_release_date || poToValidate.tanggal_po },
-            { label: 'GR Release / Tgl GR', date: poToValidate.gr_release_date || poToValidate.tanggal_gr },
+            { label: 'NOD / Publish NOD', date: poToValidate.publish_nod || poToValidate.tanggal_nod, stage: 'tahap1' },
+            { label: 'RAB Logistik', date: poToValidate.rilis_rab_logistik, stage: 'tahap3' },
+            { label: 'PR Release', date: poToValidate.pr_release_date || poToValidate.tanggal_pr, stage: 'tahap4' },
+            { label: 'Approval SAP', date: poToValidate.approval_sap_status, stage: 'tahap4' },
+            { label: 'PO Release / Tgl PO', date: poToValidate.po_release_date || poToValidate.tanggal_po, stage: 'tahap5' },
+            { label: 'GR Release / Tgl GR', date: poToValidate.gr_release_date || poToValidate.tanggal_gr, stage: 'tahap6' },
           ];
 
       const filledSteps = steps.filter(s => !!s.date);
@@ -607,6 +620,7 @@ export default function AdminPanelPage() {
         if (nextDate < currentDate) {
           const curFormatted = currentDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
           const nextFormatted = nextDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+          setInvalidStages([current.stage, next.stage]);
           return {
             valid: false,
             errorMsg: `Urutan tanggal salah: Tanggal ${next.label} (${nextFormatted}) tidak boleh lebih awal dari Tanggal ${current.label} (${curFormatted}).`
@@ -880,7 +894,7 @@ export default function AdminPanelPage() {
         <div className="px-6 py-4 flex justify-between items-center border-b"
           style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
           <h4 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>{title}</h4>
-          <button onClick={() => { setShowAddForm(false); setEditingPO(null); }}
+          <button onClick={() => { setShowAddForm(false); setEditingPO(null); setInvalidStages([]); }}
             style={{ color: 'var(--color-on-surface-variant)' }} className="hover:opacity-70 transition-all">
             <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
@@ -934,7 +948,7 @@ export default function AdminPanelPage() {
           </div>
 
           {/* Card 2: Tahap 1 — Nota Dinas (NOD) */}
-          <div className="p-5 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+          <div className="p-5 rounded-xl border space-y-4" style={getCardStyle('tahap1')}>
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 1 — Nota Dinas (NOD)
             </h5>
@@ -961,7 +975,7 @@ export default function AdminPanelPage() {
           </div>
 
           {/* Card 3: Tahap 2 — Spesifikasi Teknis & RAB */}
-          <div className="p-5 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+          <div className="p-5 rounded-xl border space-y-4" style={getCardStyle('tahap2', 'tahap3')}>
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 2 — Spesifikasi Teknis &amp; RAB
             </h5>
@@ -985,7 +999,7 @@ export default function AdminPanelPage() {
           </div>
 
           {/* Card 4: Tahap 3 — PR (Permintaan Pembelian) */}
-          <div className="p-5 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+          <div className="p-5 rounded-xl border space-y-4" style={getCardStyle('tahap4')}>
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 3 — Purchase Requisitions (PR)
             </h5>
@@ -1003,7 +1017,7 @@ export default function AdminPanelPage() {
           </div>
 
           {/* Card 5: Tahap 4 — Aanwijzing & PO */}
-          <div className="p-5 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+          <div className="p-5 rounded-xl border space-y-4" style={getCardStyle('tahap5')}>
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 4 — Aanwijzing &amp; Purchase Order (PO)
             </h5>
@@ -1024,7 +1038,7 @@ export default function AdminPanelPage() {
           </div>
 
           {/* Card 6: Goods Inspection & GR */}
-          <div className="p-5 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+          <div className="p-5 rounded-xl border space-y-4" style={getCardStyle('tahap6')}>
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 5 — Goods Receipt &amp; Inspection (GR)
             </h5>
@@ -1086,7 +1100,7 @@ export default function AdminPanelPage() {
 
         {/* Form Actions Footer */}
         <div className="px-6 py-4 flex gap-3 justify-end border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-          <button onClick={() => { setShowAddForm(false); setEditingPO(null); }}
+          <button onClick={() => { setShowAddForm(false); setEditingPO(null); setInvalidStages([]); }}
             className="px-5 py-2.5 rounded-lg border text-sm font-bold transition-all hover:opacity-70"
             style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
             Batal
@@ -1306,7 +1320,7 @@ export default function AdminPanelPage() {
               {procureList.length} proses pengadaan aktif
             </p>
             {!showAddForm && !editingPO && (
-              <button onClick={() => { setShowAddForm(true); setEditingPO(null); setNewPO(emptyPO()); }}
+              <button onClick={() => { setShowAddForm(true); setEditingPO(null); setNewPO(emptyPO()); setInvalidStages([]); }}
                 className="skeuomorphic-btn px-4 py-2 rounded text-sm flex items-center gap-2">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 + Buat NOD / PO Baru
@@ -1359,7 +1373,7 @@ export default function AdminPanelPage() {
                         <td className="px-3 py-3 text-xs">{row.risiko_keterlambatan}</td>
                         <td className="px-3 py-3">
                           <div className="flex gap-1.5">
-                            <button onClick={() => { setEditingPO({ ...row }); setShowAddForm(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                            <button onClick={() => { setEditingPO({ ...row }); setShowAddForm(false); setInvalidStages([]); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                               className="px-2 py-1 rounded border text-[10px] font-bold hover:opacity-85 transition-all"
                               style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>
                               Edit

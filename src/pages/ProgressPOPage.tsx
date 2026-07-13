@@ -719,7 +719,9 @@ export default function ProgressPOPage() {
               fontSize: 10,
               fontWeight: '600',
               fontFamily: 'inherit',
-              margin: 10
+              margin: 10,
+              interval: 0,
+              rotate: 20
             },
             axisLine: { lineStyle: { color: ct.axisLine, width: 1 } },
             axisTick: { show: false },
@@ -762,6 +764,15 @@ export default function ProgressPOPage() {
               barWidth: '24%',
               yAxisIndex: 0,
               data: gaps.map(g => g.days),
+              label: {
+                show: true,
+                position: 'top',
+                formatter: '{c} Hari',
+                color: ct.axisLabel,
+                fontSize: 9,
+                fontWeight: '700',
+                fontFamily: 'inherit'
+              },
               itemStyle: {
                 color: (params: any) => {
                   if (maxGap && params.value === maxGap.days) {
