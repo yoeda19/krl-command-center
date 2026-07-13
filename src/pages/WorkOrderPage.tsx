@@ -205,9 +205,8 @@ export default function WorkOrderPage() {
       }
     });
 
-    // Sum incoming POs (outstanding progress)
     const incomingPO = procurementList
-      .filter(p => p.nomor_material === matNo && p.status !== 'Tiba di Gudang')
+      .filter(p => p.nomor_material === matNo && p.status !== 'Goods Receipt (GR)')
       .reduce((sum, p) => sum + (p.jumlah_dipesan ?? 0), 0);
 
     const netProjection = currentStock - totalRequired + incomingPO;

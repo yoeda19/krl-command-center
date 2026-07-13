@@ -7,7 +7,7 @@ import { getProcurementData } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
 import type { ProcurementStatus, RisikoLevel, ProcurementItem } from '../types';
 
-const statusOptions: Array<'Semua' | ProcurementStatus> = ['Semua', 'Dalam Pengadaan', 'Proses Evaluasi', 'Proses PR & Approval', 'Proses PO', 'Goods Inspection', 'Tiba di Gudang'];
+const statusOptions: Array<'Semua' | ProcurementStatus> = ['Semua', 'Dalam Pengadaan', 'Proses Evaluasi', 'Proses PR & Approval', 'Proses PO', 'Goods Inspection', 'Goods Receipt (GR)'];
 const risikoOptions: Array<'Semua' | RisikoLevel> = ['Semua', 'Rendah', 'Sedang', 'Tinggi'];
 
 const statusCfg: Record<string, { bg: string; text: string; border: string }> = {
@@ -16,7 +16,7 @@ const statusCfg: Record<string, { bg: string; text: string; border: string }> = 
   'Proses PR & Approval':  { bg: 'rgba(37,99,235,0.12)',  text: '#60a5fa',                  border: 'rgba(59,130,246,0.3)' },
   'Proses PO':             { bg: 'rgba(6,182,212,0.12)',  text: '#22d3ee',                  border: 'rgba(6,182,212,0.3)' },
   'Goods Inspection':      { bg: 'rgba(234,179,8,0.12)',  text: '#facc15',                  border: 'rgba(234,179,8,0.3)' },
-  'Tiba di Gudang':        { bg: 'rgba(22,163,74,0.12)',  text: 'var(--color-led-green)',   border: 'rgba(22,163,74,0.3)' },
+  'Goods Receipt (GR)':    { bg: 'rgba(22,163,74,0.12)',  text: 'var(--color-led-green)',   border: 'rgba(22,163,74,0.3)' },
   // Legacy fallbacks
   'PO Diterbitkan':        { bg: 'rgba(37,99,235,0.12)',  text: '#60a5fa',                  border: 'rgba(59,130,246,0.3)' },
   'Dikirim Vendor':        { bg: 'rgba(107,114,128,0.12)',text: '#9ca3af',                  border: 'rgba(107,114,128,0.3)' },

@@ -3,7 +3,7 @@ import type {
   FleetMetrics, CriticalStockItem, SafetyStockItem,
   ProcurementItem, SlowMovingItem, MaintenanceSchedule,
   WorkOrder, AuditLog, AdminParameter, MonthlyPlan, MaintenanceBomConfig,
-  RestockItem, AgingKategori
+  RestockItem, AgingKategori, ProcurementStatus
 } from '../types';
 
 // ── 1. FLEET METRICS ──────────────────────────────────────
@@ -487,7 +487,61 @@ export async function getProcurementData(): Promise<ProcurementItem[]> {
     .order('id', { ascending: true });
 
   if (error || !data) return [];
-  return data as ProcurementItem[];
+  
+  return data.map((item: any) => {
+    // Legacy fallbacks:
+    const vendor_sap = item.vendor_sap || item.vendor;
+    const po_number = item.po_number || item.nomor_po;
+    const pr_number = item.pr_number || item.nomor_pr;
+    const po_release_date = item.po_release_date || item.tanggal_po;
+    const gr_release_date = item.gr_release_date || item.tanggal_gr || item.tanggal_penerimaan_barang;
+    const tanggal_rencana_pengiriman = item.tanggal_rencana_pengiriman || item.tanggal_gr || '';
+
+    const costVal = item.cost ?? item.total_harga ?? 0;
+    const isLelang = costVal >= 500000000;
+    let status: ProcurementStatus = 'Dalam Pengadaan';
+
+    if (isLelang) {
+      if (gr_release_date) {
+        status = 'Goods Receipt (GR)';
+      } else if (item.goods_inspection_status) {
+        status = 'Goods Inspection';
+      } else if (po_release_date) {
+        status = 'Proses PO';
+      } else if (item.aanwijzing_date) {
+        status = 'Dalam Pengadaan';
+      } else if (item.approval_sap_status || item.pr_release_date || item.tanggal_pr) {
+        status = 'Proses PR & Approval';
+      } else if (item.rilis_evaluasi_ctpp || item.rilis_evaluasi_ctpe) {
+        status = 'Proses Evaluasi';
+      } else {
+        status = 'Dalam Pengadaan';
+      }
+    } else {
+      if (gr_release_date) {
+        status = 'Goods Receipt (GR)';
+      } else if (po_release_date) {
+        status = 'Proses PO';
+      } else if (item.approval_sap_status || item.pr_release_date || item.tanggal_pr) {
+        status = 'Proses PR & Approval';
+      } else if (item.review_logistic_status) {
+        status = 'Proses Evaluasi';
+      } else {
+        status = 'Dalam Pengadaan';
+      }
+    }
+
+    return {
+      ...item,
+      vendor_sap,
+      po_number,
+      pr_number,
+      po_release_date,
+      gr_release_date,
+      tanggal_rencana_pengiriman,
+      status
+    };
+  }) as ProcurementItem[];
 }
 
 export async function addProcurement(item: Omit<ProcurementItem, 'id' | 'actual_lead_time' | 'tanggal_penerimaan_barang'>): Promise<{ error: string | null }> {

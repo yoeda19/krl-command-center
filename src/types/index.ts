@@ -16,7 +16,7 @@ export type ProcurementStatus =
   | 'Proses PR & Approval'
   | 'Proses PO'
   | 'Goods Inspection'
-  | 'Tiba di Gudang';
+  | 'Goods Receipt (GR)';
 export type RisikoLevel = 'Rendah' | 'Sedang' | 'Tinggi';
 export type AgingKategori = 'Fresh' | 'Slow-Moving' | 'At Risk' | 'Dead Stock' | 'Stock Out';
 

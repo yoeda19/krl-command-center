@@ -27,7 +27,7 @@ const PROCUREMENT_STATUSES: ProcurementStatus[] = [
   'Proses PR & Approval',
   'Proses PO',
   'Goods Inspection',
-  'Tiba di Gudang',
+  'Goods Receipt (GR)',
 ];
 const RISIKO_LEVELS: RisikoLevel[] = ['Rendah', 'Sedang', 'Tinggi'];
 
@@ -37,7 +37,7 @@ const statusCfg: Record<string, { color: string }> = {
   'Proses PR & Approval': { color: '#60a5fa' },
   'Proses PO':            { color: '#22d3ee' },
   'Goods Inspection':     { color: '#facc15' },
-  'Tiba di Gudang':       { color: 'var(--color-led-green)' },
+  'Goods Receipt (GR)':   { color: 'var(--color-led-green)' },
   // Legacy fallbacks
   'PO Diterbitkan':       { color: '#60a5fa' },
   'Dikirim Vendor':       { color: '#9ca3af' },
@@ -683,8 +683,17 @@ export default function AdminPanelPage() {
       if (editingPO) {
         // Auto status update logic berdasarkan milestone yang sudah diisi:
         const updatedPO = { ...editingPO };
+        
+        // Sync legacy fields
+        updatedPO.vendor = updatedPO.vendor_sap || '';
+        updatedPO.nomor_po = updatedPO.po_number || '';
+        updatedPO.nomor_pr = updatedPO.pr_number || '';
+        updatedPO.tanggal_rencana_pengiriman = updatedPO.tanggal_gr || '';
+        updatedPO.tanggal_penerimaan_barang = updatedPO.gr_release_date || null;
+        updatedPO.tanggal_tiba_depo = updatedPO.gr_release_date || null;
+
         if (updatedPO.tanggal_gr && updatedPO.gr_release_date) {
-          updatedPO.status = 'Tiba di Gudang';
+          updatedPO.status = 'Goods Receipt (GR)';
         } else if (updatedPO.goods_inspection_status) {
           updatedPO.status = 'Goods Inspection';
         } else if (updatedPO.po_release_date || updatedPO.tanggal_po) {
@@ -718,13 +727,21 @@ export default function AdminPanelPage() {
         setEditingPO(null);
         showSuccess(`Progress PO #${updatedPO.id} (${updatedPO.nomor_material}) berhasil diperbarui.`);
       } else {
-        if (!newPO.nomor_material || !newPO.vendor) {
+        // Sync legacy fields for new PO
+        const finalNewPO = { ...newPO };
+        finalNewPO.vendor = finalNewPO.vendor_sap || '';
+        finalNewPO.nomor_po = finalNewPO.po_number || '';
+        finalNewPO.nomor_pr = finalNewPO.pr_number || '';
+        finalNewPO.tanggal_rencana_pengiriman = finalNewPO.tanggal_gr || '';
+        finalNewPO.tanggal_penerimaan_barang = finalNewPO.gr_release_date || null;
+        finalNewPO.tanggal_tiba_depo = finalNewPO.gr_release_date || null;
+
+        if (!finalNewPO.nomor_material || !finalNewPO.vendor) {
           showError('Kode material dan vendor wajib diisi.'); return;
         }
         // Auto status update logic:
-        const finalNewPO = { ...newPO };
         if (finalNewPO.tanggal_gr && finalNewPO.gr_release_date) {
-          finalNewPO.status = 'Tiba di Gudang';
+          finalNewPO.status = 'Goods Receipt (GR)';
         } else {
           finalNewPO.status = finalNewPO.status || 'Dalam Pengadaan';
         }
@@ -1160,18 +1177,7 @@ export default function AdminPanelPage() {
             </div>
           </div>
 
-          {/* Card 7: Legacy Fields (Backwards Compatibility) */}
-          <div className="p-5 rounded-xl border space-y-4" style={{ borderColor: 'rgba(220,38,38,0.2)', backgroundColor: 'var(--color-surface-container)' }}>
-            <h5 className="text-xs font-black uppercase tracking-wider text-red-400 flex items-center gap-1.5">
-              Data Kompatibilitas Legacy (Wajib untuk Stok Kritis)
-            </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              <Field label="Legacy Vendor"><input value={poData.vendor || ''} onChange={e => { updatePOField('vendor', e.target.value); updatePOField('vendor_sap', e.target.value); }} className={inputCls} style={inputStyle} placeholder="Nama vendor legacy" /></Field>
-              <Field label="Legacy Tgl PO"><input type="date" value={poData.tanggal_po || ''} onChange={e => { updatePOField('tanggal_po', e.target.value || null); updatePOField('po_release_date', e.target.value || null); }} className={inputCls} style={inputStyle} /></Field>
-              <Field label="Legacy Nomor PO"><input value={poData.nomor_po || ''} onChange={e => { updatePOField('nomor_po', e.target.value); updatePOField('po_number', e.target.value); }} className={inputCls} style={inputStyle} placeholder="PO legacy" /></Field>
-              <Field label="Legacy Tgl GR"><input type="date" value={poData.tanggal_gr || ''} onChange={e => { updatePOField('tanggal_gr', e.target.value || null); updatePOField('gr_release_date', e.target.value || null); updatePOField('tanggal_rencana_pengiriman', e.target.value || ''); }} className={inputCls} style={inputStyle} /></Field>
-            </div>
-          </div>
+
 
           {/* Card 8: Status & Risk */}
           <div className="p-5 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
