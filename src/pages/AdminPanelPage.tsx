@@ -945,8 +945,8 @@ export default function AdminPanelPage() {
               <Field label="PR Release Date">
                 <input type="date" value={poData.pr_release_date || ''} onChange={e => updatePOField('pr_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
-              <Field label="Approval (CEP, CE, C2, CAA)">
-                <input value={poData.approval_sap_status || ''} onChange={e => updatePOField('approval_sap_status', e.target.value)} className={inputCls} style={inputStyle} placeholder="APPROVED CEP/CE/C2/CAA" />
+              <Field label="Approval Date (CEP, CE, C2, CAA)">
+                <input type="date" value={poData.approval_sap_status || ''} onChange={e => updatePOField('approval_sap_status', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
             </div>
           </div>
@@ -978,8 +978,8 @@ export default function AdminPanelPage() {
               Tahap 5 — Goods Receipt &amp; Inspection (GR)
             </h5>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              <Field label="Goods Inspection Status">
-                <input value={poData.goods_inspection_status || ''} onChange={e => updatePOField('goods_inspection_status', e.target.value)} className={inputCls} style={inputStyle} placeholder="LULUS UJI / SEDANG DIUJI" />
+              <Field label="Goods Inspection Date">
+                <input type="date" value={poData.goods_inspection_status || ''} onChange={e => updatePOField('goods_inspection_status', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
               <Field label="Good Receipt Release Date">
                 <input type="date" value={poData.gr_release_date || ''} onChange={e => updatePOField('gr_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />

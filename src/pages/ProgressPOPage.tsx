@@ -87,17 +87,17 @@ function PipelineCard({ item, onSelect }: { item: ProcurementItem; onSelect: (it
     steps.push({ label: 'CTPP', short: 'CTPP', num: null, date: (item.rilis_evaluasi_ctpp || null), active: !!item.rilis_evaluasi_ctpp });
     steps.push({ label: 'RAB', short: 'RAB', num: null, date: (item.rilis_rab_logistik || null), active: !!item.rilis_rab_logistik });
     steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), date: (item.pr_release_date || item.tanggal_pr || null), active: !!(item.pr_number || item.nomor_pr) });
-    steps.push({ label: 'Approval', short: 'Approval', num: (item.approval_sap_status || null), date: null, active: !!item.approval_sap_status });
+    steps.push({ label: 'Approval', short: 'Approval', num: null, date: (item.approval_sap_status || null), active: !!item.approval_sap_status });
     steps.push({ label: 'Aanwijzing', short: 'Aanwijzing', num: null, date: (item.aanwijzing_date || null), active: !!item.aanwijzing_date });
     steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
-    steps.push({ label: 'Goods Inspection', short: 'Inspection', num: (item.goods_inspection_status || null), date: null, active: !!item.goods_inspection_status });
+    steps.push({ label: 'Goods Inspection', short: 'Inspection', num: null, date: (item.goods_inspection_status || null), active: !!item.goods_inspection_status });
     steps.push({ label: 'GR', short: 'GR', num: item.nomor_gr, date: (item.gr_release_date || item.tanggal_gr || null), active: !!(item.gr_release_date || item.nomor_gr) });
   } else {
     steps.push({ label: 'NOD', short: 'NOD', num: item.nomor_nod, date: (item.publish_nod || item.tanggal_nod || null), active: !!(item.publish_nod || item.nomor_nod) });
     steps.push({ label: 'RAB', short: 'RAB Log', num: null, date: (item.rilis_rab_logistik || null), active: !!item.rilis_rab_logistik });
     steps.push({ label: 'Review Logistik', short: 'Review Log', num: (item.review_logistic_status || null), date: null, active: !!item.review_logistic_status });
     steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), date: (item.pr_release_date || item.tanggal_pr || null), active: !!(item.pr_number || item.nomor_pr) });
-    steps.push({ label: 'Approval', short: 'Approval', num: (item.approval_sap_status || null), date: null, active: !!item.approval_sap_status });
+    steps.push({ label: 'Approval', short: 'Approval', num: null, date: (item.approval_sap_status || null), active: !!item.approval_sap_status });
     steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
     steps.push({ label: 'GR', short: 'GR', num: item.nomor_gr, date: (item.gr_release_date || item.tanggal_gr || null), active: !!(item.gr_release_date || item.nomor_gr) });
   }
@@ -595,16 +595,18 @@ export default function ProgressPOPage() {
             case 'CTPP': return selectedPO.rilis_evaluasi_ctpp || null;
             case 'RAB': return selectedPO.rilis_rab_logistik || null;
             case 'PR': return selectedPO.pr_release_date || selectedPO.tanggal_pr || null;
+            case 'Approval': return selectedPO.approval_sap_status || null;
             case 'Aanwijzing': return selectedPO.aanwijzing_date || null;
             case 'PO': return selectedPO.po_release_date || selectedPO.tanggal_po || null;
+            case 'Goods Inspection': return selectedPO.goods_inspection_status || null;
             case 'GR': return selectedPO.gr_release_date || selectedPO.tanggal_gr || null;
             default: return null;
           }
         };
 
         const stepsList = isLelang 
-          ? ['NOD', 'Spektek', 'CTPE', 'CTPP', 'RAB', 'PR', 'Aanwijzing', 'PO', 'GR']
-          : ['NOD', 'RAB', 'PR', 'PO', 'GR'];
+          ? ['NOD', 'Spektek', 'CTPE', 'CTPP', 'RAB', 'PR', 'Approval', 'Aanwijzing', 'PO', 'Goods Inspection', 'GR']
+          : ['NOD', 'RAB', 'PR', 'Approval', 'PO', 'GR'];
 
         const gaps: { step: string; days: number; from: string; to: string; isOngoing: boolean }[] = [];
         for (let i = 0; i < stepsList.length - 1; i++) {
