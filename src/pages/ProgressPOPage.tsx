@@ -606,48 +606,46 @@ export default function ProgressPOPage() {
           ? ['NOD', 'Spektek', 'CTPE', 'CTPP', 'RAB', 'PR', 'Aanwijzing', 'PO', 'GR']
           : ['NOD', 'RAB', 'PR', 'PO', 'GR'];
 
-        const chartDataPoints: { label: string; date: string | null; gap: number; accumulative: number; transitionLabel: string }[] = [];
-        let runningTotal = 0;
+        const gaps: { step: string; days: number; from: string; to: string; isOngoing: boolean }[] = [];
+        for (let i = 0; i < stepsList.length - 1; i++) {
+          const fromLabel = stepsList[i];
+          const toLabel = stepsList[i+1];
+          const fromDateStr = getMilestoneDate(fromLabel);
+          const toDateStr = getMilestoneDate(toLabel);
 
-        for (let i = 0; i < stepsList.length; i++) {
-          const label = stepsList[i];
-          const dateStr = getMilestoneDate(label);
-          
-          let gap = 0;
-          let transitionLabel = '';
+          let days = 0;
+          let isOngoing = false;
 
-          if (i > 0) {
-            const prevLabel = stepsList[i - 1];
-            const prevDateStr = getMilestoneDate(prevLabel);
-            
-            if (dateStr && prevDateStr) {
-              const start = new Date(prevDateStr);
-              const end = new Date(dateStr);
-              gap = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
-              transitionLabel = `${prevLabel} → ${label}`;
-            } else if (prevDateStr && !dateStr) {
-              const hasFutureDate = stepsList.slice(i).some(step => getMilestoneDate(step) !== null);
-              if (!hasFutureDate) {
-                const start = new Date(prevDateStr);
-                const end = new Date();
-                gap = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
-                transitionLabel = `${prevLabel} → Berjalan`;
-              }
+          if (fromDateStr && toDateStr) {
+            const start = new Date(fromDateStr);
+            const end = new Date(toDateStr);
+            days = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+          } else if (fromDateStr && !toDateStr) {
+            const hasFutureDate = stepsList.slice(i + 1).some(step => getMilestoneDate(step) !== null);
+            if (!hasFutureDate) {
+              const start = new Date(fromDateStr);
+              const end = new Date();
+              days = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+              isOngoing = true;
             }
           }
 
-          runningTotal += gap;
-          chartDataPoints.push({
-            label,
-            date: dateStr,
-            gap,
-            accumulative: runningTotal,
-            transitionLabel
+          gaps.push({
+            step: `${fromLabel} → ${isOngoing ? 'Berjalan' : toLabel}`,
+            days,
+            from: fromLabel,
+            to: isOngoing ? 'Berjalan' : toLabel,
+            isOngoing
           });
         }
 
-        const validGaps = chartDataPoints.filter(p => p.gap > 0);
-        const maxGap = validGaps.length > 0 ? validGaps.reduce((max, g) => g.gap > max.gap ? g : max, validGaps[0]) : null;
+        const maxGap = gaps.length > 0 ? gaps.reduce((max, g) => g.days > max.days ? g : max, gaps[0]) : null;
+
+        let runningTotal = 0;
+        const accumulativeDays = gaps.map(g => {
+          runningTotal += g.days;
+          return runningTotal;
+        });
 
         const chartOption = {
           backgroundColor: 'transparent',
@@ -683,7 +681,7 @@ export default function ProgressPOPage() {
             },
           },
           grid: {
-            top: '18%',
+            top: '16%',
             bottom: '12%',
             left: '4%',
             right: '4%',
@@ -701,7 +699,7 @@ export default function ProgressPOPage() {
           },
           xAxis: {
             type: 'category',
-            data: chartDataPoints.map(p => `${p.label}\n${p.date ? formatTanggal(p.date) : '—'}`),
+            data: gaps.map(g => g.step),
             axisLabel: {
               color: ct.axisLabel,
               fontSize: 10,
@@ -749,26 +747,10 @@ export default function ProgressPOPage() {
               type: 'bar',
               barWidth: '24%',
               yAxisIndex: 0,
-              data: chartDataPoints.map(p => p.gap),
-              label: {
-                show: true,
-                position: 'top',
-                distance: 8,
-                formatter: (params: any) => {
-                  const pt = chartDataPoints[params.dataIndex];
-                  if (!pt || pt.gap === 0) return '';
-                  return `${pt.transitionLabel}\n(${pt.gap} Hari)`;
-                },
-                fontSize: 8,
-                fontWeight: 'bold',
-                color: 'var(--color-on-surface)',
-                align: 'center',
-                lineHeight: 11
-              },
+              data: gaps.map(g => g.days),
               itemStyle: {
                 color: (params: any) => {
-                  const pt = chartDataPoints[params.dataIndex];
-                  if (maxGap && pt && pt.gap === maxGap.gap) {
+                  if (maxGap && params.value === maxGap.days) {
                     return {
                       type: 'linear',
                       x: 0, y: 0, x2: 0, y2: 1,
@@ -798,7 +780,7 @@ export default function ProgressPOPage() {
               showSymbol: true,
               symbol: 'circle',
               symbolSize: 8,
-              data: chartDataPoints.map(p => p.accumulative),
+              data: accumulativeDays,
               lineStyle: {
                 color: '#eab308',
                 width: 2.5,
@@ -868,11 +850,29 @@ export default function ProgressPOPage() {
                   <div className="p-5 rounded-xl border flex flex-col justify-center shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Jeda Terlama (Bottleneck)</span>
                     <span className="text-3xl font-black text-red-500">
-                      {maxGap ? `${maxGap.gap} Hari` : '—'}
+                      {maxGap ? `${maxGap.days} Hari` : '—'}
                     </span>
                     <span className="text-[10px] text-slate-500 mt-1.5">
-                      {maxGap ? `Proses: ${maxGap.transitionLabel}` : 'Tidak ada data jeda'}
+                      {maxGap ? `Proses: ${maxGap.step}` : 'Tidak ada data jeda'}
                     </span>
+                  </div>
+                </div>
+
+                {/* Milestone Dates Timeline Row */}
+                <div className="p-5 border rounded-xl shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                  <h5 className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3.5">Tanggal Rilis Setiap Tahap Proses</h5>
+                  <div className="flex flex-wrap justify-between gap-y-4 gap-x-2">
+                    {stepsList.map(step => {
+                      const date = getMilestoneDate(step);
+                      return (
+                        <div key={step} className="flex flex-col items-center flex-1 min-w-[90px] border-r last:border-r-0" style={{ borderColor: 'var(--color-steel-border)' }}>
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">{step}</span>
+                          <span className="text-xs font-black mt-1.5 text-center px-1" style={{ color: date ? 'var(--color-on-surface)' : 'var(--color-on-surface-variant)' }}>
+                            {date ? formatTanggal(date) : '—'}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
