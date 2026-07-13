@@ -741,22 +741,42 @@ export default function ProgressPOPage() {
         const getPlanMilestoneDate = (label: string): string | null => {
           switch (label) {
             case 'NOD': return selectedPO.tanggal_nod || null;
-            case 'Spektek': return selectedPO.tech_spec_release_date || null;
-            case 'CTPE': return selectedPO.rilis_evaluasi_ctpe || null;
-            case 'CTPP': return selectedPO.rilis_evaluasi_ctpp || null;
-            case 'RAB': return selectedPO.rilis_rab_logistik || null;
+            case 'Spektek': return selectedPO.plan_tech_spec_release_date || null;
+            case 'CTPE': return selectedPO.plan_rilis_evaluasi_ctpe || null;
+            case 'CTPP': return selectedPO.plan_rilis_evaluasi_ctpp || null;
+            case 'RAB': return selectedPO.plan_rilis_rab_logistik || null;
             case 'PR': return selectedPO.tanggal_pr || null;
-            case 'Approval': return selectedPO.approval_sap_status || null;
-            case 'Aanwijzing': return selectedPO.aanwijzing_date || null;
+            case 'Approval': return selectedPO.plan_approval_sap_status || null;
+            case 'Aanwijzing': return selectedPO.plan_aanwijzing_date || null;
             case 'PO': return selectedPO.tanggal_po || null;
-            case 'Goods Inspection': return selectedPO.goods_inspection_status || null;
+            case 'Goods Inspection': return selectedPO.plan_goods_inspection_status || null;
             case 'GR': return selectedPO.tanggal_gr || selectedPO.tanggal_rencana_pengiriman || null;
             default: return null;
           }
         };
 
         // Plan cumulative per gap end point
-        const planCumulativeLine = gaps.map(g => getPlanDays(getPlanMilestoneDate(g.to === 'Berjalan' ? g.from : g.to)));
+        // Priority: (1) specific plan date for milestone, (2) linear interpolation to plan GR date
+        const planTotalDays = (() => {
+          if (!planStartDate) return null;
+          const planEndStr = selectedPO.tanggal_rencana_pengiriman || selectedPO.tanggal_gr || null;
+          if (!planEndStr) return null;
+          return Math.max(0, Math.round((new Date(planEndStr).getTime() - planStartDate.getTime()) / 86400000));
+        })();
+
+        const planCumulativeLine = gaps.map((g, i) => {
+          // Use actual plan date if available for this milestone
+          const targetLabel = g.to === 'Berjalan' ? 'GR' : g.to;
+          const specificPlanDays = getPlanDays(getPlanMilestoneDate(targetLabel));
+          if (specificPlanDays !== null) return specificPlanDays;
+
+          // Fall back to linear interpolation from 0 → planTotalDays across all gaps
+          if (planTotalDays !== null) {
+            return Math.round(planTotalDays * (i + 1) / gaps.length);
+          }
+
+          return null;
+        });
 
         const chartOption = {
           backgroundColor: 'transparent',
@@ -884,6 +904,7 @@ export default function ProgressPOPage() {
               showSymbol: true,
               symbol: 'circle',
               symbolSize: 8,
+              connectNulls: true,
               data: planCumulativeLine,
               lineStyle: { color: '#eab308', width: 2.5, type: 'dashed', shadowColor: 'rgba(234,179,8,0.3)', shadowBlur: 4 },
               itemStyle: { color: '#eab308', borderColor: '#ffffff', borderWidth: 1.5 }
@@ -896,6 +917,7 @@ export default function ProgressPOPage() {
               showSymbol: true,
               symbol: 'circle',
               symbolSize: 8,
+              connectNulls: true,
               data: accumulativeDays,
               lineStyle: { color: '#10b981', width: 2.5, shadowColor: 'rgba(16,185,129,0.3)', shadowBlur: 4 },
               itemStyle: { color: '#10b981', borderColor: '#ffffff', borderWidth: 1.5 }

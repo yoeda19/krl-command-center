@@ -91,7 +91,9 @@ const emptyPO = (): Partial<ProcurementItem> => ({
   plan_goods_inspection_status: null,
   pr_number: '',
   pr_release_date: null,
+  plan_approval_sap_status: null,
   approval_sap_status: '',
+  plan_aanwijzing_date: null,
   aanwijzing_date: null,
   vendor_sap: '',
   po_number: '',
@@ -1123,7 +1125,10 @@ export default function AdminPanelPage() {
               <Field label="Realisasi PR Date">
                 <input type="date" value={poData.pr_release_date || ''} onChange={e => updatePOField('pr_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
-              <Field label="Approval Date (CEP, CE, C2, CAA)">
+              <Field label="Plan Approval Date">
+                <input type="date" value={poData.plan_approval_sap_status || ''} onChange={e => updatePOField('plan_approval_sap_status', e.target.value || null)} className={inputCls} style={inputStyle} />
+              </Field>
+              <Field label="Realisasi Approval Date">
                 <input type="date" value={poData.approval_sap_status || ''} onChange={e => updatePOField('approval_sap_status', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
             </div>
@@ -1134,8 +1139,11 @@ export default function AdminPanelPage() {
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 4 — Aanwijzing &amp; Purchase Order (PO)
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
-              <Field label="Aanwijzing Date">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5">
+              <Field label="Plan Aanwijzing Date">
+                <input type="date" value={poData.plan_aanwijzing_date || ''} onChange={e => updatePOField('plan_aanwijzing_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+              </Field>
+              <Field label="Realisasi Aanwijzing Date">
                 <input type="date" value={poData.aanwijzing_date || ''} onChange={e => updatePOField('aanwijzing_date', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
               <Field label="Vendor">

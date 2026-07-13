@@ -123,7 +123,9 @@ export interface ProcurementItem {
   plan_goods_inspection_status?: string | null;
   pr_number?: string | null;
   pr_release_date?: string | null;
+  plan_approval_sap_status?: string | null;
   approval_sap_status?: string | null;
+  plan_aanwijzing_date?: string | null;
   aanwijzing_date?: string | null;
   vendor_sap?: string | null;
   po_number?: string | null;
