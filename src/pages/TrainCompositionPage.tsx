@@ -176,7 +176,7 @@ export default function TrainCompositionPage() {
         </div>
 
         {/* Filters */}
-        <div className="tactile-card rounded-lg p-4 grid grid-cols-1 sm:grid-cols-4 gap-4 col-span-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
+        <div className="tactile-card rounded-lg p-4 grid grid-cols-1 sm:grid-cols-5 gap-4 col-span-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
           <div>
             <label className="block text-[10px] font-black tracking-wider mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>
               Cari Rangkaian
@@ -231,6 +231,22 @@ export default function TrainCompositionPage() {
             >
               {dipoOptions.map(d => <option key={d} value={d}>{d === 'Semua' ? 'Semua Dipo' : d}</option>)}
             </select>
+          </div>
+
+          <div className="flex flex-col justify-end">
+            <button
+              onClick={() => {
+                setSearchRangkaian('');
+                setFilterSeri('Semua');
+                setFilterPropulsi('Semua');
+                setFilterDipo('Semua');
+                setSelectedTrainId('');
+              }}
+              className="w-full rounded py-2 text-xs font-bold border transition-all hover:opacity-85"
+              style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)', backgroundColor: 'var(--color-surface-container-high)' }}
+            >
+              Reset Filter
+            </button>
           </div>
         </div>
       </div>
