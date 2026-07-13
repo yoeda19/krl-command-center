@@ -221,6 +221,28 @@ export default function ProgressPOPage() {
   const [viewMode, setViewMode] = useState<'timeline' | 'table'>('table');
   const [selectedPO, setSelectedPO] = useState<ProcurementItem | null>(null);
 
+  // Deteksi tema light/dark secara reaktif
+  const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
+  useEffect(() => {
+    const obs = new MutationObserver(() =>
+      setIsDark(document.documentElement.classList.contains('dark'))
+    );
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => obs.disconnect();
+  }, []);
+
+  // Palet warna chart adaptif tema
+  const ct = {
+    axisLabel:    isDark ? '#94a3b8' : '#475569',
+    axisLine:     isDark ? '#334155' : '#d1d5db',
+    gridLine:     isDark ? 'rgba(51,65,85,0.5)'  : 'rgba(209,213,219,0.7)',
+    legendText:   isDark ? '#94a3b8' : '#374151',
+    tooltipBg:    isDark ? 'rgba(15,23,42,0.96)' : 'rgba(255,255,255,0.98)',
+    tooltipBorder:isDark ? 'rgba(148,163,184,0.15)' : 'rgba(0,0,0,0.1)',
+    tooltipText:  isDark ? '#f1f5f9' : '#111827',
+    tooltipSub:   isDark ? '#94a3b8' : '#6b7280',
+  };
+
   useEffect(() => {
     async function loadData() {
       try {
@@ -562,42 +584,58 @@ export default function ProgressPOPage() {
 
       {/* Modal Analisis Jeda Proses PO */}
       {selectedPO && (() => {
-        const milestones = [
-          { label: 'NOD', date: selectedPO.publish_nod || selectedPO.tanggal_nod || null },
-          { label: 'Spektek', date: selectedPO.tech_spec_release_date || null },
-          { label: 'CTPE', date: selectedPO.rilis_evaluasi_ctpe || null },
-          { label: 'CTPP', date: selectedPO.rilis_evaluasi_ctpp || null },
-          { label: 'RAB', date: selectedPO.rilis_rab_logistik || null },
-          { label: 'PR', date: selectedPO.pr_release_date || selectedPO.tanggal_pr || null },
-          { label: 'PO', date: selectedPO.po_release_date || selectedPO.tanggal_po || null },
-          { label: 'GR', date: selectedPO.gr_release_date || selectedPO.tanggal_gr || null }
-        ].filter(m => m.date);
+        const costVal = selectedPO.cost ?? selectedPO.total_harga ?? 0;
+        const isLelang = costVal >= 500000000;
 
-        const gaps: { step: string; days: number; from: string; to: string }[] = [];
-        for (let i = 0; i < milestones.length - 1; i++) {
-          const start = new Date(milestones[i].date!);
-          const end = new Date(milestones[i+1].date!);
-          const diff = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
-          gaps.push({
-            step: `${milestones[i].label} ➡️ ${milestones[i+1].label}`,
-            days: diff,
-            from: milestones[i].label,
-            to: milestones[i+1].label
-          });
-        }
+        const getMilestoneDate = (label: string) => {
+          switch (label) {
+            case 'NOD': return selectedPO.publish_nod || selectedPO.tanggal_nod || null;
+            case 'Spektek': return selectedPO.tech_spec_release_date || null;
+            case 'CTPE': return selectedPO.rilis_evaluasi_ctpe || null;
+            case 'CTPP': return selectedPO.rilis_evaluasi_ctpp || null;
+            case 'RAB': return selectedPO.rilis_rab_logistik || null;
+            case 'PR': return selectedPO.pr_release_date || selectedPO.tanggal_pr || null;
+            case 'Aanwijzing': return selectedPO.aanwijzing_date || null;
+            case 'PO': return selectedPO.po_release_date || selectedPO.tanggal_po || null;
+            case 'GR': return selectedPO.gr_release_date || selectedPO.tanggal_gr || null;
+            default: return null;
+          }
+        };
 
-        // If PO is not GR yet, add an ongoing gap from the last milestone to today
-        const hasGR = milestones.some(m => m.label === 'GR');
-        if (!hasGR && milestones.length > 0) {
-          const last = milestones[milestones.length - 1];
-          const start = new Date(last.date!);
-          const end = new Date(); // today
-          const diff = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+        const stepsList = isLelang 
+          ? ['NOD', 'Spektek', 'CTPE', 'CTPP', 'RAB', 'PR', 'Aanwijzing', 'PO', 'GR']
+          : ['NOD', 'RAB', 'PR', 'PO', 'GR'];
+
+        const gaps: { step: string; days: number; from: string; to: string; isOngoing: boolean }[] = [];
+        for (let i = 0; i < stepsList.length - 1; i++) {
+          const fromLabel = stepsList[i];
+          const toLabel = stepsList[i+1];
+          const fromDateStr = getMilestoneDate(fromLabel);
+          const toDateStr = getMilestoneDate(toLabel);
+
+          let days = 0;
+          let isOngoing = false;
+
+          if (fromDateStr && toDateStr) {
+            const start = new Date(fromDateStr);
+            const end = new Date(toDateStr);
+            days = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+          } else if (fromDateStr && !toDateStr) {
+            const hasFutureDate = stepsList.slice(i + 1).some(step => getMilestoneDate(step) !== null);
+            if (!hasFutureDate) {
+              const start = new Date(fromDateStr);
+              const end = new Date();
+              days = Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+              isOngoing = true;
+            }
+          }
+
           gaps.push({
-            step: `${last.label} ➡️ Berjalan`,
-            days: diff,
-            from: last.label,
-            to: 'Hari ini'
+            step: `${fromLabel} ➡️ ${isOngoing ? 'Berjalan' : toLabel}`,
+            days,
+            from: fromLabel,
+            to: isOngoing ? 'Berjalan' : toLabel,
+            isOngoing
           });
         }
 
@@ -605,71 +643,97 @@ export default function ProgressPOPage() {
 
         let runningTotal = 0;
         const accumulativeDays = gaps.map(g => {
-          runningTotal += g.days;
-          return runningTotal;
-        });
-
-        const chartOption = {
+               const chartOption = {
+          backgroundColor: 'transparent',
+          animation: true,
+          animationDuration: 800,
+          animationEasing: 'cubicInOut',
           tooltip: {
             trigger: 'axis',
             axisPointer: {
-              type: 'shadow'
+              type: 'cross',
+              crossStyle: { color: ct.axisLine },
+              lineStyle: { color: ct.axisLine, type: 'dashed', width: 1 },
             },
-            formatter: (params: any) => {
-              let html = `<div style="font-weight: bold; margin-bottom: 6px; color: #f8fafc; font-size: 11px;">${params[0].name}</div>`;
-              params.forEach((param: any) => {
-                const marker = param.marker;
-                const seriesName = param.seriesName === 'Durasi Jeda' ? 'Durasi Jeda' : 'Total Akumulatif';
-                html += `<div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; font-size: 10px; color: #cbd5e1; margin-top: 2px;">
-                  <span style="display: flex; align-items: center; gap: 4px;">${marker} ${seriesName}</span>
-                  <span style="font-weight: bold; color: #f8fafc;">${param.value} Hari</span>
-                </div>`;
-              });
-              return html;
-            },
-            backgroundColor: 'rgba(15, 23, 42, 0.95)',
-            borderColor: '#334155',
+            backgroundColor: ct.tooltipBg,
+            borderColor: ct.tooltipBorder,
             borderWidth: 1,
-            textStyle: { color: '#f8fafc' },
-            padding: [8, 12]
+            padding: [12, 16],
+            textStyle: { color: ct.tooltipText, fontSize: 12, fontFamily: 'inherit' },
+            extraCssText: 'box-shadow: 0 8px 32px rgba(0,0,0,0.18); border-radius: 10px;',
+            formatter: (params: any[]) => {
+              const label = params[0]?.axisValue || '';
+              const rows = params
+                .filter((p: any) => p.value !== null && p.value !== undefined)
+                .map((p: any) => {
+                  const val = typeof p.value === 'number'
+                    ? p.value.toLocaleString('id-ID') + ' Hari'
+                    : '—';
+                  const dot = `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${p.color};margin-right:8px;flex-shrink:0;box-shadow:0 0 0 2px rgba(255,255,255,0.3)"></span>`;
+                  const sName = p.seriesName === 'Durasi Jeda' ? 'Durasi Jeda' : 'Total Akumulatif';
+                  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:18px;padding:3px 0">${dot}<span style="color:${ct.tooltipSub};font-size:11px">${sName}</span><b style="color:${ct.tooltipText};font-size:12px;font-variant-numeric:tabular-nums">${val}</b></div>`;
+                }).join('');
+              return `<div style="font-size:10px;font-weight:800;color:${ct.tooltipSub};margin-bottom:8px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid ${ct.tooltipBorder};padding-bottom:6px">${label}</div>${rows}`;
+            },
           },
           grid: {
-            top: '18%',
-            bottom: '18%',
-            left: '6%',
-            right: '6%',
+            top: '16%',
+            bottom: '12%',
+            left: '4%',
+            right: '4%',
             containLabel: true
           },
           legend: {
             data: ['Durasi Jeda', 'Total Akumulatif'],
-            textStyle: { color: 'var(--color-on-surface)', fontSize: 10, fontWeight: 'bold' },
+            itemWidth: 32,
+            itemHeight: 6,
+            itemGap: 32,
+            icon: 'roundRect',
+            textStyle: { color: ct.legendText, fontSize: 13, fontWeight: '700', fontFamily: 'inherit' },
+            inactiveColor: isDark ? '#334155' : '#d1d5db',
             top: '0%'
           },
           xAxis: {
             type: 'category',
             data: gaps.map(g => g.step),
             axisLabel: {
-              rotate: 15,
-              fontSize: 9,
-              color: 'var(--color-on-surface-variant)',
-              fontWeight: '600'
+              color: ct.axisLabel,
+              fontSize: 10,
+              fontWeight: '600',
+              fontFamily: 'inherit',
+              margin: 10
             },
-            axisLine: { lineStyle: { color: 'var(--color-steel-border)' } },
-            axisTick: { show: false }
+            axisLine: { lineStyle: { color: ct.axisLine, width: 1 } },
+            axisTick: { show: false },
+            splitLine: { show: true, lineStyle: { color: ct.gridLine, type: 'dashed', width: 1 } }
           },
           yAxis: [
             {
               type: 'value',
               name: 'Jeda (Hari)',
-              nameTextStyle: { fontSize: 9, color: 'var(--color-on-surface-variant)', fontWeight: 'bold', padding: [0, 16, 0, 0] },
-              axisLabel: { fontSize: 9, color: 'var(--color-on-surface-variant)' },
-              splitLine: { lineStyle: { color: 'var(--color-steel-border)', type: 'dashed' } }
+              nameLocation: 'end',
+              nameTextStyle: { color: ct.axisLabel, fontSize: 9, fontWeight: '700', fontFamily: 'inherit', padding: [0, 16, 4, 0] },
+              axisLabel: {
+                color: ct.axisLabel,
+                fontSize: 10,
+                fontFamily: 'inherit',
+              },
+              axisLine: { show: false },
+              axisTick: { show: false },
+              splitLine: { lineStyle: { color: ct.gridLine, type: 'dashed', width: 1 } }
             },
             {
               type: 'value',
               name: 'Akumulatif (Hari)',
-              nameTextStyle: { fontSize: 9, color: 'var(--color-on-surface-variant)', fontWeight: 'bold', padding: [0, 0, 0, 16] },
-              axisLabel: { fontSize: 9, color: 'var(--color-on-surface-variant)' },
+              nameLocation: 'end',
+              nameTextStyle: { color: ct.axisLabel, fontSize: 9, fontWeight: '700', fontFamily: 'inherit', padding: [0, 0, 4, 16] },
+              axisLabel: {
+                color: ct.axisLabel,
+                fontSize: 10,
+                fontFamily: 'inherit',
+              },
+              axisLine: { show: false },
+              axisTick: { show: false },
               splitLine: { show: false }
             }
           ],
@@ -739,8 +803,8 @@ export default function ProgressPOPage() {
         })();
 
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-            <div className="tactile-card rounded-lg overflow-hidden w-full max-w-3xl shadow-2xl flex flex-col animate-scale-up"
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/60 backdrop-blur-sm animate-fade-in">
+            <div className="tactile-card rounded-lg overflow-hidden w-[98vw] max-w-[98vw] h-[96vh] max-h-[96vh] shadow-2xl flex flex-col animate-scale-up"
                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
               
               {/* Modal Header */}
@@ -766,34 +830,34 @@ export default function ProgressPOPage() {
               </div>
 
               {/* Modal Body */}
-              <div className="p-5 flex flex-col gap-5">
+              <div className="p-6 flex-1 overflow-y-auto flex flex-col gap-6">
                 {/* Stats row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl border flex flex-col justify-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="p-5 rounded-xl border flex flex-col justify-center shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Total Hari Proses</span>
-                    <span className="text-2xl font-black text-blue-500">
+                    <span className="text-3xl font-black text-blue-500">
                       {totalDays} Hari
                     </span>
-                    <span className="text-[10px] text-slate-500 mt-1">
+                    <span className="text-[10px] text-slate-500 mt-1.5">
                       NOD: {formatTanggal(selectedPO.publish_nod || selectedPO.tanggal_nod) || '—'} s/d {selectedPO.gr_release_date || selectedPO.tanggal_gr ? `GR: ${formatTanggal(selectedPO.gr_release_date || selectedPO.tanggal_gr!)}` : 'Berjalan (Hari ini)'}
                     </span>
                   </div>
 
-                  <div className="p-4 rounded-xl border flex flex-col justify-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                  <div className="p-5 rounded-xl border flex flex-col justify-center shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
                     <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Jeda Terlama (Bottleneck)</span>
-                    <span className="text-2xl font-black text-red-500">
+                    <span className="text-3xl font-black text-red-500">
                       {maxGap ? `${maxGap.days} Hari` : '—'}
                     </span>
-                    <span className="text-[10px] text-slate-500 mt-1">
+                    <span className="text-[10px] text-slate-500 mt-1.5">
                       {maxGap ? `Proses: ${maxGap.step}` : 'Tidak ada data jeda'}
                     </span>
                   </div>
                 </div>
 
                 {/* Chart */}
-                <div className="p-4 border rounded-xl" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
-                  <h5 className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-2">Grafik Selisih Jeda Transisi (Hari)</h5>
-                  <div className="h-[260px]">
+                <div className="p-5 border rounded-xl flex-1 flex flex-col shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                  <h5 className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3">Grafik Selisih Jeda Transisi &amp; Total Akumulatif (Hari)</h5>
+                  <div className="flex-1 min-h-[400px]">
                     <ReactECharts option={chartOption} style={{ height: '100%', width: '100%' }} />
                   </div>
                 </div>
