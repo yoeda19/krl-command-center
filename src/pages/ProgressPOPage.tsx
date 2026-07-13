@@ -64,7 +64,7 @@ function CheckIcon() {
   );
 }
 
-function PipelineCard({ item }: { item: ProcurementItem }) {
+function PipelineCard({ item, onSelect }: { item: ProcurementItem; onSelect: (item: ProcurementItem) => void }) {
   const cfg = statusCfg[item.status];
   const rCfg = riskCfg[item.risiko_keterlambatan];
 
@@ -98,7 +98,7 @@ function PipelineCard({ item }: { item: ProcurementItem }) {
     steps.push({ label: 'Review Logistik', short: 'Review Log', num: (item.review_logistic_status || null), date: null, active: !!item.review_logistic_status });
     steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), date: (item.pr_release_date || item.tanggal_pr || null), active: !!(item.pr_number || item.nomor_pr) });
     steps.push({ label: 'Approval', short: 'Approval', num: (item.approval_sap_status || null), date: null, active: !!item.approval_sap_status });
-    steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
+    steps.push({ color: 'var(--color-on-surface-variant)', label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
     steps.push({ label: 'GR', short: 'GR', num: item.nomor_gr, date: (item.gr_release_date || item.tanggal_gr || null), active: !!(item.gr_release_date || item.nomor_gr) });
   }
 
@@ -131,7 +131,7 @@ function PipelineCard({ item }: { item: ProcurementItem }) {
           )}
           {(item.publish_nod || item.tanggal_nod) && (
             <button
-              onClick={() => setSelectedPO(item)}
+              onClick={() => onSelect(item)}
               className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 border border-blue-600/20 transition-all cursor-pointer whitespace-nowrap"
             >
               ANALISIS
@@ -339,7 +339,7 @@ export default function ProgressPOPage() {
               Tidak ada data yang sesuai filter.
             </div>
           )}
-          {filtered.map(item => <PipelineCard key={item.id} item={item} />)}
+          {filtered.map(item => <PipelineCard key={item.id} item={item} onSelect={setSelectedPO} />)}
         </div>
       )}
 
