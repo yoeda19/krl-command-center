@@ -570,6 +570,57 @@ export default function AdminPanelPage() {
   };
 
   const handleSavePO = async () => {
+    // Validasi urutan tanggal
+    const poToValidate = editingPO || newPO;
+    const validation = (() => {
+      const costVal = poToValidate.cost ?? poToValidate.total_harga ?? 0;
+      const isLelang = costVal >= 500000000;
+      const steps = isLelang 
+        ? [
+            { label: 'NOD / Publish NOD', date: poToValidate.publish_nod || poToValidate.tanggal_nod },
+            { label: 'Spektek Release', date: poToValidate.tech_spec_release_date },
+            { label: 'Evaluasi CTPE', date: poToValidate.rilis_evaluasi_ctpe },
+            { label: 'Evaluasi CTPP', date: poToValidate.rilis_evaluasi_ctpp },
+            { label: 'RAB Logistik', date: poToValidate.rilis_rab_logistik },
+            { label: 'PR Release', date: poToValidate.pr_release_date || poToValidate.tanggal_pr },
+            { label: 'Approval SAP', date: poToValidate.approval_sap_status },
+            { label: 'Aanwijzing', date: poToValidate.aanwijzing_date },
+            { label: 'PO Release / Tgl PO', date: poToValidate.po_release_date || poToValidate.tanggal_po },
+            { label: 'Goods Inspection', date: poToValidate.goods_inspection_status },
+            { label: 'GR Release / Tgl GR', date: poToValidate.gr_release_date || poToValidate.tanggal_gr },
+          ]
+        : [
+            { label: 'NOD / Publish NOD', date: poToValidate.publish_nod || poToValidate.tanggal_nod },
+            { label: 'RAB Logistik', date: poToValidate.rilis_rab_logistik },
+            { label: 'PR Release', date: poToValidate.pr_release_date || poToValidate.tanggal_pr },
+            { label: 'Approval SAP', date: poToValidate.approval_sap_status },
+            { label: 'PO Release / Tgl PO', date: poToValidate.po_release_date || poToValidate.tanggal_po },
+            { label: 'GR Release / Tgl GR', date: poToValidate.gr_release_date || poToValidate.tanggal_gr },
+          ];
+
+      const filledSteps = steps.filter(s => !!s.date);
+      for (let i = 0; i < filledSteps.length - 1; i++) {
+        const current = filledSteps[i];
+        const next = filledSteps[i + 1];
+        const currentDate = new Date(current.date!);
+        const nextDate = new Date(next.date!);
+        if (nextDate < currentDate) {
+          const curFormatted = currentDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+          const nextFormatted = nextDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+          return {
+            valid: false,
+            errorMsg: `Urutan tanggal salah: Tanggal ${next.label} (${nextFormatted}) tidak boleh lebih awal dari Tanggal ${current.label} (${curFormatted}).`
+          };
+        }
+      }
+      return { valid: true };
+    })();
+
+    if (!validation.valid) {
+      showError(validation.errorMsg || 'Urutan tanggal salah.');
+      return;
+    }
+
     setPOLoading(true);
     try {
       const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
