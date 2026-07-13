@@ -944,40 +944,40 @@ export default function ProgressPOPage() {
                 {/* Stats row */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="p-3 rounded-lg border flex flex-col justify-center shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Total Hari Proses</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider mb-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Total Hari Proses</span>
                     <span className="text-xl font-black text-blue-500">
                       {totalDays} Hari
                     </span>
-                    <span className="text-[10px] text-slate-500 mt-1">
+                    <span className="text-[10px] mt-1" style={{ color: 'var(--color-on-surface-variant)', opacity: 0.8 }}>
                       NOD: {formatTanggal(selectedPO.publish_nod || selectedPO.tanggal_nod) || '—'} s/d {selectedPO.gr_release_date || selectedPO.tanggal_gr ? `GR: ${formatTanggal(selectedPO.gr_release_date || selectedPO.tanggal_gr!)}` : 'Berjalan (Hari ini)'}
                     </span>
                   </div>
 
                   <div className="p-3 rounded-lg border flex flex-col justify-center shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Jeda Terlama (Bottleneck)</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider mb-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Jeda Terlama (Bottleneck)</span>
                     <span className="text-xl font-black text-red-500">
                       {maxGap ? `${maxGap.days} Hari` : '—'}
                     </span>
-                    <span className="text-[10px] text-slate-500 mt-1">
+                    <span className="text-[10px] mt-1" style={{ color: 'var(--color-on-surface-variant)', opacity: 0.8 }}>
                       {maxGap ? `Proses: ${maxGap.step}` : 'Tidak ada data jeda'}
                     </span>
                   </div>
 
                   <div className="p-3 rounded-lg border flex flex-col justify-center shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Perbandingan GR (Rencana vs Realisasi)</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider mb-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Perbandingan GR (Rencana vs Realisasi)</span>
                     <div className="flex flex-col gap-1 mt-1">
                       <div className="flex justify-between text-[10px]">
-                        <span className="text-slate-400">Rencana GR:</span>
-                        <span className="font-bold text-slate-200">{selectedPO.tanggal_rencana_pengiriman ? formatTanggal(selectedPO.tanggal_rencana_pengiriman) : '—'}</span>
+                        <span style={{ color: 'var(--color-on-surface-variant)' }}>Rencana GR:</span>
+                        <span className="font-bold" style={{ color: 'var(--color-on-surface)' }}>{selectedPO.tanggal_rencana_pengiriman ? formatTanggal(selectedPO.tanggal_rencana_pengiriman) : '—'}</span>
                       </div>
                       <div className="flex justify-between text-[10px]">
-                        <span className="text-slate-400">Realisasi GR:</span>
-                        <span className="font-bold text-slate-200">{(selectedPO.gr_release_date || selectedPO.tanggal_gr) ? formatTanggal(selectedPO.gr_release_date || selectedPO.tanggal_gr) : '—'}</span>
+                        <span style={{ color: 'var(--color-on-surface-variant)' }}>Realisasi GR:</span>
+                        <span className="font-bold" style={{ color: 'var(--color-on-surface)' }}>{(selectedPO.gr_release_date || selectedPO.tanggal_gr) ? formatTanggal(selectedPO.gr_release_date || selectedPO.tanggal_gr) : '—'}</span>
                       </div>
-                      <div className="flex justify-between text-[10px] border-t pt-1 mt-1 border-slate-700">
-                        <span className="text-slate-400">Status Kedatangan:</span>
+                      <div className="flex justify-between text-[10px] border-t pt-1 mt-1" style={{ borderColor: 'var(--color-steel-border)' }}>
+                        <span style={{ color: 'var(--color-on-surface-variant)' }}>Status Kedatangan:</span>
                         {(() => {
-                          if (!selectedPO.tanggal_rencana_pengiriman) return <span className="font-bold text-gray-400">Belum Ada Rencana</span>;
+                          if (!selectedPO.tanggal_rencana_pengiriman) return <span className="font-bold" style={{ color: 'var(--color-on-surface-variant)' }}>Belum Ada Rencana</span>;
                           const grDate = selectedPO.gr_release_date || selectedPO.tanggal_gr;
                           if (!grDate) return <span className="font-bold text-yellow-500">Dalam Proses</span>;
                           
@@ -996,7 +996,7 @@ export default function ProgressPOPage() {
 
                 {/* Chart */}
                 <div className="p-5 border rounded-xl flex-1 flex flex-col shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
-                  <h5 className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-3">Grafik Selisih Jeda Transisi &amp; Total Akumulatif (Hari)</h5>
+                  <h5 className="text-[10px] font-black uppercase tracking-wider mb-3" style={{ color: 'var(--color-on-surface-variant)' }}>Grafik Selisih Jeda Transisi &amp; Total Akumulatif (Hari)</h5>
                   <div className="flex-1 min-h-[400px]">
                     <ReactECharts option={chartOption} style={{ height: '100%', width: '100%' }} />
                   </div>
