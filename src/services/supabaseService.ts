@@ -135,7 +135,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
 
   const { data: adminParams } = await supabase
     .from('procurement_progress')
-    .select('nomor_material, plan_lead_time, tanggal_rencana_pengiriman, jumlah_dipesan');
+    .select('nomor_material, plan_lead_time, tanggal_rencana_pengiriman, jumlah_dipesan, status');
 
   // Caching mechanism for recent_history (cutoff dari Januari 2025)
   let history: { id: number; nomor_material: string; qty: number; tanggal: string | null; gudang: string; order_no: string | null }[] = [];
@@ -267,7 +267,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
 
   materials.forEach(mat => {
     const config = configs?.find(c => c.nomor_material === mat.nomor_material);
-    const param = adminParams?.find(p => p.nomor_material === mat.nomor_material);
+    const param = adminParams?.find(p => p.nomor_material === mat.nomor_material && p.status !== 'Tiba di Depo');
     const matHistory = history?.filter(h => h.nomor_material === mat.nomor_material) || [];
     const matPlans = (monthlyPlans || []).filter(p => p.nomor_material === mat.nomor_material).map(p => ({
       ...p,

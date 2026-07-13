@@ -21,16 +21,28 @@ import type {
 interface ConfirmModal { message?: string; customContent?: React.ReactNode; onConfirm: () => void; }
 type ActiveTab = 'parameter' | 'pengadaan' | 'perawatan' | 'bom';
 
-const PROCUREMENT_STATUSES: ProcurementStatus[] = ['PO Diterbitkan', 'Dalam Pengadaan', 'Dikirim Vendor', 'Dalam Transit', 'Tiba di Gudang'];
+const PROCUREMENT_STATUSES: ProcurementStatus[] = [
+  'Dalam Pengadaan',
+  'Proses Evaluasi',
+  'Proses PR & Approval',
+  'Proses PO',
+  'Goods Inspection',
+  'Tiba di Gudang',
+];
 const RISIKO_LEVELS: RisikoLevel[] = ['Rendah', 'Sedang', 'Tinggi'];
 
-const statusCfg: Record<ProcurementStatus | 'Tiba di Depo', { color: string }> = {
-  'PO Diterbitkan':  { color: '#60a5fa' },
-  'Dalam Pengadaan': { color: 'var(--color-led-amber)' },
-  'Dikirim Vendor':  { color: '#9ca3af' },
-  'Dalam Transit':   { color: '#10b981' },
-  'Tiba di Gudang':  { color: 'var(--color-led-green)' },
-  'Tiba di Depo':    { color: 'var(--color-led-green)' },
+const statusCfg: Record<string, { color: string }> = {
+  'Dalam Pengadaan':      { color: 'var(--color-led-amber)' },
+  'Proses Evaluasi':      { color: '#a78bfa' },
+  'Proses PR & Approval': { color: '#60a5fa' },
+  'Proses PO':            { color: '#22d3ee' },
+  'Goods Inspection':     { color: '#facc15' },
+  'Tiba di Gudang':       { color: 'var(--color-led-green)' },
+  // Legacy fallbacks
+  'PO Diterbitkan':       { color: '#60a5fa' },
+  'Dikirim Vendor':       { color: '#9ca3af' },
+  'Dalam Transit':        { color: '#10b981' },
+  'Tiba di Depo':         { color: 'var(--color-led-green)' },
 };
 
 const emptyPO = (): Partial<ProcurementItem> => ({
@@ -55,7 +67,7 @@ const emptyPO = (): Partial<ProcurementItem> => ({
   tanggal_penerimaan_barang: null,
   vendor: '',
   kota_asal: '',
-  status: 'PO Diterbitkan',
+  status: 'Dalam Pengadaan',
   plan_lead_time: 90,
   actual_lead_time: null,
   risiko_keterlambatan: 'Rendah',
@@ -70,15 +82,21 @@ const emptyPO = (): Partial<ProcurementItem> => ({
   rilis_evaluasi_ctpe: null,
   rilis_evaluasi_ctpp: null,
   rilis_rab_logistik: null,
-  review_logistic_status: 'SELESAI',
+  review_logistic_status: '',
+  plan_tech_spec_release_date: null,
+  plan_rilis_evaluasi_ctpe: null,
+  plan_rilis_evaluasi_ctpp: null,
+  plan_rilis_rab_logistik: null,
+  plan_review_logistic_status: null,
+  plan_goods_inspection_status: null,
   pr_number: '',
   pr_release_date: null,
-  approval_sap_status: 'APPROVED CEP/CE/C2/CAA',
+  approval_sap_status: '',
   aanwijzing_date: null,
   vendor_sap: '',
   po_number: '',
   po_release_date: null,
-  goods_inspection_status: 'LULUS UJI',
+  goods_inspection_status: '',
   gr_release_date: null,
   cost: 0
 });
@@ -588,45 +606,68 @@ export default function AdminPanelPage() {
     const validation = (() => {
       const costVal = poToValidate.cost ?? poToValidate.total_harga ?? 0;
       const isLelang = costVal >= 500000000;
-      const steps = isLelang 
+
+      // 1. Validate Plan Dates
+      const planSteps = [
+        { label: 'Plan NOD', date: poToValidate.tanggal_nod, stage: 'tahap1' },
+        { label: 'Plan PR', date: poToValidate.tanggal_pr, stage: 'tahap4' },
+        { label: 'Plan PO', date: poToValidate.tanggal_po, stage: 'tahap5' },
+        { label: 'Plan GR', date: poToValidate.tanggal_gr, stage: 'tahap6' }
+      ].filter(s => !!s.date);
+
+      for (let i = 0; i < planSteps.length - 1; i++) {
+        const current = planSteps[i];
+        const next = planSteps[i + 1];
+        if (new Date(next.date!) < new Date(current.date!)) {
+          const curFormatted = new Date(current.date!).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+          const nextFormatted = new Date(next.date!).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+          setInvalidStages([current.stage, next.stage]);
+          return {
+            valid: false,
+            errorMsg: `Urutan Rencana (Plan) salah: Tanggal ${next.label} (${nextFormatted}) tidak boleh lebih awal dari Tanggal ${current.label} (${curFormatted}).`
+          };
+        }
+      }
+
+      // 2. Validate Realisasi (Progress) Dates
+      const realSteps = isLelang 
         ? [
-            { label: 'NOD / Publish NOD', date: poToValidate.publish_nod || poToValidate.tanggal_nod, stage: 'tahap1' },
+            { label: 'Realisasi NOD', date: poToValidate.publish_nod, stage: 'tahap1' },
             { label: 'Spektek Release', date: poToValidate.tech_spec_release_date, stage: 'tahap2' },
             { label: 'Evaluasi CTPE', date: poToValidate.rilis_evaluasi_ctpe, stage: 'tahap2' },
             { label: 'Evaluasi CTPP', date: poToValidate.rilis_evaluasi_ctpp, stage: 'tahap2' },
             { label: 'RAB Logistik', date: poToValidate.rilis_rab_logistik, stage: 'tahap3' },
-            { label: 'PR Release', date: poToValidate.pr_release_date || poToValidate.tanggal_pr, stage: 'tahap4' },
+            { label: 'Realisasi PR', date: poToValidate.pr_release_date, stage: 'tahap4' },
             { label: 'Approval SAP', date: poToValidate.approval_sap_status, stage: 'tahap4' },
             { label: 'Aanwijzing', date: poToValidate.aanwijzing_date, stage: 'tahap5' },
-            { label: 'PO Release / Tgl PO', date: poToValidate.po_release_date || poToValidate.tanggal_po, stage: 'tahap5' },
+            { label: 'Realisasi PO', date: poToValidate.po_release_date, stage: 'tahap5' },
             { label: 'Goods Inspection', date: poToValidate.goods_inspection_status, stage: 'tahap6' },
-            { label: 'GR Release / Tgl GR', date: poToValidate.gr_release_date || poToValidate.tanggal_gr, stage: 'tahap6' },
+            { label: 'Realisasi GR', date: poToValidate.gr_release_date, stage: 'tahap6' }
           ]
         : [
-            { label: 'NOD / Publish NOD', date: poToValidate.publish_nod || poToValidate.tanggal_nod, stage: 'tahap1' },
+            { label: 'Realisasi NOD', date: poToValidate.publish_nod, stage: 'tahap1' },
             { label: 'RAB Logistik', date: poToValidate.rilis_rab_logistik, stage: 'tahap3' },
-            { label: 'PR Release', date: poToValidate.pr_release_date || poToValidate.tanggal_pr, stage: 'tahap4' },
+            { label: 'Realisasi PR', date: poToValidate.pr_release_date, stage: 'tahap4' },
             { label: 'Approval SAP', date: poToValidate.approval_sap_status, stage: 'tahap4' },
-            { label: 'PO Release / Tgl PO', date: poToValidate.po_release_date || poToValidate.tanggal_po, stage: 'tahap5' },
-            { label: 'GR Release / Tgl GR', date: poToValidate.gr_release_date || poToValidate.tanggal_gr, stage: 'tahap6' },
+            { label: 'Realisasi PO', date: poToValidate.po_release_date, stage: 'tahap5' },
+            { label: 'Realisasi GR', date: poToValidate.gr_release_date, stage: 'tahap6' }
           ];
 
-      const filledSteps = steps.filter(s => !!s.date);
-      for (let i = 0; i < filledSteps.length - 1; i++) {
-        const current = filledSteps[i];
-        const next = filledSteps[i + 1];
-        const currentDate = new Date(current.date!);
-        const nextDate = new Date(next.date!);
-        if (nextDate < currentDate) {
-          const curFormatted = currentDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
-          const nextFormatted = nextDate.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+      const filledRealSteps = realSteps.filter(s => !!s.date);
+      for (let i = 0; i < filledRealSteps.length - 1; i++) {
+        const current = filledRealSteps[i];
+        const next = filledRealSteps[i + 1];
+        if (new Date(next.date!) < new Date(current.date!)) {
+          const curFormatted = new Date(current.date!).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
+          const nextFormatted = new Date(next.date!).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' });
           setInvalidStages([current.stage, next.stage]);
           return {
             valid: false,
-            errorMsg: `Urutan tanggal salah: Tanggal ${next.label} (${nextFormatted}) tidak boleh lebih awal dari Tanggal ${current.label} (${curFormatted}).`
+            errorMsg: `Urutan Realisasi salah: Tanggal ${next.label} (${nextFormatted}) tidak boleh lebih awal dari Tanggal ${current.label} (${curFormatted}).`
           };
         }
       }
+
       return { valid: true };
     })();
 
@@ -640,41 +681,61 @@ export default function AdminPanelPage() {
       const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
       const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
       if (editingPO) {
-        const originalItem = procureList.find(p => p.id === editingPO.id);
+        // Auto status update logic berdasarkan milestone yang sudah diisi:
+        const updatedPO = { ...editingPO };
+        if (updatedPO.tanggal_gr && updatedPO.gr_release_date) {
+          updatedPO.status = 'Tiba di Gudang';
+        } else if (updatedPO.goods_inspection_status) {
+          updatedPO.status = 'Goods Inspection';
+        } else if (updatedPO.po_release_date || updatedPO.tanggal_po) {
+          updatedPO.status = 'Proses PO';
+        } else if (updatedPO.pr_release_date || updatedPO.tanggal_pr) {
+          updatedPO.status = 'Proses PR & Approval';
+        }
+
+        const originalItem = procureList.find(p => p.id === updatedPO.id);
         const changedFields: string[] = [];
         if (originalItem) {
-          Object.keys(editingPO).forEach(k => {
+          Object.keys(updatedPO).forEach(k => {
             const key = k as keyof ProcurementItem;
-            if (String(originalItem[key]) !== String(editingPO[key])) {
-              changedFields.push(`${key}: ${originalItem[key]} -> ${editingPO[key]}`);
+            if (String(originalItem[key]) !== String(updatedPO[key])) {
+              changedFields.push(`${key}: ${originalItem[key]} -> ${updatedPO[key]}`);
             }
           });
         }
-        const { error } = await updateProcurement(editingPO.id, editingPO);
+        const { error } = await updateProcurement(updatedPO.id, updatedPO);
         if (error) { showError(`Gagal update: ${error}`); return; }
         await addAuditLog({
-          nomor_material: editingPO.nomor_material,
-          parameter_name: `Update PO #${editingPO.id}`,
+          nomor_material: updatedPO.nomor_material,
+          parameter_name: `Update PO #${updatedPO.id}`,
           original_value: originalItem ? `PO: ${originalItem.nomor_po}, Status: ${originalItem.status}` : '-',
           new_value: changedFields.join(', ').slice(0, 250) || 'No change',
           admin_email: email,
           admin_name: name,
           modul: 'Progress PO & Transit'
         });
-        setProcureList(prev => prev.map(p => p.id === editingPO.id ? editingPO : p));
+        setProcureList(prev => prev.map(p => p.id === updatedPO.id ? updatedPO : p));
         setEditingPO(null);
-        showSuccess(`Progress PO #${editingPO.id} (${editingPO.nomor_material}) berhasil diperbarui.`);
+        showSuccess(`Progress PO #${updatedPO.id} (${updatedPO.nomor_material}) berhasil diperbarui.`);
       } else {
-        if (!newPO.nomor_material || !newPO.tanggal_po || !newPO.vendor) {
-          showError('Kode material, tanggal PO, dan vendor wajib diisi.'); return;
+        if (!newPO.nomor_material || !newPO.vendor) {
+          showError('Kode material dan vendor wajib diisi.'); return;
         }
-        const { error } = await addProcurement(newPO as Omit<ProcurementItem, 'id' | 'actual_lead_time' | 'tanggal_penerimaan_barang'>);
+        // Auto status update logic:
+        const finalNewPO = { ...newPO };
+        if (finalNewPO.tanggal_gr && finalNewPO.gr_release_date) {
+          finalNewPO.status = 'Tiba di Gudang';
+        } else {
+          finalNewPO.status = finalNewPO.status || 'Dalam Pengadaan';
+        }
+
+        const { error } = await addProcurement(finalNewPO as Omit<ProcurementItem, 'id' | 'actual_lead_time' | 'tanggal_penerimaan_barang'>);
         if (error) { showError(`Gagal menyimpan: ${error}`); return; }
         await addAuditLog({
-          nomor_material: newPO.nomor_material,
+          nomor_material: finalNewPO.nomor_material,
           parameter_name: 'Tambah PO Baru',
           original_value: null,
-          new_value: `PO: ${newPO.nomor_po}, Vendor: ${newPO.vendor}, Qty: ${newPO.jumlah_dipesan}`,
+          new_value: `PO: ${finalNewPO.nomor_po}, Vendor: ${finalNewPO.vendor}, Qty: ${finalNewPO.jumlah_dipesan}`,
           admin_email: email,
           admin_name: name,
           modul: 'Progress PO & Transit'
@@ -683,7 +744,7 @@ export default function AdminPanelPage() {
         setProcureList(freshData);
         setNewPO(emptyPO());
         setShowAddForm(false);
-        showSuccess(`NOD/PO baru untuk ${newPO.nomor_material} berhasil disimpan.`);
+        showSuccess(`NOD/PO baru untuk ${finalNewPO.nomor_material} berhasil disimpan.`);
       }
     } finally {
       setPOLoading(false);
@@ -952,14 +1013,17 @@ export default function AdminPanelPage() {
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 1 — Nota Dinas (NOD)
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5">
               <Field label="Proposed By">
                 <input value={poData.proposed_by || ''} onChange={e => updatePOField('proposed_by', e.target.value)} className={inputCls} style={inputStyle} placeholder="Unit Perawatan KRL" />
               </Field>
               <Field label="Nomor NOD">
                 <input value={poData.nomor_nod || ''} onChange={e => updatePOField('nomor_nod', e.target.value)} className={inputCls} style={inputStyle} placeholder="NOD-2026-001" />
               </Field>
-              <Field label="Publish NOD Date">
+              <Field label="Plan NOD Date">
+                <input type="date" value={poData.tanggal_nod || ''} onChange={e => updatePOField('tanggal_nod', e.target.value || null)} className={inputCls} style={inputStyle} />
+              </Field>
+              <Field label="Realisasi NOD Date">
                 <input type="date" value={poData.publish_nod || ''} onChange={e => updatePOField('publish_nod', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
               <Field label="RKAP / NON RKAP">
@@ -979,22 +1043,51 @@ export default function AdminPanelPage() {
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 2 — Spesifikasi Teknis &amp; RAB
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-5">
-              <Field label="Spektek Release Date">
-                <input type="date" value={poData.tech_spec_release_date || ''} onChange={e => updatePOField('tech_spec_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Rilis Dokumen Evaluasi ke CTPE">
-                <input type="date" value={poData.rilis_evaluasi_ctpe || ''} onChange={e => updatePOField('rilis_evaluasi_ctpe', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Rilis Dokumen Evaluasi ke CTPP">
-                <input type="date" value={poData.rilis_evaluasi_ctpp || ''} onChange={e => updatePOField('rilis_evaluasi_ctpp', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Rilis RAB ke Logistik">
-                <input type="date" value={poData.rilis_rab_logistik || ''} onChange={e => updatePOField('rilis_rab_logistik', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Review Logistik Status">
-                <input value={poData.review_logistic_status || ''} onChange={e => updatePOField('review_logistic_status', e.target.value)} className={inputCls} style={inputStyle} placeholder="SELESAI / UNDER REVIEW" />
-              </Field>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+              <div className="space-y-2 border-r pr-3 border-gray-700/50">
+                <Field label="Plan Spektek Date">
+                  <input type="date" value={poData.plan_tech_spec_release_date || ''} onChange={e => updatePOField('plan_tech_spec_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+                </Field>
+                <Field label="Realisasi Spektek Date">
+                  <input type="date" value={poData.tech_spec_release_date || ''} onChange={e => updatePOField('tech_spec_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+                </Field>
+              </div>
+
+              <div className="space-y-2 border-r pr-3 border-gray-700/50">
+                <Field label="Plan Evaluasi ke CTPE">
+                  <input type="date" value={poData.plan_rilis_evaluasi_ctpe || ''} onChange={e => updatePOField('plan_rilis_evaluasi_ctpe', e.target.value || null)} className={inputCls} style={inputStyle} />
+                </Field>
+                <Field label="Realisasi Evaluasi ke CTPE">
+                  <input type="date" value={poData.rilis_evaluasi_ctpe || ''} onChange={e => updatePOField('rilis_evaluasi_ctpe', e.target.value || null)} className={inputCls} style={inputStyle} />
+                </Field>
+              </div>
+
+              <div className="space-y-2 border-r pr-3 border-gray-700/50">
+                <Field label="Plan Evaluasi ke CTPP">
+                  <input type="date" value={poData.plan_rilis_evaluasi_ctpp || ''} onChange={e => updatePOField('plan_rilis_evaluasi_ctpp', e.target.value || null)} className={inputCls} style={inputStyle} />
+                </Field>
+                <Field label="Realisasi Evaluasi ke CTPP">
+                  <input type="date" value={poData.rilis_evaluasi_ctpp || ''} onChange={e => updatePOField('rilis_evaluasi_ctpp', e.target.value || null)} className={inputCls} style={inputStyle} />
+                </Field>
+              </div>
+
+              <div className="space-y-2 border-r pr-3 border-gray-700/50">
+                <Field label="Plan RAB ke Logistik">
+                  <input type="date" value={poData.plan_rilis_rab_logistik || ''} onChange={e => updatePOField('plan_rilis_rab_logistik', e.target.value || null)} className={inputCls} style={inputStyle} />
+                </Field>
+                <Field label="Realisasi RAB ke Logistik">
+                  <input type="date" value={poData.rilis_rab_logistik || ''} onChange={e => updatePOField('rilis_rab_logistik', e.target.value || null)} className={inputCls} style={inputStyle} />
+                </Field>
+              </div>
+
+              <div className="space-y-2">
+                <Field label="Plan Review Logistik">
+                  <input type="date" value={poData.plan_review_logistic_status || ''} onChange={e => updatePOField('plan_review_logistic_status', e.target.value || null)} className={inputCls} style={inputStyle} />
+                </Field>
+                <Field label="Realisasi Review Logistik">
+                  <input type="date" value={poData.review_logistic_status || ''} onChange={e => updatePOField('review_logistic_status', e.target.value || null)} className={inputCls} style={inputStyle} placeholder="Tanggal selesai atau teks..." />
+                </Field>
+              </div>
             </div>
           </div>
 
@@ -1003,11 +1096,14 @@ export default function AdminPanelPage() {
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 3 — Purchase Requisitions (PR)
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
               <Field label="PR Number">
-                <input value={poData.pr_number || ''} onChange={e => updatePOField('pr_number', e.target.value)} className={inputCls} style={inputStyle} placeholder="PR-5000xxxxx" />
+                <input value={poData.pr_number || ''} onChange={e => { updatePOField('pr_number', e.target.value); updatePOField('nomor_pr', e.target.value); }} className={inputCls} style={inputStyle} placeholder="PR-5000xxxxx" />
               </Field>
-              <Field label="PR Release Date">
+              <Field label="Plan PR Date">
+                <input type="date" value={poData.tanggal_pr || ''} onChange={e => updatePOField('tanggal_pr', e.target.value || null)} className={inputCls} style={inputStyle} />
+              </Field>
+              <Field label="Realisasi PR Date">
                 <input type="date" value={poData.pr_release_date || ''} onChange={e => updatePOField('pr_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
               <Field label="Approval Date (CEP, CE, C2, CAA)">
@@ -1021,17 +1117,20 @@ export default function AdminPanelPage() {
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 4 — Aanwijzing &amp; Purchase Order (PO)
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
               <Field label="Aanwijzing Date">
                 <input type="date" value={poData.aanwijzing_date || ''} onChange={e => updatePOField('aanwijzing_date', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
               <Field label="Vendor">
-                <input value={poData.vendor_sap || ''} onChange={e => updatePOField('vendor_sap', e.target.value)} className={inputCls} style={inputStyle} placeholder="Nama Vendor" />
+                <input value={poData.vendor_sap || ''} onChange={e => { updatePOField('vendor_sap', e.target.value); updatePOField('vendor', e.target.value); }} className={inputCls} style={inputStyle} placeholder="Nama Vendor" />
               </Field>
               <Field label="PO Number">
-                <input value={poData.po_number || ''} onChange={e => updatePOField('po_number', e.target.value)} className={inputCls} style={inputStyle} placeholder="PO-4500xxxxx" />
+                <input value={poData.po_number || ''} onChange={e => { updatePOField('po_number', e.target.value); updatePOField('nomor_po', e.target.value); }} className={inputCls} style={inputStyle} placeholder="PO-4500xxxxx" />
               </Field>
-              <Field label="PO Release Date">
+              <Field label="Plan PO Date">
+                <input type="date" value={poData.tanggal_po || ''} onChange={e => updatePOField('tanggal_po', e.target.value || null)} className={inputCls} style={inputStyle} />
+              </Field>
+              <Field label="Realisasi PO Date">
                 <input type="date" value={poData.po_release_date || ''} onChange={e => updatePOField('po_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
             </div>
@@ -1042,18 +1141,21 @@ export default function AdminPanelPage() {
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 5 — Goods Receipt &amp; Inspection (GR)
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              <Field label="Goods Inspection Date">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
+              <Field label="Plan Goods Inspection Date">
+                <input type="date" value={poData.plan_goods_inspection_status || ''} onChange={e => updatePOField('plan_goods_inspection_status', e.target.value || null)} className={inputCls} style={inputStyle} />
+              </Field>
+              <Field label="Realisasi Goods Inspection Date">
                 <input type="date" value={poData.goods_inspection_status || ''} onChange={e => updatePOField('goods_inspection_status', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
-              <Field label="Good Receipt Release Date">
+              <Field label="Plan GR Date">
+                <input type="date" value={poData.tanggal_gr || ''} onChange={e => { updatePOField('tanggal_gr', e.target.value || null); updatePOField('tanggal_rencana_pengiriman', e.target.value || ''); }} className={inputCls} style={inputStyle} />
+              </Field>
+              <Field label="Realisasi GR Date">
                 <input type="date" value={poData.gr_release_date || ''} onChange={e => updatePOField('gr_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
               <Field label="Sisa Stok Sebelum GR">
                 <input type="number" value={poData.sisa_stok || 0} onChange={e => updatePOField('sisa_stok', +e.target.value)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Rencana Tiba Fisik (Depo)">
-                <input type="date" value={poData.tanggal_rencana_pengiriman || ''} onChange={e => updatePOField('tanggal_rencana_pengiriman', e.target.value)} className={inputCls} style={inputStyle} />
               </Field>
             </div>
           </div>
@@ -1065,9 +1167,9 @@ export default function AdminPanelPage() {
             </h5>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
               <Field label="Legacy Vendor"><input value={poData.vendor || ''} onChange={e => { updatePOField('vendor', e.target.value); updatePOField('vendor_sap', e.target.value); }} className={inputCls} style={inputStyle} placeholder="Nama vendor legacy" /></Field>
-              <Field label="Legacy Tgl PO"><input type="date" value={poData.tanggal_po || ''} onChange={e => { updatePOField('tanggal_po', e.target.value); updatePOField('po_release_date', e.target.value || null); }} className={inputCls} style={inputStyle} /></Field>
+              <Field label="Legacy Tgl PO"><input type="date" value={poData.tanggal_po || ''} onChange={e => { updatePOField('tanggal_po', e.target.value || null); updatePOField('po_release_date', e.target.value || null); }} className={inputCls} style={inputStyle} /></Field>
               <Field label="Legacy Nomor PO"><input value={poData.nomor_po || ''} onChange={e => { updatePOField('nomor_po', e.target.value); updatePOField('po_number', e.target.value); }} className={inputCls} style={inputStyle} placeholder="PO legacy" /></Field>
-              <Field label="Legacy Tgl GR"><input type="date" value={poData.tanggal_gr || ''} onChange={e => { updatePOField('tanggal_gr', e.target.value || null); updatePOField('gr_release_date', e.target.value || null); }} className={inputCls} style={inputStyle} /></Field>
+              <Field label="Legacy Tgl GR"><input type="date" value={poData.tanggal_gr || ''} onChange={e => { updatePOField('tanggal_gr', e.target.value || null); updatePOField('gr_release_date', e.target.value || null); updatePOField('tanggal_rencana_pengiriman', e.target.value || ''); }} className={inputCls} style={inputStyle} /></Field>
             </div>
           </div>
 
@@ -1078,7 +1180,7 @@ export default function AdminPanelPage() {
             </h5>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
               <Field label="Status Pengadaan">
-                <select value={poData.status || 'PO Diterbitkan'} onChange={e => updatePOField('status', e.target.value as ProcurementStatus)} className={inputCls} style={inputStyle}>
+                <select value={poData.status || 'Dalam Pengadaan'} onChange={e => updatePOField('status', e.target.value as ProcurementStatus)} className={inputCls} style={inputStyle}>
                   {PROCUREMENT_STATUSES.map(s => <option key={s}>{s}</option>)}
                 </select>
               </Field>

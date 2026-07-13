@@ -11,10 +11,11 @@ export type TipePerawatan = 'P1' | 'P3' | 'P6' | 'P12' | 'P24' | 'P48';
 export type PelaksanaanStatus = 'Rencana' | 'Sedang Dirawat' | 'Selesai';
 export type PemenuhStatus = 'Outstanding' | 'Fulfilled';
 export type ProcurementStatus =
-  | 'PO Diterbitkan'
   | 'Dalam Pengadaan'
-  | 'Dikirim Vendor'
-  | 'Dalam Transit'
+  | 'Proses Evaluasi'
+  | 'Proses PR & Approval'
+  | 'Proses PO'
+  | 'Goods Inspection'
   | 'Tiba di Gudang';
 export type RisikoLevel = 'Rendah' | 'Sedang' | 'Tinggi';
 export type AgingKategori = 'Fresh' | 'Slow-Moving' | 'At Risk' | 'Dead Stock' | 'Stock Out';
@@ -114,6 +115,12 @@ export interface ProcurementItem {
   rilis_evaluasi_ctpp?: string | null;
   rilis_rab_logistik?: string | null;
   review_logistic_status?: string | null;
+  plan_tech_spec_release_date?: string | null;
+  plan_rilis_evaluasi_ctpe?: string | null;
+  plan_rilis_evaluasi_ctpp?: string | null;
+  plan_rilis_rab_logistik?: string | null;
+  plan_review_logistic_status?: string | null;
+  plan_goods_inspection_status?: string | null;
   pr_number?: string | null;
   pr_release_date?: string | null;
   approval_sap_status?: string | null;

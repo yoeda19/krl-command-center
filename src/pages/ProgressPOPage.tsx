@@ -7,16 +7,21 @@ import { getProcurementData } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
 import type { ProcurementStatus, RisikoLevel, ProcurementItem } from '../types';
 
-const statusOptions: Array<'Semua' | ProcurementStatus> = ['Semua', 'PO Diterbitkan', 'Dalam Pengadaan', 'Dikirim Vendor', 'Dalam Transit', 'Tiba di Gudang'];
+const statusOptions: Array<'Semua' | ProcurementStatus> = ['Semua', 'Dalam Pengadaan', 'Proses Evaluasi', 'Proses PR & Approval', 'Proses PO', 'Goods Inspection', 'Tiba di Gudang'];
 const risikoOptions: Array<'Semua' | RisikoLevel> = ['Semua', 'Rendah', 'Sedang', 'Tinggi'];
 
-const statusCfg: Record<ProcurementStatus | 'Tiba di Depo', { bg: string; text: string; border: string }> = {
-  'PO Diterbitkan':   { bg: 'rgba(37,99,235,0.12)',  text: '#60a5fa',                  border: 'rgba(59,130,246,0.3)' },
-  'Dalam Pengadaan':  { bg: 'rgba(217,119,6,0.12)',  text: 'var(--color-led-amber)',   border: 'rgba(217,119,6,0.3)' },
-  'Dikirim Vendor':   { bg: 'rgba(107,114,128,0.12)',text: '#9ca3af',                  border: 'rgba(107,114,128,0.3)' },
-  'Dalam Transit':    { bg: 'rgba(16,185,129,0.12)', text: '#10b981',                  border: 'rgba(16,185,129,0.3)' },
-  'Tiba di Gudang':   { bg: 'rgba(22,163,74,0.12)',  text: 'var(--color-led-green)',   border: 'rgba(22,163,74,0.3)' },
-  'Tiba di Depo':     { bg: 'rgba(22,163,74,0.12)',  text: 'var(--color-led-green)',   border: 'rgba(22,163,74,0.3)' },
+const statusCfg: Record<string, { bg: string; text: string; border: string }> = {
+  'Dalam Pengadaan':       { bg: 'rgba(217,119,6,0.12)',  text: 'var(--color-led-amber)',  border: 'rgba(217,119,6,0.3)' },
+  'Proses Evaluasi':       { bg: 'rgba(139,92,246,0.12)', text: '#a78bfa',                  border: 'rgba(139,92,246,0.3)' },
+  'Proses PR & Approval':  { bg: 'rgba(37,99,235,0.12)',  text: '#60a5fa',                  border: 'rgba(59,130,246,0.3)' },
+  'Proses PO':             { bg: 'rgba(6,182,212,0.12)',  text: '#22d3ee',                  border: 'rgba(6,182,212,0.3)' },
+  'Goods Inspection':      { bg: 'rgba(234,179,8,0.12)',  text: '#facc15',                  border: 'rgba(234,179,8,0.3)' },
+  'Tiba di Gudang':        { bg: 'rgba(22,163,74,0.12)',  text: 'var(--color-led-green)',   border: 'rgba(22,163,74,0.3)' },
+  // Legacy fallbacks
+  'PO Diterbitkan':        { bg: 'rgba(37,99,235,0.12)',  text: '#60a5fa',                  border: 'rgba(59,130,246,0.3)' },
+  'Dikirim Vendor':        { bg: 'rgba(107,114,128,0.12)',text: '#9ca3af',                  border: 'rgba(107,114,128,0.3)' },
+  'Dalam Transit':         { bg: 'rgba(16,185,129,0.12)', text: '#10b981',                  border: 'rgba(16,185,129,0.3)' },
+  'Tiba di Depo':          { bg: 'rgba(22,163,74,0.12)',  text: 'var(--color-led-green)',   border: 'rgba(22,163,74,0.3)' },
 };
 
 const riskCfg: Record<RisikoLevel, { bg: string; text: string }> = {
@@ -78,28 +83,28 @@ function PipelineCard({ item, onSelect }: { item: ProcurementItem; onSelect: (it
   const isLelang = costVal >= 500000000;
 
   // Bangun langkah-langkah timeline secara dinamis berdasarkan nilai pengadaan (Lelang vs PL)
-  const steps: { label: string; short: string; num: string | null; date: string | null; active: boolean }[] = [];
+  const steps: { label: string; short: string; num: string | null; planDate: string | null; realDate: string | null; active: boolean }[] = [];
 
   if (isLelang) {
-    steps.push({ label: 'NOD', short: 'NOD', num: item.nomor_nod, date: (item.publish_nod || item.tanggal_nod || null), active: !!(item.publish_nod || item.nomor_nod) });
-    steps.push({ label: 'Spektek', short: 'Spektek', num: null, date: (item.tech_spec_release_date || null), active: !!item.tech_spec_release_date });
-    steps.push({ label: 'CTPE', short: 'CTPE', num: null, date: (item.rilis_evaluasi_ctpe || null), active: !!item.rilis_evaluasi_ctpe });
-    steps.push({ label: 'CTPP', short: 'CTPP', num: null, date: (item.rilis_evaluasi_ctpp || null), active: !!item.rilis_evaluasi_ctpp });
-    steps.push({ label: 'RAB', short: 'RAB', num: null, date: (item.rilis_rab_logistik || null), active: !!item.rilis_rab_logistik });
-    steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), date: (item.pr_release_date || item.tanggal_pr || null), active: !!(item.pr_number || item.nomor_pr) });
-    steps.push({ label: 'Approval', short: 'Approval', num: null, date: (item.approval_sap_status || null), active: !!item.approval_sap_status });
-    steps.push({ label: 'Aanwijzing', short: 'Aanwijzing', num: null, date: (item.aanwijzing_date || null), active: !!item.aanwijzing_date });
-    steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
-    steps.push({ label: 'Goods Inspection', short: 'Inspection', num: null, date: (item.goods_inspection_status || null), active: !!item.goods_inspection_status });
-    steps.push({ label: 'GR', short: 'GR', num: item.nomor_gr, date: (item.gr_release_date || item.tanggal_gr || null), active: !!(item.gr_release_date || item.nomor_gr) });
+    steps.push({ label: 'NOD', short: 'NOD', num: item.nomor_nod, planDate: item.tanggal_nod || null, realDate: item.publish_nod || null, active: !!item.publish_nod });
+    steps.push({ label: 'Spektek', short: 'Spektek', num: null, planDate: null, realDate: item.tech_spec_release_date || null, active: !!item.tech_spec_release_date });
+    steps.push({ label: 'CTPE', short: 'CTPE', num: null, planDate: null, realDate: item.rilis_evaluasi_ctpe || null, active: !!item.rilis_evaluasi_ctpe });
+    steps.push({ label: 'CTPP', short: 'CTPP', num: null, planDate: null, realDate: item.rilis_evaluasi_ctpp || null, active: !!item.rilis_evaluasi_ctpp });
+    steps.push({ label: 'RAB', short: 'RAB', num: null, planDate: null, realDate: item.rilis_rab_logistik || null, active: !!item.rilis_rab_logistik });
+    steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), planDate: item.tanggal_pr || null, realDate: item.pr_release_date || null, active: !!item.pr_release_date });
+    steps.push({ label: 'Approval', short: 'Approval', num: null, planDate: null, realDate: item.approval_sap_status || null, active: !!item.approval_sap_status });
+    steps.push({ label: 'Aanwijzing', short: 'Aanwijzing', num: null, planDate: null, realDate: item.aanwijzing_date || null, active: !!item.aanwijzing_date });
+    steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), planDate: item.tanggal_po || null, realDate: item.po_release_date || null, active: !!item.po_release_date });
+    steps.push({ label: 'Goods Inspection', short: 'Inspection', num: null, planDate: null, realDate: item.goods_inspection_status || null, active: !!item.goods_inspection_status });
+    steps.push({ label: 'GR', short: 'GR', num: item.nomor_gr, planDate: item.tanggal_gr || item.tanggal_rencana_pengiriman || null, realDate: item.gr_release_date || null, active: !!item.gr_release_date });
   } else {
-    steps.push({ label: 'NOD', short: 'NOD', num: item.nomor_nod, date: (item.publish_nod || item.tanggal_nod || null), active: !!(item.publish_nod || item.nomor_nod) });
-    steps.push({ label: 'RAB', short: 'RAB Log', num: null, date: (item.rilis_rab_logistik || null), active: !!item.rilis_rab_logistik });
-    steps.push({ label: 'Review Logistik', short: 'Review Log', num: (item.review_logistic_status || null), date: null, active: !!item.review_logistic_status });
-    steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), date: (item.pr_release_date || item.tanggal_pr || null), active: !!(item.pr_number || item.nomor_pr) });
-    steps.push({ label: 'Approval', short: 'Approval', num: null, date: (item.approval_sap_status || null), active: !!item.approval_sap_status });
-    steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
-    steps.push({ label: 'GR', short: 'GR', num: item.nomor_gr, date: (item.gr_release_date || item.tanggal_gr || null), active: !!(item.gr_release_date || item.nomor_gr) });
+    steps.push({ label: 'NOD', short: 'NOD', num: item.nomor_nod, planDate: item.tanggal_nod || null, realDate: item.publish_nod || null, active: !!item.publish_nod });
+    steps.push({ label: 'RAB', short: 'RAB Log', num: null, planDate: null, realDate: item.rilis_rab_logistik || null, active: !!item.rilis_rab_logistik });
+    steps.push({ label: 'Review Logistik', short: 'Review Log', num: (item.review_logistic_status || null), planDate: null, realDate: null, active: !!item.review_logistic_status });
+    steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), planDate: item.tanggal_pr || null, realDate: item.pr_release_date || null, active: !!item.pr_release_date });
+    steps.push({ label: 'Approval', short: 'Approval', num: null, planDate: null, realDate: item.approval_sap_status || null, active: !!item.approval_sap_status });
+    steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), planDate: item.tanggal_po || null, realDate: item.po_release_date || null, active: !!item.po_release_date });
+    steps.push({ label: 'GR', short: 'GR', num: item.nomor_gr, planDate: item.tanggal_gr || item.tanggal_rencana_pengiriman || null, realDate: item.gr_release_date || null, active: !!item.gr_release_date });
   }
 
   return (
@@ -146,39 +151,55 @@ function PipelineCard({ item, onSelect }: { item: ProcurementItem; onSelect: (it
           {steps.map((step, si) => {
             return (
               <div key={step.label} className="flex items-start flex-1 min-w-0">
-                <div className="flex flex-col items-center flex-shrink-0 relative group" style={{ minWidth: 70 }}>
+                <div className="flex flex-col items-center flex-shrink-0 relative group" style={{ minWidth: 80 }}>
                   {/* Node circle */}
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center border-2 text-[10px] font-black transition-all cursor-pointer"
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center border-2 text-[10px] font-black transition-all cursor-pointer flex-col"
                     style={{
-                      backgroundColor: step.date ? 'var(--color-led-green)' : 'var(--color-surface-container-highest)',
-                      borderColor: step.date ? 'var(--color-led-green)' : 'var(--color-steel-border)',
-                      color: step.date ? '#ffffff' : 'var(--color-on-surface-variant)',
+                      backgroundColor: step.realDate ? 'var(--color-led-green)' : 'transparent',
+                      borderColor: step.realDate 
+                        ? 'var(--color-led-green)' 
+                        : step.planDate 
+                          ? '#eab308' // yellow border if planned but not yet realized
+                          : 'var(--color-steel-border)',
+                      borderStyle: (!step.realDate && step.planDate) ? 'dashed' : 'solid',
+                      color: step.realDate ? '#ffffff' : step.planDate ? '#eab308' : 'var(--color-on-surface-variant)',
                       boxShadow: 'none',
                     }}>
-                    {step.date ? <CheckIcon /> : si + 1}
+                    {step.realDate ? <CheckIcon /> : step.planDate ? 'Plan' : si + 1}
                   </div>
 
                   {/* Custom Styled Tooltip */}
-                  <div className="absolute bottom-12 hidden group-hover:flex flex-col bg-gray-900 border border-gray-800 text-white rounded p-2.5 text-[10px] z-30 shadow-xl pointer-events-none left-1/2 -translate-x-1/2 min-w-[130px]"
+                  <div className="absolute bottom-14 hidden group-hover:flex flex-col bg-gray-900 border border-gray-800 text-white rounded p-2.5 text-[10px] z-30 shadow-xl pointer-events-none left-1/2 -translate-x-1/2 min-w-[145px]"
                     style={{ filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.3))' }}>
                     <div className="font-bold text-gray-300 border-b border-gray-800 pb-1 mb-1">{step.label}</div>
-                    <div className="text-gray-400">Status: <span className={step.date ? 'text-green-400 font-bold' : 'text-gray-400'}>{step.date ? 'Selesai' : 'Belum'}</span></div>
-                    {step.num && <div className="mt-1 font-mono text-[9px] text-blue-400 overflow-hidden text-ellipsis whitespace-nowrap max-w-[120px]" title={step.num}>No: {step.num}</div>}
-                    {step.date && <div className="mt-0.5 text-amber-400">Tgl: {formatTanggal(step.date)}</div>}
+                    <div className="text-gray-400">Status: <span className={step.realDate ? 'text-green-400 font-bold' : step.planDate ? 'text-amber-400 font-bold' : 'text-gray-400'}>{step.realDate ? 'Selesai' : step.planDate ? 'Direncanakan' : 'Belum'}</span></div>
+                    {step.num && <div className="mt-1 font-mono text-[9px] text-blue-400 overflow-hidden text-ellipsis whitespace-nowrap max-w-[130px]" title={step.num}>No: {step.num}</div>}
+                    {step.planDate && <div className="mt-0.5 text-amber-400">Rencana: {formatTanggal(step.planDate)}</div>}
+                    {step.realDate && <div className="mt-0.5 text-green-400">Realisasi: {formatTanggal(step.realDate)}</div>}
                     {/* Small triangle arrow */}
                     <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900 border-r border-b border-gray-800 rotate-45"></div>
                   </div>
 
                   {/* Step label */}
                   <span className="text-[9px] mt-1.5 text-center font-bold leading-tight"
-                    style={{ color: step.date ? 'var(--color-on-surface)' : 'var(--color-on-surface-variant)', maxWidth: 68 }}>
+                    style={{ color: step.realDate ? 'var(--color-on-surface)' : 'var(--color-on-surface-variant)', maxWidth: 78 }}>
                     {step.short}
                   </span>
+
+                  {/* Plan/Realisasi Dates Under Node */}
+                  <div className="flex flex-col items-center mt-1">
+                    {step.planDate && (
+                      <span className="text-[8px] opacity-75 text-amber-500 font-mono mt-0.5">P: {formatTanggal(step.planDate)}</span>
+                    )}
+                    {step.realDate && (
+                      <span className="text-[8px] text-green-500 font-bold font-mono mt-0.5">R: {formatTanggal(step.realDate)}</span>
+                    )}
+                  </div>
                 </div>
                 {/* Connector */}
                 {si < steps.length - 1 && (
                   <div className="flex-1 h-0.5 mt-4 mx-0.5"
-                    style={{ backgroundColor: (step.date && steps[si + 1]?.date) ? 'var(--color-led-green)' : 'var(--color-steel-border)' }} />
+                    style={{ backgroundColor: (step.realDate && steps[si + 1]?.realDate) ? 'var(--color-led-green)' : 'var(--color-steel-border)' }} />
                 )}
               </div>
             );
@@ -294,18 +315,18 @@ export default function ProgressPOPage() {
       <div className="h-4" />
 
       {/* Status Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5">
         {statusOptions.slice(1).map(s => {
           const count = procureList.filter(d => d.status === s).length;
-          const cfg = statusCfg[s as ProcurementStatus];
+          const cfg = statusCfg[s as ProcurementStatus] || { bg: 'rgba(107,114,128,0.12)', text: '#9ca3af', border: 'rgba(107,114,128,0.3)' };
           const active = filterStatus === s;
           return (
             <div key={s}
-              className="tactile-card rounded-lg p-4 text-center cursor-pointer transition-all hover:scale-105 active:scale-100"
+              className="tactile-card rounded-lg p-2.5 text-center cursor-pointer transition-all hover:scale-105 active:scale-100"
               style={active ? { backgroundColor: cfg.bg, borderColor: cfg.border } : undefined}
               onClick={() => setFilterStatus(prev => prev === s ? 'Semua' : s as ProcurementStatus)}>
-              <p className="text-3xl font-black" style={{ color: cfg.text }}>{count}</p>
-              <p className="text-[9px] font-black tracking-widest uppercase mt-1" style={{ color: cfg.text }}>{s}</p>
+              <p className="text-2xl font-black" style={{ color: cfg.text }}>{count}</p>
+              <p className="text-[8px] font-black tracking-wider uppercase mt-1 leading-tight" style={{ color: cfg.text }}>{s}</p>
             </div>
           );
         })}
@@ -373,21 +394,33 @@ export default function ProgressPOPage() {
               <thead>
                 <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
                   {[
-                    'NO', 'NOD', 'Progress', 'Proposed by', 'NOD Number', 'Publish NOD',
-                    'RKAP/NON RKAP', 'Link Doc NOD', 'Category', 'Spektek Release',
-                    'Evaluasi CTPE', 'Evaluasi CTPP', 'RAB ke Logistik', 'Review Logistic',
-                    'PR Number', 'PR Release Date', 'Approval',
-                    'Aanwijzing', 'Vendor', 'PO Number', 'PO Release Date',
-                    'Goods Inspection', 'GR Release Date', 'Duration', 'Status', 'Cost'
-                  ].map(h => (
-                    <th key={h} className="px-3 py-3 text-[10px] font-black tracking-widest uppercase whitespace-nowrap text-center first:text-left last:text-right"
-                      style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
-                  ))}
+                    'NO', 'NOD Status', 'Progress', 'Proposed by', 'NOD Number', 'Plan NOD', 'Realisasi NOD',
+                    'RKAP/NON RKAP', 'Link Doc NOD', 'Category', 
+                    'Plan Spektek', 'Realisasi Spektek',
+                    'Plan CTPE', 'Realisasi CTPE',
+                    'Plan CTPP', 'Realisasi CTPP',
+                    'Plan RAB', 'Realisasi RAB',
+                    'Plan Review Log', 'Realisasi Review Log',
+                    'PR Number', 'Plan PR', 'Realisasi PR', 'Approval',
+                    'Aanwijzing', 'Vendor', 'PO Number', 'Plan PO', 'Realisasi PO',
+                    'Plan GI', 'Realisasi GI', 'Plan GR', 'Realisasi GR', 'Duration', 'Status', 'Cost'
+                  ].map(h => {
+                    let textColor = 'var(--color-on-primary-container)';
+                    if (h.toLowerCase().includes('plan')) {
+                      textColor = '#3b82f6'; // Biru untuk Plan
+                    } else if (h.toLowerCase().includes('realisasi')) {
+                      textColor = '#f97316'; // Orange untuk Realisasi
+                    }
+                    return (
+                      <th key={h} className="px-3 py-3 text-[10px] font-black tracking-widest uppercase whitespace-nowrap text-center first:text-left last:text-right"
+                        style={{ color: textColor }}>{h}</th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((row, i) => {
-                  const cfg = statusCfg[row.status];
+                  const cfg = statusCfg[row.status] || { bg: 'rgba(107,114,128,0.12)', text: '#9ca3af', border: 'rgba(107,114,128,0.3)' };
                   return (
                     <tr key={row.id} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
                       {/* 1. NO */}
@@ -432,7 +465,12 @@ export default function ProgressPOPage() {
                         {row.nomor_nod || '—'}
                       </td>
                       
-                      {/* 6. Publish NOD */}
+                      {/* 6. Plan NOD */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.tanggal_nod ? formatTanggal(row.tanggal_nod) : '—'}
+                      </td>
+
+                      {/* 7. Realisasi NOD */}
                       <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
                         {row.publish_nod ? formatTanggal(row.publish_nod) : '—'}
                       </td>
@@ -459,31 +497,52 @@ export default function ProgressPOPage() {
                       {/* 9. Category */}
                       <td className="px-3 py-3 text-xs text-center">{row.category || 'Suku Cadang'}</td>
                       
-                      {/* 10. Technical Specification Release Date (Spektek) */}
+                      {/* 10. Spektek (Plan vs Realisasi) */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.plan_tech_spec_release_date ? formatTanggal(row.plan_tech_spec_release_date) : '—'}
+                      </td>
                       <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
                         {row.tech_spec_release_date ? formatTanggal(row.tech_spec_release_date) : '—'}
                       </td>
                       
-                      {/* 11. Rilis Dokumen Evaluasi Ke CTPE */}
+                      {/* 11. Evaluasi CTPE (Plan vs Realisasi) */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.plan_rilis_evaluasi_ctpe ? formatTanggal(row.plan_rilis_evaluasi_ctpe) : '—'}
+                      </td>
                       <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
                         {row.rilis_evaluasi_ctpe ? formatTanggal(row.rilis_evaluasi_ctpe) : '—'}
                       </td>
                       
-                      {/* 12. Rilis Dokumen Evaluasi Ke CTPP */}
+                      {/* 12. Evaluasi CTPP (Plan vs Realisasi) */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.plan_rilis_evaluasi_ctpp ? formatTanggal(row.plan_rilis_evaluasi_ctpp) : '—'}
+                      </td>
                       <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
                         {row.rilis_evaluasi_ctpp ? formatTanggal(row.rilis_evaluasi_ctpp) : '—'}
                       </td>
                       
-                      {/* 13. Rilis RAB Ke Logistik */}
+                      {/* 13. Rilis RAB Ke Logistik (Plan vs Realisasi) */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.plan_rilis_rab_logistik ? formatTanggal(row.plan_rilis_rab_logistik) : '—'}
+                      </td>
                       <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
                         {row.rilis_rab_logistik ? formatTanggal(row.rilis_rab_logistik) : '—'}
                       </td>
                       
-                      {/* 14. REVIEW LOGISTIC/IF Under 500 JT RP */}
-                      <td className="px-3 py-3 text-xs text-center">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-gray-800 text-gray-300">
-                          {row.review_logistic_status || 'SELESAI'}
-                        </span>
+                      {/* 14. REVIEW LOGISTIC (Plan vs Realisasi) */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.plan_review_logistic_status
+                          ? (row.plan_review_logistic_status.match(/\d{4}-\d{2}-\d{2}/)
+                              ? formatTanggal(row.plan_review_logistic_status)
+                              : row.plan_review_logistic_status)
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.review_logistic_status
+                          ? (row.review_logistic_status.match(/\d{4}-\d{2}-\d{2}/)
+                              ? formatTanggal(row.review_logistic_status)
+                              : row.review_logistic_status)
+                          : '—'}
                       </td>
                       
                       {/* 14. Purchase Requisitions Number (SAP) */}
@@ -491,9 +550,14 @@ export default function ProgressPOPage() {
                         {row.pr_number || row.nomor_pr || '—'}
                       </td>
                       
-                      {/* 15. Purchase Requisitions Release Date (SAP) */}
+                      {/* Plan PR */}
                       <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
-                        {row.pr_release_date || row.tanggal_pr ? formatTanggal(row.pr_release_date || row.tanggal_pr!) : '—'}
+                        {row.tanggal_pr ? formatTanggal(row.tanggal_pr) : '—'}
+                      </td>
+
+                      {/* Realisasi PR */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.pr_release_date ? formatTanggal(row.pr_release_date) : '—'}
                       </td>
                       
                       {/* 16. APPROVAL CEP, CE, C2, CAA (SAP) */}
@@ -516,21 +580,34 @@ export default function ProgressPOPage() {
                         {row.po_number || row.nomor_po || '—'}
                       </td>
                       
-                      {/* 20. Purchase Order Release date (SAP) */}
+                      {/* Plan PO */}
                       <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
-                        {row.po_release_date || row.tanggal_po ? formatTanggal(row.po_release_date || row.tanggal_po) : '—'}
+                        {row.tanggal_po ? formatTanggal(row.tanggal_po) : '—'}
+                      </td>
+
+                      {/* Realisasi PO */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.po_release_date ? formatTanggal(row.po_release_date) : '—'}
                       </td>
                       
-                      {/* 21. Goods Inspection (Pengujian) */}
-                      <td className="px-3 py-3 text-xs text-center">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400">
-                          {row.goods_inspection_status || 'LULUS UJI'}
-                        </span>
+                      {/* Plan GI */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.plan_goods_inspection_status ? formatTanggal(row.plan_goods_inspection_status) : '—'}
+                      </td>
+
+                      {/* Realisasi GI */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.goods_inspection_status ? formatTanggal(row.goods_inspection_status) : '—'}
                       </td>
                       
-                      {/* 22. Good Receipt Release Date (SAP) */}
+                      {/* Plan GR */}
                       <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
-                        {row.gr_release_date || row.tanggal_gr ? formatTanggal(row.gr_release_date || row.tanggal_gr!) : '—'}
+                        {row.tanggal_gr || row.tanggal_rencana_pengiriman ? formatTanggal(row.tanggal_gr || row.tanggal_rencana_pengiriman) : '—'}
+                      </td>
+
+                      {/* Realisasi GR */}
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        {row.gr_release_date ? formatTanggal(row.gr_release_date) : '—'}
                       </td>
                       
                       {/* 23. DURATION */}
@@ -649,6 +726,39 @@ export default function ProgressPOPage() {
           return runningTotal;
         });
 
+        // Plan cumulative: map plan dates relative to plan NOD start (fallback ke publish_nod)
+        const planStartDate = selectedPO.tanggal_nod
+          ? new Date(selectedPO.tanggal_nod)
+          : selectedPO.publish_nod
+            ? new Date(selectedPO.publish_nod)
+            : null;
+        const getPlanDays = (dateStr: string | null): number | null => {
+          if (!planStartDate || !dateStr) return null;
+          return Math.max(0, Math.round((new Date(dateStr).getTime() - planStartDate.getTime()) / 86400000));
+        };
+
+        // Build plan cumulative mapped to the same gap x-axis positions
+        // For each gap step "A → B", the plan point is at the plan date of B
+        const getPlanMilestoneDate = (label: string): string | null => {
+          switch (label) {
+            case 'NOD': return selectedPO.tanggal_nod || null;
+            case 'Spektek': return selectedPO.tech_spec_release_date || null;
+            case 'CTPE': return selectedPO.rilis_evaluasi_ctpe || null;
+            case 'CTPP': return selectedPO.rilis_evaluasi_ctpp || null;
+            case 'RAB': return selectedPO.rilis_rab_logistik || null;
+            case 'PR': return selectedPO.tanggal_pr || null;
+            case 'Approval': return selectedPO.approval_sap_status || null;
+            case 'Aanwijzing': return selectedPO.aanwijzing_date || null;
+            case 'PO': return selectedPO.tanggal_po || null;
+            case 'Goods Inspection': return selectedPO.goods_inspection_status || null;
+            case 'GR': return selectedPO.tanggal_gr || selectedPO.tanggal_rencana_pengiriman || null;
+            default: return null;
+          }
+        };
+
+        // Plan cumulative per gap end point
+        const planCumulativeLine = gaps.map(g => getPlanDays(getPlanMilestoneDate(g.to === 'Berjalan' ? g.from : g.to)));
+
         const chartOption = {
           backgroundColor: 'transparent',
           animation: true,
@@ -672,24 +782,16 @@ export default function ProgressPOPage() {
               const parts = label.split(' → ');
               const fromLabel = parts[0];
               const toLabel = parts[1];
-
               const fromDate = getMilestoneDate(fromLabel);
               const toDate = toLabel === 'Berjalan' ? new Date().toISOString() : getMilestoneDate(toLabel);
-
-              const fromDateFormatted = fromDate ? formatTanggal(fromDate) : '—';
-              const toDateFormatted = toDate ? formatTanggal(toDate) : '—';
-
-              const headerText = `${fromLabel} (${fromDateFormatted}) → ${toLabel} (${toDateFormatted})`;
-
+              const headerText = `${fromLabel} (${fromDate ? formatTanggal(fromDate) : '—'}) → ${toLabel} (${toDate ? formatTanggal(toDate) : '—'})`;
               const rows = params
                 .filter((p: any) => p.value !== null && p.value !== undefined)
                 .map((p: any) => {
-                  const val = typeof p.value === 'number'
-                    ? p.value.toLocaleString('id-ID') + ' Hari'
-                    : '—';
+                  const val = typeof p.value === 'number' ? p.value.toLocaleString('id-ID') + ' Hari' : '—';
                   const dot = `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${p.color};margin-right:8px;flex-shrink:0;box-shadow:0 0 0 2px rgba(255,255,255,0.3)"></span>`;
-                  const sName = p.seriesName === 'Durasi Jeda' ? 'Durasi Jeda' : 'Total Akumulatif';
-                  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:18px;padding:3px 0">${dot}<span style="color:${ct.tooltipSub};font-size:11px">${sName}</span><b style="color:${ct.tooltipText};font-size:12px;font-variant-numeric:tabular-nums">${val}</b></div>`;
+                  const nameMap: Record<string, string> = { 'Durasi Realisasi': 'Durasi Realisasi', 'Rencana (Kumulatif)': 'Rencana (Kumulatif)', 'Realisasi (Kumulatif)': 'Realisasi (Kumulatif)' };
+                  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:18px;padding:3px 0">${dot}<span style="color:${ct.tooltipSub};font-size:11px">${nameMap[p.seriesName] || p.seriesName}</span><b style="color:${ct.tooltipText};font-size:12px;font-variant-numeric:tabular-nums">${val}</b></div>`;
                 }).join('');
               return `<div style="font-size:10px;font-weight:800;color:${ct.tooltipSub};margin-bottom:8px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid ${ct.tooltipBorder};padding-bottom:6px">${headerText}</div>${rows}`;
             },
@@ -702,12 +804,12 @@ export default function ProgressPOPage() {
             containLabel: true
           },
           legend: {
-            data: ['Durasi Jeda', 'Total Akumulatif'],
+            data: ['Durasi Realisasi', 'Rencana (Kumulatif)', 'Realisasi (Kumulatif)'],
             itemWidth: 32,
             itemHeight: 6,
-            itemGap: 32,
+            itemGap: 24,
             icon: 'roundRect',
-            textStyle: { color: ct.legendText, fontSize: 13, fontWeight: '700', fontFamily: 'inherit' },
+            textStyle: { color: ct.legendText, fontSize: 12, fontWeight: '700', fontFamily: 'inherit' },
             inactiveColor: isDark ? '#334155' : '#d1d5db',
             top: '0%'
           },
@@ -733,25 +835,17 @@ export default function ProgressPOPage() {
               name: 'Jeda (Hari)',
               nameLocation: 'end',
               nameTextStyle: { color: ct.axisLabel, fontSize: 9, fontWeight: '700', fontFamily: 'inherit', padding: [0, 16, 4, 0] },
-              axisLabel: {
-                color: ct.axisLabel,
-                fontSize: 10,
-                fontFamily: 'inherit',
-              },
+              axisLabel: { color: ct.axisLabel, fontSize: 10, fontFamily: 'inherit' },
               axisLine: { show: false },
               axisTick: { show: false },
               splitLine: { lineStyle: { color: ct.gridLine, type: 'dashed', width: 1 } }
             },
             {
               type: 'value',
-              name: 'Akumulatif (Hari)',
+              name: 'Kumulatif (Hari)',
               nameLocation: 'end',
               nameTextStyle: { color: ct.axisLabel, fontSize: 9, fontWeight: '700', fontFamily: 'inherit', padding: [0, 0, 4, 16] },
-              axisLabel: {
-                color: ct.axisLabel,
-                fontSize: 10,
-                fontFamily: 'inherit',
-              },
+              axisLabel: { color: ct.axisLabel, fontSize: 10, fontFamily: 'inherit' },
               axisLine: { show: false },
               axisTick: { show: false },
               splitLine: { show: false }
@@ -759,7 +853,7 @@ export default function ProgressPOPage() {
           ],
           series: [
             {
-              name: 'Durasi Jeda',
+              name: 'Durasi Realisasi',
               type: 'bar',
               barWidth: '24%',
               yAxisIndex: 0,
@@ -767,7 +861,7 @@ export default function ProgressPOPage() {
               label: {
                 show: true,
                 position: 'top',
-                formatter: '{c} Hari',
+                formatter: '{c} H',
                 color: ct.axisLabel,
                 fontSize: 9,
                 fontWeight: '700',
@@ -775,30 +869,28 @@ export default function ProgressPOPage() {
               },
               itemStyle: {
                 color: (params: any) => {
-                  if (maxGap && params.value === maxGap.days) {
-                    return {
-                      type: 'linear',
-                      x: 0, y: 0, x2: 0, y2: 1,
-                      colorStops: [
-                        { offset: 0, color: '#ef4444' },
-                        { offset: 1, color: '#b91c1c' }
-                      ]
-                    };
+                  if (maxGap && params.value === maxGap.days && params.value > 0) {
+                    return { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#ef4444' }, { offset: 1, color: '#b91c1c' }] };
                   }
-                  return {
-                    type: 'linear',
-                    x: 0, y: 0, x2: 0, y2: 1,
-                    colorStops: [
-                      { offset: 0, color: '#3b82f6' },
-                      { offset: 1, color: '#1d4ed8' }
-                    ]
-                  };
+                  return { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#3b82f6' }, { offset: 1, color: '#1d4ed8' }] };
                 },
                 borderRadius: [3, 3, 0, 0]
               }
             },
             {
-              name: 'Total Akumulatif',
+              name: 'Rencana (Kumulatif)',
+              type: 'line',
+              yAxisIndex: 1,
+              smooth: true,
+              showSymbol: true,
+              symbol: 'circle',
+              symbolSize: 8,
+              data: planCumulativeLine,
+              lineStyle: { color: '#eab308', width: 2.5, type: 'dashed', shadowColor: 'rgba(234,179,8,0.3)', shadowBlur: 4 },
+              itemStyle: { color: '#eab308', borderColor: '#ffffff', borderWidth: 1.5 }
+            },
+            {
+              name: 'Realisasi (Kumulatif)',
               type: 'line',
               yAxisIndex: 1,
               smooth: true,
@@ -806,18 +898,8 @@ export default function ProgressPOPage() {
               symbol: 'circle',
               symbolSize: 8,
               data: accumulativeDays,
-              lineStyle: {
-                color: '#eab308',
-                width: 2.5,
-                shadowColor: 'rgba(234, 179, 8, 0.3)',
-                shadowBlur: 4,
-                shadowOffsetY: 2
-              },
-              itemStyle: {
-                color: '#eab308',
-                borderColor: '#ffffff',
-                borderWidth: 1.5
-              }
+              lineStyle: { color: '#10b981', width: 2.5, shadowColor: 'rgba(16,185,129,0.3)', shadowBlur: 4 },
+              itemStyle: { color: '#10b981', borderColor: '#ffffff', borderWidth: 1.5 }
             }
           ]
         };
@@ -861,25 +943,55 @@ export default function ProgressPOPage() {
               {/* Modal Body */}
               <div className="p-6 flex-1 overflow-y-auto flex flex-col gap-6">
                 {/* Stats row */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="p-5 rounded-xl border flex flex-col justify-center shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Total Hari Proses</span>
-                    <span className="text-3xl font-black text-blue-500">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-3 rounded-lg border flex flex-col justify-center shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Total Hari Proses</span>
+                    <span className="text-xl font-black text-blue-500">
                       {totalDays} Hari
                     </span>
-                    <span className="text-[10px] text-slate-500 mt-1.5">
+                    <span className="text-[10px] text-slate-500 mt-1">
                       NOD: {formatTanggal(selectedPO.publish_nod || selectedPO.tanggal_nod) || '—'} s/d {selectedPO.gr_release_date || selectedPO.tanggal_gr ? `GR: ${formatTanggal(selectedPO.gr_release_date || selectedPO.tanggal_gr!)}` : 'Berjalan (Hari ini)'}
                     </span>
                   </div>
 
-                  <div className="p-5 rounded-xl border flex flex-col justify-center shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Jeda Terlama (Bottleneck)</span>
-                    <span className="text-3xl font-black text-red-500">
+                  <div className="p-3 rounded-lg border flex flex-col justify-center shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Jeda Terlama (Bottleneck)</span>
+                    <span className="text-xl font-black text-red-500">
                       {maxGap ? `${maxGap.days} Hari` : '—'}
                     </span>
-                    <span className="text-[10px] text-slate-500 mt-1.5">
+                    <span className="text-[10px] text-slate-500 mt-1">
                       {maxGap ? `Proses: ${maxGap.step}` : 'Tidak ada data jeda'}
                     </span>
+                  </div>
+
+                  <div className="p-3 rounded-lg border flex flex-col justify-center shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-0.5">Perbandingan GR (Rencana vs Realisasi)</span>
+                    <div className="flex flex-col gap-1 mt-1">
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-slate-400">Rencana GR:</span>
+                        <span className="font-bold text-slate-200">{selectedPO.tanggal_rencana_pengiriman ? formatTanggal(selectedPO.tanggal_rencana_pengiriman) : '—'}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-slate-400">Realisasi GR:</span>
+                        <span className="font-bold text-slate-200">{(selectedPO.gr_release_date || selectedPO.tanggal_gr) ? formatTanggal(selectedPO.gr_release_date || selectedPO.tanggal_gr) : '—'}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] border-t pt-1 mt-1 border-slate-700">
+                        <span className="text-slate-400">Status Kedatangan:</span>
+                        {(() => {
+                          if (!selectedPO.tanggal_rencana_pengiriman) return <span className="font-bold text-gray-400">Belum Ada Rencana</span>;
+                          const grDate = selectedPO.gr_release_date || selectedPO.tanggal_gr;
+                          if (!grDate) return <span className="font-bold text-yellow-500">Dalam Proses</span>;
+                          
+                          const plan = new Date(selectedPO.tanggal_rencana_pengiriman);
+                          const real = new Date(grDate);
+                          const diffTime = real.getTime() - plan.getTime();
+                          const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+                          
+                          if (diffDays <= 0) return <span className="font-bold text-green-500">Tepat Waktu / Lebih Cepat</span>;
+                          return <span className="font-bold text-red-500">Terlambat {diffDays} Hari</span>;
+                        })()}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

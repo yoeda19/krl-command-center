@@ -1196,7 +1196,7 @@ export default function CriticalStockPage() {
                               show: true,
                               position: 'inside',
                               formatter: [
-                                `{title|PO MASUK}`,
+                                `{title|RENCANA GR}`,
                                 `{date|${poLabel}}`,
                               ].join('\n'),
                               rich: {
