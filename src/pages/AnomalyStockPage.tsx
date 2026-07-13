@@ -471,19 +471,68 @@ export default function AnomalyStockPage() {
       return d.getFullYear() === m.year && (d.getMonth() + 1) === m.month;
     }) || [];
     
-    // 2. Fetch order descriptions from orders table
+    // 2. Fetch order descriptions and equipment relations from orders table
     const uniqueOrderNos = Array.from(new Set(hist.map(h => h.order_no).filter(Boolean))) as string[];
     
-    const ordersMap = new Map<string, string>();
+    const ordersMap = new Map<string, { description: string; seri?: string; propulsi?: string }>();
     if (uniqueOrderNos.length > 0) {
       try {
         const { data, error } = await supabase
           .from('orders')
-          .select('order_no, description')
+          .select(`
+            order_no, 
+            description,
+            equipment_id,
+            equipment_master (
+              id,
+              name,
+              level,
+              model_no,
+              parent_id,
+              parent:equipment_master!parent_id (
+                id,
+                name,
+                model_no
+              )
+            )
+          ` as any)
           .in('order_no', uniqueOrderNos);
         if (data && !error) {
           data.forEach((o: any) => {
-            ordersMap.set(o.order_no, o.description || '');
+            let eqName = '';
+            let modelNo = '';
+            const eq = o.equipment_master;
+            if (eq) {
+              if (eq.level === 2 && eq.parent) {
+                eqName = eq.parent.name || '';
+                modelNo = eq.parent.model_no || '';
+              } else {
+                eqName = eq.name || '';
+                modelNo = eq.model_no || '';
+              }
+            }
+
+            // Resolve series from rangkaian name
+            let resolvedSeri = '';
+            const upperName = eqName.toUpperCase();
+            if (upperName.includes('205') || upperName.includes('JR')) resolvedSeri = 'JR205';
+            else if (upperName.includes('125') || upperName.includes('CLI125')) resolvedSeri = 'CLI125';
+            else if (upperName.includes('225') || upperName.includes('CLI225')) resolvedSeri = 'CLI225';
+            else if (upperName.includes('METRO')) resolvedSeri = 'Metro';
+            else if (upperName.includes('KFW')) resolvedSeri = 'KFW';
+            else if (upperName.includes('EA')) resolvedSeri = 'EA203';
+
+            // Resolve propulsion
+            let resolvedPropulsi = '';
+            const upperModel = modelNo.toUpperCase();
+            if (upperModel.includes('VVVF')) resolvedPropulsi = 'VVVF';
+            else if (upperModel.includes('RHEOSTATIC') || upperModel.includes('RHEO')) resolvedPropulsi = 'Rheostatic';
+
+            ordersMap.set(o.order_no, {
+              description: o.description || '',
+              seri: resolvedSeri || undefined,
+              propulsi: resolvedPropulsi || undefined
+            });
           });
         }
       } catch (err) {
@@ -504,7 +553,10 @@ export default function AnomalyStockPage() {
         'C013': 'Gudang Pusat (C013)',
       };
       
-      const description = h.order_no ? (ordersMap.get(h.order_no) || `Pemeliharaan ${referenceItem.nama_material}`) : '—';
+      const orderInfo = h.order_no ? ordersMap.get(h.order_no) : null;
+      const description = orderInfo?.description || (h.order_no ? `Pemeliharaan ${referenceItem.nama_material}` : '—');
+      const resolvedSeri = orderInfo?.seri;
+      const resolvedPropulsi = orderInfo?.propulsi;
       
       // Determine status from BOM configuration
       let status: 'AMAN' | 'ANOMALI' = 'AMAN';
@@ -525,10 +577,47 @@ export default function AnomalyStockPage() {
 
       let activeBom = null;
       if (detectedType) {
-        activeBom = materialBoms.find(b => b.tipe_perawatan.toUpperCase() === detectedType);
+        // Filter by tipe_perawatan first
+        const typeBoms = materialBoms.filter(b => b.tipe_perawatan.toUpperCase() === detectedType);
+        
+        if (typeBoms.length > 0) {
+          // 1. Try matching both resolvedSeri and resolvedPropulsi
+          if (resolvedSeri && resolvedPropulsi) {
+            activeBom = typeBoms.find(b => 
+              b.compat_seri_kereta?.split(',').map(s => s.trim()).includes(resolvedSeri) &&
+              b.compat_propulsi?.split(',').map(p => p.trim()).includes(resolvedPropulsi)
+            );
+          }
+          // 2. Try matching resolvedSeri only
+          if (!activeBom && resolvedSeri) {
+            activeBom = typeBoms.find(b => 
+              b.compat_seri_kereta?.split(',').map(s => s.trim()).includes(resolvedSeri)
+            );
+          }
+          // 3. Try matching resolvedPropulsi only
+          if (!activeBom && resolvedPropulsi) {
+            activeBom = typeBoms.find(b => 
+              b.compat_propulsi?.split(',').map(p => p.trim()).includes(resolvedPropulsi)
+            );
+          }
+          // 4. Fallback to universal/default rule (no compatibility restrictions)
+          if (!activeBom) {
+            activeBom = typeBoms.find(b => !b.compat_seri_kereta && !b.compat_propulsi);
+          }
+          // 5. Fallback to the first one available
+          if (!activeBom) {
+            activeBom = typeBoms[0];
+          }
+        }
       }
+      
       if (!activeBom && materialBoms.length > 0) {
-        activeBom = materialBoms[0];
+        if (resolvedSeri) {
+          activeBom = materialBoms.find(b => b.compat_seri_kereta?.split(',').map(s => s.trim()).includes(resolvedSeri));
+        }
+        if (!activeBom) {
+          activeBom = materialBoms[0];
+        }
       }
 
       if (detectedCarType) {

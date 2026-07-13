@@ -45,7 +45,7 @@ const exportCols = [
   { key: 'pr_release_date',         header: 'Purchase Requisitions Release Date' },
   { key: 'approval_sap_status',     header: 'APPROVAL CEP, CE, C2, CAA' },
   { key: 'aanwijzing_date',         header: 'AANWIJZING' },
-  { key: 'vendor_sap',              header: 'VENDOR (SAP)' },
+  { key: 'vendor_sap',              header: 'VENDOR' },
   { key: 'po_number',               header: 'Purchase Order Number' },
   { key: 'po_release_date',         header: 'Purchase Order Release date' },
   { key: 'goods_inspection_status', header: 'Goods Inspection' },
@@ -83,20 +83,20 @@ function PipelineCard({ item }: { item: ProcurementItem }) {
     steps.push({ label: 'Spektek', short: 'Spektek', num: null, date: (item.tech_spec_release_date || null), active: !!item.tech_spec_release_date });
     steps.push({ label: 'CTPP', short: 'CTPP', num: null, date: (item.rilis_evaluasi_ctpp || null), active: !!item.rilis_evaluasi_ctpp });
     steps.push({ label: 'RAB', short: 'RAB', num: null, date: (item.rilis_rab_logistik || null), active: !!item.rilis_rab_logistik });
-    steps.push({ label: 'PR SAP', short: 'PR SAP', num: (item.pr_number || item.nomor_pr || null), date: (item.pr_release_date || item.tanggal_pr || null), active: !!(item.pr_number || item.nomor_pr) });
+    steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), date: (item.pr_release_date || item.tanggal_pr || null), active: !!(item.pr_number || item.nomor_pr) });
     steps.push({ label: 'Approval', short: 'Approval', num: (item.approval_sap_status || null), date: null, active: !!item.approval_sap_status });
     steps.push({ label: 'Aanwijzing', short: 'Aanwijzing', num: null, date: (item.aanwijzing_date || null), active: !!item.aanwijzing_date });
-    steps.push({ label: 'PO SAP', short: 'PO SAP', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
+    steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
     steps.push({ label: 'Goods Inspection', short: 'Inspection', num: (item.goods_inspection_status || null), date: null, active: !!item.goods_inspection_status });
-    steps.push({ label: 'GR SAP', short: 'GR SAP', num: item.nomor_gr, date: (item.gr_release_date || item.tanggal_gr || null), active: !!(item.gr_release_date || item.nomor_gr) });
+    steps.push({ label: 'GR', short: 'GR', num: item.nomor_gr, date: (item.gr_release_date || item.tanggal_gr || null), active: !!(item.gr_release_date || item.nomor_gr) });
   } else {
     steps.push({ label: 'NOD', short: 'NOD', num: item.nomor_nod, date: (item.publish_nod || item.tanggal_nod || null), active: !!(item.publish_nod || item.nomor_nod) });
     steps.push({ label: 'RAB', short: 'RAB Log', num: null, date: (item.rilis_rab_logistik || null), active: !!item.rilis_rab_logistik });
     steps.push({ label: 'Review Logistik', short: 'Review Log', num: (item.review_logistic_status || null), date: null, active: !!item.review_logistic_status });
-    steps.push({ label: 'PR SAP', short: 'PR SAP', num: (item.pr_number || item.nomor_pr || null), date: (item.pr_release_date || item.tanggal_pr || null), active: !!(item.pr_number || item.nomor_pr) });
+    steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), date: (item.pr_release_date || item.tanggal_pr || null), active: !!(item.pr_number || item.nomor_pr) });
     steps.push({ label: 'Approval', short: 'Approval', num: (item.approval_sap_status || null), date: null, active: !!item.approval_sap_status });
-    steps.push({ label: 'PO SAP', short: 'PO SAP', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
-    steps.push({ label: 'GR SAP', short: 'GR SAP', num: item.nomor_gr, date: (item.gr_release_date || item.tanggal_gr || null), active: !!(item.gr_release_date || item.nomor_gr) });
+    steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), date: (item.po_release_date || item.tanggal_po || null), active: !!(item.po_number || item.nomor_po) });
+    steps.push({ label: 'GR', short: 'GR', num: item.nomor_gr, date: (item.gr_release_date || item.tanggal_gr || null), active: !!(item.gr_release_date || item.nomor_gr) });
   }
 
   return (
@@ -342,9 +342,9 @@ export default function ProgressPOPage() {
                     'NO', 'NOD', 'Progress', 'Proposed by', 'NOD Number', 'Publish NOD',
                     'RKAP/NON RKAP', 'Link Doc NOD', 'Category', 'Spektek Release',
                     'Evaluasi CTPP', 'RAB ke Logistik', 'Review Logistic',
-                    'PR Number (SAP)', 'PR Release Date (SAP)', 'Approval (SAP)',
-                    'Aanwijzing', 'Vendor (SAP)', 'PO Number (SAP)', 'PO Release Date (SAP)',
-                    'Goods Inspection', 'GR Release Date (SAP)', 'Duration', 'Status', 'Cost'
+                    'PR Number', 'PR Release Date', 'Approval',
+                    'Aanwijzing', 'Vendor', 'PO Number', 'PO Release Date',
+                    'Goods Inspection', 'GR Release Date', 'Duration', 'Status', 'Cost'
                   ].map(h => (
                     <th key={h} className="px-3 py-3 text-[10px] font-black tracking-widest uppercase whitespace-nowrap text-center first:text-left last:text-right"
                       style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>

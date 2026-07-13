@@ -90,6 +90,22 @@ export async function getMasterMaterials(): Promise<{ nomor_material: string; na
   return data;
 }
 
+export async function createMasterMaterial(nomor_material: string, nama_material: string, satuan: string = 'PCS'): Promise<{ error: string | null }> {
+  try {
+    const { error } = await supabase
+      .from('master_materials')
+      .insert([{ 
+        nomor_material, 
+        nama_material,
+        satuan,
+        total_stock: 0
+      }]);
+    return { error: error ? error.message : null };
+  } catch (err: any) {
+    return { error: err.message || 'Unknown error' };
+  }
+}
+
 // ── 2. CRITICAL STOCK & ABSOLUTION HISTORY ────────────────
 // Pemetaan kode gudang SAP ke label nama depo
 export const GUDANG_LABEL_MAP: Record<string, string> = {
@@ -832,6 +848,55 @@ export async function deleteMaintenanceBomConfig(id: number): Promise<{ error: s
     .eq('id', id);
   return { error: error?.message ?? null };
 }
+
+export async function deleteMaterialBomConfigs(nomor_material: string): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('maintenance_bom_config')
+    .delete()
+    .eq('nomor_material', nomor_material);
+  return { error: error?.message ?? null };
+}
+
+export async function saveMaterialBomConfigs(
+  nomor_material: string,
+  configs: Omit<MaintenanceBomConfig, 'id' | 'nama_material' | 'satuan' | 'current_stock'>[]
+): Promise<{ error: string | null }> {
+  // First delete all existing configurations for this material
+  const { error: deleteErr } = await supabase
+    .from('maintenance_bom_config')
+    .delete()
+    .eq('nomor_material', nomor_material);
+
+  if (deleteErr) {
+    return { error: deleteErr.message };
+  }
+
+  if (configs.length === 0) {
+    return { error: null };
+  }
+
+  // Map values including compatibility columns
+  const dbConfigs = configs.map(c => ({
+    tipe_perawatan: c.tipe_perawatan,
+    nomor_material: c.nomor_material,
+    qty_standar: c.qty_standar,
+    qty_tc: c.qty_tc ?? 0,
+    qty_m1: c.qty_m1 ?? 0,
+    qty_m2: c.qty_m2 ?? 0,
+    qty_t6: c.qty_t6 ?? 0,
+    qty_t: c.qty_t ?? 0,
+    compat_seri_kereta: c.compat_seri_kereta || null,
+    compat_propulsi: c.compat_propulsi || null,
+  }));
+
+  // Insert the new configurations
+  const { error: insertErr } = await supabase
+    .from('maintenance_bom_config')
+    .insert(dbConfigs);
+
+  return { error: insertErr?.message ?? null };
+}
+
 
 
 // ── 7. AUDIT LOGS ─────────────────────────────────────────

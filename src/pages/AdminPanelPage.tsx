@@ -6,8 +6,9 @@ import {
   getProcurementData, addProcurement, updateProcurement, deleteProcurement,
   getMaintenanceSchedule, addMaintenanceSchedule, updateMaintenanceSchedule, deleteMaintenanceSchedule,
   getWorkOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
-  getRealSAPTrains, getRealSAPOrders, getMasterMaterials,
+  getRealSAPTrains, getRealSAPOrders, getMasterMaterials, createMasterMaterial,
   getMaintenanceBomConfig, addMaintenanceBomConfig, updateMaintenanceBomConfig, deleteMaintenanceBomConfig,
+  saveMaterialBomConfigs, deleteMaterialBomConfigs,
   getAllEquipment
 } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
@@ -152,21 +153,26 @@ export default function AdminPanelPage() {
 
   // BOM Config tab state
   const [bomList, setBomList] = useState<MaintenanceBomConfig[]>([]);
+  const [bomSearchText, setBomSearchText] = useState('');
   const [showBOMForm, setShowBOMForm] = useState(false);
-  const [activeBOMTypeModal, setActiveBOMTypeModal] = useState<string | null>(null);
-  const [newBOM, setNewBOM] = useState<Omit<MaintenanceBomConfig, 'id' | 'nama_material' | 'satuan' | 'current_stock'>>({
-    tipe_perawatan: 'P1',
-    nomor_material: '',
-    qty_standar: 1,
-    qty_tc: 0,
-    qty_m1: 0,
-    qty_m2: 0,
-    qty_t6: 0,
-    qty_t: 0,
-    compat_seri_kereta: '',
-    compat_propulsi: ''
-  });
-  const [editingBOM, setEditingBOM] = useState<MaintenanceBomConfig | null>(null);
+  const [activeBOMMaterialModal, setActiveBOMMaterialModal] = useState<string | null>(null); // 'NEW' or nomor_material
+  
+  // States for rules configured inside the modal
+  const [bomModalMaterial, setBomModalMaterial] = useState<string>('');
+  const [bomModalRules, setBomModalRules] = useState<{
+    selectedTypes: string[];
+    selectedSeries: string[];
+    selectedPropulsion: string[];
+    qty_standar: number;
+    qty_tc: number;
+    qty_m1: number;
+    qty_m2: number;
+    qty_t6: number;
+    qty_t: number;
+  }[]>([]);
+  const [isNewMasterInput, setIsNewMasterInput] = useState(false);
+  const [newMasterName, setNewMasterName] = useState('');
+  const [newMasterSatuan, setNewMasterSatuan] = useState('PCS');
 
   useEffect(() => {
     async function loadData() {
@@ -263,56 +269,137 @@ export default function AdminPanelPage() {
 
   // BOM Configuration handlers
   const handleSaveBOM = async () => {
-    const data = editingBOM ?? newBOM;
-    if (!data.nomor_material || !data.tipe_perawatan) {
-      showError('Tipe perawatan dan Kode material wajib diisi.');
+    if (!bomModalMaterial) {
+      showError('Material wajib dipilih atau diisi.');
       return;
     }
-    try {
-      if (editingBOM) {
-        const { error } = await updateMaintenanceBomConfig(editingBOM.id, editingBOM);
-        if (error) { showError(error); return; }
-        const fresh = await getMaintenanceBomConfig();
-        setBomList(fresh);
-        setEditingBOM(null);
-        showSuccess('BOM configuration updated.');
-      } else {
-        const { error } = await addMaintenanceBomConfig(newBOM);
-        if (error) { showError(error); return; }
-        const fresh = await getMaintenanceBomConfig();
-        setBomList(fresh);
-        setNewBOM({ tipe_perawatan: 'P1', nomor_material: '', qty_standar: 1, qty_tc: 0, qty_m1: 0, qty_m2: 0, qty_t6: 0, qty_t: 0 });
-        setShowBOMForm(false);
-        showSuccess('New BOM requirement configuration saved.');
+    if (bomModalRules.length === 0) {
+      showError('Minimal harus ada satu aturan BOM.');
+      return;
+    }
+
+    // New Master Material Input Validation & Creation
+    if (isNewMasterInput) {
+      if (!newMasterName.trim()) {
+        showError('Nama Material Baru wajib diisi.');
+        return;
       }
+      try {
+        const { error: masterErr } = await createMasterMaterial(bomModalMaterial, newMasterName.trim(), newMasterSatuan);
+        if (masterErr) {
+          showError(`Gagal mendaftarkan material baru ke Master Data: ${masterErr}`);
+          return;
+        }
+        // Update local state to sync with db
+        setMasterMaterials(prev => [
+          ...prev, 
+          { nomor_material: bomModalMaterial, nama_material: newMasterName.trim() }
+        ]);
+      } catch (err) {
+        console.error(err);
+        showError('Gagal menyimpan material baru.');
+        return;
+      }
+    }
+
+    // Validation
+    for (let i = 0; i < bomModalRules.length; i++) {
+      const r = bomModalRules[i];
+      if (r.selectedTypes.length === 0) {
+        showError(`Aturan #${i + 1} wajib memilih minimal satu tipe perawatan.`);
+        return;
+      }
+    }
+
+    // Check overlaps of series per tipe_perawatan
+    const ALL_TYPES = ['P1', 'P3', 'P6', 'P12', 'P24', 'P48'];
+    for (const type of ALL_TYPES) {
+      const seriesSeen = new Set<string>();
+      let hasUniversalRule = false;
+      
+      const rulesWithThisType = bomModalRules.filter(r => r.selectedTypes.includes(type));
+      for (const r of rulesWithThisType) {
+        if (r.selectedSeries.length === 0) {
+          if (hasUniversalRule) {
+            showError(`Konflik: Ditemukan lebih dari satu aturan umum (Universal) untuk Perawatan ${type}.`);
+            return;
+          }
+          hasUniversalRule = true;
+        } else {
+          for (const s of r.selectedSeries) {
+            if (seriesSeen.has(s)) {
+              showError(`Konflik: Seri kereta ${s} terdaftar di lebih dari satu aturan untuk Perawatan ${type}.`);
+              return;
+            }
+            seriesSeen.add(s);
+          }
+        }
+      }
+    }
+
+    try {
+      // Map rules into database configs
+      const payloads: any[] = [];
+      bomModalRules.forEach(r => {
+        const compatSeriStr = r.selectedSeries.length > 0 ? r.selectedSeries.join(',') : '';
+        const compatPropStr = r.selectedPropulsion.length > 0 ? r.selectedPropulsion.join(',') : '';
+
+        r.selectedTypes.forEach(type => {
+          payloads.push({
+            tipe_perawatan: type,
+            nomor_material: bomModalMaterial,
+            qty_standar: r.qty_standar,
+            qty_tc: r.qty_tc,
+            qty_m1: r.qty_m1,
+            qty_m2: r.qty_m2,
+            qty_t6: r.qty_t6,
+            qty_t: r.qty_t,
+            compat_seri_kereta: compatSeriStr || null,
+            compat_propulsi: compatPropStr || null
+          });
+        });
+      });
+
+      const { error } = await saveMaterialBomConfigs(bomModalMaterial, payloads);
+      if (error) {
+        showError(error);
+        return;
+      }
+
+      const fresh = await getMaintenanceBomConfig();
+      setBomList(fresh);
+      setActiveBOMMaterialModal(null);
+      showSuccess(`Konfigurasi BOM untuk material ${bomModalMaterial} berhasil disimpan.`);
     } catch (err) {
       console.error(err);
+      showError('Gagal menyimpan konfigurasi BOM.');
     }
   };
 
-  const handleDeleteBOM = (id: number) => {
+  const handleDeleteBOMMaterial = (nomorMaterial: string, namaMaterial: string) => {
     setConfirmModal({
-      message: 'Hapus konfigurasi kebutuhan material standar untuk tipe perawatan ini?',
+      message: `Hapus semua konfigurasi BOM untuk material ${namaMaterial} (${nomorMaterial})?`,
       onConfirm: async () => {
-        const originalItem = bomList.find(b => b.id === id);
-        const { error } = await deleteMaintenanceBomConfig(id);
-        if (error) showError(error);
-        else {
+        const originalItems = bomList.filter(b => b.nomor_material === nomorMaterial);
+        const { error } = await deleteMaterialBomConfigs(nomorMaterial);
+        if (error) {
+          showError(error);
+        } else {
           const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
           const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
-          if (originalItem) {
+          if (originalItems.length > 0) {
             await addAuditLog({
-              nomor_material: originalItem.nomor_material,
-              parameter_name: `Hapus BOM ${originalItem.tipe_perawatan}`,
-              original_value: `Qty: ${originalItem.qty_standar}`,
+              nomor_material: nomorMaterial,
+              parameter_name: 'Hapus Semua BOM Material',
+              original_value: `Tipe: ${originalItems.map(o => o.tipe_perawatan).join(',')}`,
               new_value: 'DELETED',
               admin_email: email,
               admin_name: name,
               modul: 'BOM Standar Perawatan'
             });
           }
-          setBomList(prev => prev.filter(b => b.id !== id));
-          showSuccess('BOM config deleted successfully.');
+          setBomList(prev => prev.filter(b => b.nomor_material !== nomorMaterial));
+          showSuccess('BOM material berhasil dihapus.');
         }
         setConfirmModal(null);
       }
@@ -842,25 +929,25 @@ export default function AdminPanelPage() {
             </div>
           </div>
 
-          {/* Card 4: Tahap 3 — PR SAP (Permintaan Pembelian) */}
+          {/* Card 4: Tahap 3 — PR (Permintaan Pembelian) */}
           <div className="p-5 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
-              Tahap 3 — Purchase Requisitions SAP (PR)
+              Tahap 3 — Purchase Requisitions (PR)
             </h5>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              <Field label="PR Number (SAP)">
+              <Field label="PR Number">
                 <input value={poData.pr_number || ''} onChange={e => updatePOField('pr_number', e.target.value)} className={inputCls} style={inputStyle} placeholder="PR-5000xxxxx" />
               </Field>
-              <Field label="PR Release Date (SAP)">
+              <Field label="PR Release Date">
                 <input type="date" value={poData.pr_release_date || ''} onChange={e => updatePOField('pr_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
-              <Field label="Approval SAP (CEP, CE, C2, CAA)">
+              <Field label="Approval (CEP, CE, C2, CAA)">
                 <input value={poData.approval_sap_status || ''} onChange={e => updatePOField('approval_sap_status', e.target.value)} className={inputCls} style={inputStyle} placeholder="APPROVED CEP/CE/C2/CAA" />
               </Field>
             </div>
           </div>
 
-          {/* Card 5: Tahap 4 — Aanwijzing & PO SAP */}
+          {/* Card 5: Tahap 4 — Aanwijzing & PO */}
           <div className="p-5 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
             <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 4 — Aanwijzing &amp; Purchase Order (PO)
@@ -869,13 +956,13 @@ export default function AdminPanelPage() {
               <Field label="Aanwijzing Date">
                 <input type="date" value={poData.aanwijzing_date || ''} onChange={e => updatePOField('aanwijzing_date', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
-              <Field label="Vendor (SAP)">
-                <input value={poData.vendor_sap || ''} onChange={e => updatePOField('vendor_sap', e.target.value)} className={inputCls} style={inputStyle} placeholder="Nama Vendor SAP" />
+              <Field label="Vendor">
+                <input value={poData.vendor_sap || ''} onChange={e => updatePOField('vendor_sap', e.target.value)} className={inputCls} style={inputStyle} placeholder="Nama Vendor" />
               </Field>
-              <Field label="PO Number (SAP)">
+              <Field label="PO Number">
                 <input value={poData.po_number || ''} onChange={e => updatePOField('po_number', e.target.value)} className={inputCls} style={inputStyle} placeholder="PO-4500xxxxx" />
               </Field>
-              <Field label="PO Release Date (SAP)">
+              <Field label="PO Release Date">
                 <input type="date" value={poData.po_release_date || ''} onChange={e => updatePOField('po_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
             </div>
@@ -890,7 +977,7 @@ export default function AdminPanelPage() {
               <Field label="Goods Inspection Status">
                 <input value={poData.goods_inspection_status || ''} onChange={e => updatePOField('goods_inspection_status', e.target.value)} className={inputCls} style={inputStyle} placeholder="LULUS UJI / SEDANG DIUJI" />
               </Field>
-              <Field label="Good Receipt Release Date (SAP)">
+              <Field label="Good Receipt Release Date">
                 <input type="date" value={poData.gr_release_date || ''} onChange={e => updatePOField('gr_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
               <Field label="Sisa Stok Sebelum GR">
@@ -1405,73 +1492,210 @@ export default function AdminPanelPage() {
 
       {/* ── TAB: BOM Standar Perawatan ── */}
       {activeTab === 'bom' && (() => {
-        const dynamicBOMTypes = Array.from(new Set([
-          'P1', 'P3', 'P6', 'P12', 'P24', 'P48',
-          ...bomList.map(b => b.tipe_perawatan)
-        ])).sort((a, b) => {
-          const numA = parseInt(a.replace(/\D/g, '')) || 0;
-          const numB = parseInt(b.replace(/\D/g, '')) || 0;
-          return numA - numB;
+        const uniqueMaterials = Array.from(new Set(bomList.map(b => b.nomor_material))).map(matNo => {
+          const configs = bomList.filter(b => b.nomor_material === matNo);
+          const first = configs[0];
+          return {
+            nomor_material: matNo,
+            nama_material: first.nama_material ?? '—',
+            satuan: first.satuan ?? 'PCS',
+            qty_standar: first.qty_standar,
+            qty_tc: first.qty_tc ?? 0,
+            qty_m1: first.qty_m1 ?? 0,
+            qty_m2: first.qty_m2 ?? 0,
+            qty_t6: first.qty_t6 ?? 0,
+            qty_t: first.qty_t ?? 0,
+            compat_seri_kereta: first.compat_seri_kereta ?? '',
+            compat_propulsi: first.compat_propulsi ?? '',
+            types: configs.map(c => c.tipe_perawatan).sort()
+          };
         });
 
-        const handleAddBOMType = () => {
-          const name = prompt("Masukkan Kode Tipe Perawatan Baru (contoh: P2, P96):");
-          if (name) {
-            const clean = name.trim().toUpperCase();
-            if (clean) {
-              setActiveBOMTypeModal(clean);
+        const filteredMaterials = uniqueMaterials.filter(m => {
+          const search = bomSearchText.toLowerCase();
+          return m.nomor_material.toLowerCase().includes(search) || 
+                 m.nama_material.toLowerCase().includes(search);
+        });
+
+        const handleAddBOMMaterialClick = () => {
+          setBomModalMaterial('');
+          setBomModalRules([{
+            selectedTypes: [],
+            selectedSeries: [],
+            selectedPropulsion: [],
+            qty_standar: 1,
+            qty_tc: 0,
+            qty_m1: 0,
+            qty_m2: 0,
+            qty_t6: 0,
+            qty_t: 0
+          }]);
+          setIsNewMasterInput(false);
+          setNewMasterName('');
+          setNewMasterSatuan('PCS');
+          setActiveBOMMaterialModal('NEW');
+        };
+
+        const handleEditBOMMaterialClick = (mat: typeof uniqueMaterials[0]) => {
+          const configs = bomList.filter(b => b.nomor_material === mat.nomor_material);
+          const rules: typeof bomModalRules = [];
+          
+          configs.forEach(c => {
+            const seriesList = c.compat_seri_kereta ? c.compat_seri_kereta.split(',').map(s => s.trim()).filter(Boolean) : [];
+            const propList = c.compat_propulsi ? c.compat_propulsi.split(',').map(p => p.trim()).filter(Boolean) : [];
+            
+            // Check if there is an existing rule with identical quantities and compatibilities
+            const match = rules.find(r => 
+              r.qty_standar === c.qty_standar &&
+              r.qty_tc === (c.qty_tc ?? 0) &&
+              r.qty_m1 === (c.qty_m1 ?? 0) &&
+              r.qty_m2 === (c.qty_m2 ?? 0) &&
+              r.qty_t6 === (c.qty_t6 ?? 0) &&
+              r.qty_t === (c.qty_t ?? 0) &&
+              r.selectedSeries.join(',') === seriesList.join(',') &&
+              r.selectedPropulsion.join(',') === propList.join(',')
+            );
+            
+            if (match) {
+              if (!match.selectedTypes.includes(c.tipe_perawatan)) {
+                match.selectedTypes.push(c.tipe_perawatan);
+              }
+            } else {
+              rules.push({
+                selectedTypes: [c.tipe_perawatan],
+                selectedSeries: seriesList,
+                selectedPropulsion: propList,
+                qty_standar: c.qty_standar,
+                qty_tc: c.qty_tc ?? 0,
+                qty_m1: c.qty_m1 ?? 0,
+                qty_m2: c.qty_m2 ?? 0,
+                qty_t6: c.qty_t6 ?? 0,
+                qty_t: c.qty_t ?? 0
+              });
             }
+          });
+
+          if (rules.length === 0) {
+            rules.push({
+              selectedTypes: [],
+              selectedSeries: [],
+              selectedPropulsion: [],
+              qty_standar: 1,
+              qty_tc: 0,
+              qty_m1: 0,
+              qty_m2: 0,
+              qty_t6: 0,
+              qty_t: 0
+            });
           }
+
+          setIsNewMasterInput(false);
+          setNewMasterName('');
+          setNewMasterSatuan('PCS');
+          setBomModalMaterial(mat.nomor_material);
+          setBomModalRules(rules);
+          setActiveBOMMaterialModal(mat.nomor_material);
         };
 
         return (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <p className="text-sm" style={{ color: 'var(--color-on-surface-variant)' }}>
-                {dynamicBOMTypes.length} tipe perawatan terkonfigurasi di sistem
-              </p>
-              <button onClick={handleAddBOMType}
-                className="skeuomorphic-btn px-4 py-1.5 rounded text-xs flex items-center gap-2">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                + Tambah Tipe Perawatan Baru
-              </button>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div className="relative w-full sm:max-w-xs">
+                <input
+                  type="text"
+                  placeholder="Cari kode atau nama material..."
+                  value={bomSearchText}
+                  onChange={e => setBomSearchText(e.target.value)}
+                  className={inputCls}
+                  style={inputStyle}
+                />
+              </div>
+              <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                <p className="text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>
+                  {filteredMaterials.length} material terkonfigurasi
+                </p>
+                <button onClick={handleAddBOMMaterialClick}
+                  className="skeuomorphic-btn px-4 py-1.5 rounded text-xs flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  + Tambah Material ke BOM
+                </button>
+              </div>
             </div>
 
             {/* BOM Configurations summary table */}
             <div className="tactile-card rounded-lg overflow-hidden">
               <div className="p-4 border-b flex items-center gap-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-                <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Master BOM</h3>
+                <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Master BOM (Berdasarkan Material)</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse data-table">
                   <thead>
                     <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                      {['Tipe Perawatan', 'Jumlah Suku Cadang', 'Daftar Suku Cadang Terkait', 'Aksi'].map(h => (
-                        <th key={h} className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
-                      ))}
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider w-[100px]" style={{ color: 'var(--color-on-primary-container)' }}>Kode Material</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider" style={{ color: 'var(--color-on-primary-container)' }}>Nama Material</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider w-[140px]" style={{ color: 'var(--color-on-primary-container)' }}>Jenis Perawatan</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider w-[80px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>Qty Std</th>
+                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider w-[40px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>TC</th>
+                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider w-[40px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>M1</th>
+                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider w-[40px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>M2</th>
+                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider w-[40px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>T6</th>
+                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider w-[40px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>T</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider w-[180px]" style={{ color: 'var(--color-on-primary-container)' }}>Kompatibilitas</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider w-[140px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {dynamicBOMTypes.map(type => {
-                      const items = bomList.filter(b => b.tipe_perawatan === type);
-                      const materialStr = items.map(i => i.nomor_material).join(', ');
-                      return (
-                        <tr key={type}>
-                          <td className="px-4 py-3 text-sm font-black" style={{ color: 'var(--color-secondary)' }}>{type}</td>
-                          <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{items.length} item</td>
-                          <td className="px-4 py-3 text-xs max-w-[400px] truncate" style={{ color: 'var(--color-on-surface-variant)' }}>
-                            {materialStr || <span className="opacity-40 italic">Belum ada material terdaftar</span>}
-                          </td>
-                          <td className="px-4 py-3">
-                            <button onClick={() => setActiveBOMTypeModal(type)}
-                              className="px-3 py-1.5 rounded text-[10px] font-bold text-white transition-all hover:opacity-85"
-                              style={{ backgroundColor: 'var(--color-secondary)' }}>
-                              Atur BOM
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {filteredMaterials.length === 0 ? (
+                      <tr>
+                        <td colSpan={11} className="px-4 py-8 text-center text-xs opacity-50 italic">
+                          Belum ada material terdaftar di BOM atau kata kunci tidak cocok.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredMaterials.map(m => {
+                        return (
+                          <tr key={m.nomor_material}>
+                            <td className="px-4 py-3 text-xs font-black" style={{ color: 'var(--color-on-surface)' }}>{m.nomor_material}</td>
+                            <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>
+                              {m.nama_material} <span className="opacity-50 font-normal">({m.satuan})</span>
+                            </td>
+                            <td className="px-4 py-3 text-[10px] font-bold" style={{ color: 'var(--color-secondary)' }}>
+                              {m.types.join(', ')}
+                            </td>
+                            <td className="px-4 py-3 text-xs font-bold text-center" style={{ color: 'var(--color-on-surface)' }}>{m.qty_standar}</td>
+                            <td className="px-2 py-3 text-xs font-bold font-mono text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_tc}</td>
+                            <td className="px-2 py-3 text-xs font-bold font-mono text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_m1}</td>
+                            <td className="px-2 py-3 text-xs font-bold font-mono text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_m2}</td>
+                            <td className="px-2 py-3 text-xs font-bold font-mono text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_t6}</td>
+                            <td className="px-2 py-3 text-xs font-bold font-mono text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_t}</td>
+                            <td className="px-4 py-3 text-xs font-bold">
+                              {m.compat_seri_kereta || m.compat_propulsi ? (
+                                <div className="flex flex-col gap-0.5">
+                                  {m.compat_seri_kereta && <div className="text-[10px]" style={{ color: 'var(--color-on-surface)' }}>Seri: {m.compat_seri_kereta}</div>}
+                                  {m.compat_propulsi && <div className="text-[10px]" style={{ color: 'var(--color-secondary)' }}>Propulsi: {m.compat_propulsi}</div>}
+                                </div>
+                              ) : (
+                                <span className="opacity-40 italic">Semua (Universal)</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-2 justify-center">
+                                <button onClick={() => handleEditBOMMaterialClick(m)}
+                                  className="px-3 py-1.5 rounded text-[10px] font-bold text-white transition-all hover:opacity-85"
+                                  style={{ backgroundColor: 'var(--color-secondary)' }}>
+                                  Atur BOM
+                                </button>
+                                <button onClick={() => handleDeleteBOMMaterial(m.nomor_material, m.nama_material)}
+                                  className="px-3 py-1.5 rounded text-[10px] font-bold border transition-all hover:opacity-85"
+                                  style={{ borderColor: 'rgba(220,38,38,0.3)', color: 'var(--color-led-red)' }}>
+                                  Hapus
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1672,107 +1896,77 @@ export default function AdminPanelPage() {
         </div>
       )}
 
-      {/* Modal Configure BOM Suku Cadang Per Tipe Perawatan */}
-      {activeBOMTypeModal && (() => {
-        const type = activeBOMTypeModal;
-        const items = bomList.filter(b => b.tipe_perawatan === type);
-        const selectedSeriesList = (editingBOM ?? newBOM).compat_seri_kereta
-          ? (editingBOM ?? newBOM).compat_seri_kereta!.split(',').map(s => s.trim()).filter(Boolean)
-          : [];
+      {/* Modal Configure BOM Suku Cadang Per Material */}
+      {activeBOMMaterialModal && (() => {
+        const isNew = activeBOMMaterialModal === 'NEW';
+        const targetMat = isNew ? null : masterMaterials.find(m => m.nomor_material === activeBOMMaterialModal);
+        const name = targetMat ? targetMat.nama_material : 'Material Baru';
 
-        const selectedPropulsionList = (editingBOM ?? newBOM).compat_propulsi
-          ? (editingBOM ?? newBOM).compat_propulsi!.split(',').map(p => p.trim()).filter(Boolean)
-          : [];
+        const uniqueMaterialCodes = Array.from(new Set(bomList.map(b => b.nomor_material)));
+        const availableMaterials = masterMaterials.filter(m => !uniqueMaterialCodes.includes(m.nomor_material));
 
-        const toggleSeries = (seriesName: string) => {
-          let newList: string[];
-          if (selectedSeriesList.includes(seriesName)) {
-            newList = selectedSeriesList.filter(s => s !== seriesName);
-          } else {
-            newList = [...selectedSeriesList, seriesName];
-          }
-          const strVal = newList.join(',');
-          if (editingBOM) {
-            setEditingBOM(prev => prev ? { ...prev, compat_seri_kereta: strVal } : null);
-          } else {
-            setNewBOM(prev => ({ ...prev, compat_seri_kereta: strVal }));
-          }
-        };
+        const ALL_MAINTENANCE_TYPES = ['P1', 'P3', 'P6', 'P12', 'P24', 'P48'];
+        const SERIES_OPTIONS = ['JR205', 'CLI125', 'CLI225', 'Metro', 'KFW', 'EA203'];
+        const PROPULSION_OPTIONS = ['VVVF', 'Rheostatic'];
 
-        const togglePropulsion = (propName: string) => {
-          let newList: string[];
-          if (selectedPropulsionList.includes(propName)) {
-            newList = selectedPropulsionList.filter(p => p !== propName);
-          } else {
-            newList = [...selectedPropulsionList, propName];
-          }
-          const strVal = newList.join(',');
-          if (editingBOM) {
-            setEditingBOM(prev => prev ? { ...prev, compat_propulsi: strVal } : null);
-          } else {
-            setNewBOM(prev => ({ ...prev, compat_propulsi: strVal }));
-          }
-        };
-
-        // Handle saving BOM inside modal
-        const handleSaveBOMModal = async () => {
-          const payload = {
-            ...newBOM,
-            tipe_perawatan: type as TipePerawatan
-          };
-          if (!payload.nomor_material) {
-            showError("Pilih material terlebih dahulu.");
-            return;
-          }
-          try {
-            const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
-            const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
-            if (editingBOM) {
-              const originalItem = bomList.find(b => b.id === editingBOM.id);
-              const changedFields: string[] = [];
-              if (originalItem) {
-                Object.keys(editingBOM).forEach(k => {
-                  const key = k as keyof MaintenanceBomConfig;
-                  if (String(originalItem[key]) !== String(editingBOM[key])) {
-                    changedFields.push(`${key}: ${originalItem[key]} -> ${editingBOM[key]}`);
-                  }
-                });
-              }
-              const { error } = await updateMaintenanceBomConfig(editingBOM.id, editingBOM);
-              if (error) { showError(error); return; }
-              await addAuditLog({
-                nomor_material: editingBOM.nomor_material,
-                parameter_name: `Update BOM ${type}`,
-                original_value: originalItem ? `Qty: ${originalItem.qty_standar}, TC:${originalItem.qty_tc ?? 0}, M1:${originalItem.qty_m1 ?? 0}, M2:${originalItem.qty_m2 ?? 0}` : '-',
-                new_value: changedFields.join(', ').slice(0, 250) || 'No change',
-                admin_email: email,
-                admin_name: name,
-                modul: 'BOM Standar Perawatan'
-              });
-              const fresh = await getMaintenanceBomConfig();
-              setBomList(fresh);
-              setEditingBOM(null);
-              showSuccess('BOM configuration updated.');
-            } else {
-              const { error } = await addMaintenanceBomConfig(payload);
-              if (error) { showError(error); return; }
-              await addAuditLog({
-                nomor_material: payload.nomor_material,
-                parameter_name: `Tambah BOM ${type}`,
-                original_value: null,
-                new_value: `Qty: ${payload.qty_standar}, TC:${payload.qty_tc ?? 0}, M1:${payload.qty_m1 ?? 0}, M2:${payload.qty_m2 ?? 0}, T6:${payload.qty_t6 ?? 0}, T:${payload.qty_t ?? 0}`,
-                admin_email: email,
-                admin_name: name,
-                modul: 'BOM Standar Perawatan'
-              });
-              const fresh = await getMaintenanceBomConfig();
-              setBomList(fresh);
-              setNewBOM({ tipe_perawatan: type as TipePerawatan, nomor_material: '', qty_standar: 1, qty_tc: 0, qty_m1: 0, qty_m2: 0, qty_t6: 0, qty_t: 0, compat_seri_kereta: '', compat_propulsi: '' });
-              showSuccess('Material added to BOM.');
+        const addRule = () => {
+          setBomModalRules(prev => [
+            ...prev,
+            {
+              selectedTypes: [],
+              selectedSeries: [],
+              selectedPropulsion: [],
+              qty_standar: 1,
+              qty_tc: 0,
+              qty_m1: 0,
+              qty_m2: 0,
+              qty_t6: 0,
+              qty_t: 0
             }
-          } catch (err) {
-            console.error(err);
-          }
+          ]);
+        };
+
+        const deleteRule = (ruleIdx: number) => {
+          setBomModalRules(prev => prev.filter((_, idx) => idx !== ruleIdx));
+        };
+
+        const updateRuleField = (ruleIdx: number, field: string, value: any) => {
+          setBomModalRules(prev => prev.map((r, idx) => {
+            if (idx === ruleIdx) {
+              return { ...r, [field]: value };
+            }
+            return r;
+          }));
+        };
+
+        const toggleType = (ruleIdx: number, type: string) => {
+          const r = bomModalRules[ruleIdx];
+          const updated = r.selectedTypes.includes(type)
+            ? r.selectedTypes.filter(t => t !== type)
+            : [...r.selectedTypes, type];
+          updateRuleField(ruleIdx, 'selectedTypes', updated);
+        };
+
+        const toggleSelectAllTypes = (ruleIdx: number) => {
+          const r = bomModalRules[ruleIdx];
+          const allSelected = r.selectedTypes.length === ALL_MAINTENANCE_TYPES.length;
+          updateRuleField(ruleIdx, 'selectedTypes', allSelected ? [] : [...ALL_MAINTENANCE_TYPES]);
+        };
+
+        const toggleSeries = (ruleIdx: number, series: string) => {
+          const r = bomModalRules[ruleIdx];
+          const updated = r.selectedSeries.includes(series)
+            ? r.selectedSeries.filter(s => s !== series)
+            : [...r.selectedSeries, series];
+          updateRuleField(ruleIdx, 'selectedSeries', updated);
+        };
+
+        const togglePropulsion = (ruleIdx: number, prop: string) => {
+          const r = bomModalRules[ruleIdx];
+          const updated = r.selectedPropulsion.includes(prop)
+            ? r.selectedPropulsion.filter(p => p !== prop)
+            : [...r.selectedPropulsion, prop];
+          updateRuleField(ruleIdx, 'selectedPropulsion', updated);
         };
 
         return (
@@ -1783,191 +1977,219 @@ export default function AdminPanelPage() {
               {/* Modal Header */}
               <div className="flex justify-between items-center border-b pb-3" style={{ borderColor: 'var(--color-steel-border)' }}>
                 <div>
-                  <h3 className="font-bold text-lg" style={{ color: 'var(--color-on-surface)' }}>Atur Suku Cadang BOM — Perawatan {type}</h3>
+                  <h3 className="font-bold text-lg" style={{ color: 'var(--color-on-surface)' }}>
+                    {isNew ? 'Tambah Konfigurasi BOM Baru' : 'Atur BOM Material'}
+                  </h3>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
-                    Kelola daftar material standar dan rumus gerbong untuk tipe perawatan <b>{type}</b>
+                    {!isNew ? `Kode: ${activeBOMMaterialModal} — ${name}` : 'Tentukan material dan tipe perawatan terkait'}
                   </p>
                 </div>
-                <button onClick={() => { setActiveBOMTypeModal(null); setEditingBOM(null); }} className="text-gray-400 hover:text-white transition-colors">
+                <button onClick={() => { setActiveBOMMaterialModal(null); }} className="text-gray-400 hover:text-white transition-colors">
                   <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </button>
               </div>
 
-              {/* Form Input Suku Cadang */}
-              <div className="p-4 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
-                <p className="text-xs font-bold text-secondary" style={{ color: 'var(--color-secondary)' }}>
-                  {editingBOM ? 'Ubah Material Terdaftar' : 'Tambah Material Baru ke Perawatan ' + type}
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Field label="Pilih Material *">
-                    {editingBOM ? (
-                      <div className="px-3 py-2 rounded border text-sm font-bold font-mono" style={inputStyle}>
-                        {editingBOM.nomor_material} — {editingBOM.nama_material}
-                      </div>
-                    ) : (
-                      <select value={newBOM.nomor_material}
-                        onChange={e => setNewBOM(prev => ({ ...prev, nomor_material: e.target.value }))}
+              {/* Material Selector (for new BOM config) */}
+              {isNew && (
+                <div className="p-4 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                  <div className="flex justify-between items-center">
+                    <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer select-none" style={{ color: 'var(--color-secondary)' }}>
+                      <input type="checkbox" checked={isNewMasterInput} onChange={e => {
+                        setIsNewMasterInput(e.target.checked);
+                        setBomModalMaterial('');
+                      }} />
+                      <span>Ketik Material Baru Manual (Belum terdaftar di Master Data)</span>
+                    </label>
+                  </div>
+                  
+                  {!isNewMasterInput ? (
+                    <Field label="Pilih Material *">
+                      <select value={bomModalMaterial}
+                        onChange={e => setBomModalMaterial(e.target.value)}
                         className={inputCls} style={inputStyle}>
                         <option value="">-- Pilih Kode Material --</option>
-                        {masterMaterials.map(m => <option key={m.nomor_material} value={m.nomor_material}>{m.nomor_material} — {m.nama_material}</option>)}
+                        {availableMaterials.map(m => <option key={m.nomor_material} value={m.nomor_material}>{m.nomor_material} — {m.nama_material}</option>)}
                       </select>
-                    )}
-                  </Field>
-                  <Field label="Qty Standar Rangkaian">
-                    <input type="number" value={(editingBOM ?? newBOM).qty_standar}
-                      onChange={e => {
-                        const val = Math.max(1, +e.target.value);
-                        if (editingBOM) setEditingBOM(prev => prev ? { ...prev, qty_standar: val } : prev);
-                        else setNewBOM(prev => ({ ...prev, qty_standar: val }));
-                      }}
-                      className={inputCls} style={inputStyle} min={1} />
-                  </Field>
-                </div>
-
-                {/* Formula Kereta */}
-                <div className="border-t pt-3" style={{ borderColor: 'var(--color-steel-border)' }}>
-                  <p className="text-[11px] font-bold mb-2 opacity-80" style={{ color: 'var(--color-on-surface)' }}>Rumus Dinamis per Kereta (TC / M1 / M2 / T6 / T) — Opsional</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                    {[
-                      { key: 'qty_tc', label: 'Qty TC' },
-                      { key: 'qty_m1', label: 'Qty M1' },
-                      { key: 'qty_m2', label: 'Qty M2' },
-                      { key: 'qty_t6', label: 'Qty T6' },
-                      { key: 'qty_t',  label: 'Qty T' },
-                    ].map(f => (
-                      <Field key={f.key} label={f.label}>
-                        <input type="number" 
-                          value={(() => {
-                            const valObj = (editingBOM ?? newBOM);
-                            const val = valObj[f.key as keyof typeof valObj];
-                            return typeof val === 'number' ? val : 0;
-                          })()}
-                          onChange={e => {
-                            const val = Math.max(0, +e.target.value);
-                            if (editingBOM) setEditingBOM(prev => prev ? { ...prev, [f.key]: val } : prev);
-                            else setNewBOM(prev => ({ ...prev, [f.key]: val }));
-                          }}
-                          className={inputCls} style={inputStyle} min={0} />
+                    </Field>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                      <Field label="Kode Material Baru *">
+                        <input type="text" value={bomModalMaterial}
+                          placeholder="Masukkan nomor material..."
+                          onChange={e => setBomModalMaterial(e.target.value.trim())}
+                          className={inputCls} style={inputStyle} />
                       </Field>
-                    ))}
-                  </div>
-                  <p className="text-[10px] mt-2 opacity-50 italic">
-                    *Isi 0 jika kereta bersangkutan tidak menggunakan material ini. Jika semua 0, sistem menggunakan Qty Standar Rangkaian.
-                  </p>
-                </div>
-
-                {/* Kompatibilitas Seri & Propulsi */}
-                <div className="border-t pt-3" style={{ borderColor: 'var(--color-steel-border)' }}>
-                  <p className="text-[11px] font-bold mb-2 opacity-80" style={{ color: 'var(--color-on-surface)' }}>
-                    Kompatibilitas Target (Kosongkan jika bisa untuk SEMUA / Universal)
-                  </p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[10px] block mb-1 opacity-70">Seri Kereta:</label>
-                      <div className="flex flex-wrap gap-3">
-                        {['JR205', 'CLI125', 'CLI225', 'Metro', 'KFW', 'EA203'].map(s => {
-                          const isChecked = selectedSeriesList.includes(s);
-                          return (
-                            <label key={s} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
-                              <input type="checkbox" checked={isChecked} onChange={() => toggleSeries(s)} />
-                              <span>{s}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
+                      <Field label="Nama Material Baru *">
+                        <input type="text" value={newMasterName}
+                          placeholder="Masukkan nama material..."
+                          onChange={e => setNewMasterName(e.target.value)}
+                          className={inputCls} style={inputStyle} />
+                      </Field>
+                      <Field label="Satuan">
+                        <select value={newMasterSatuan}
+                          onChange={e => setNewMasterSatuan(e.target.value)}
+                          className={inputCls} style={inputStyle}>
+                          <option value="PCS">PCS</option>
+                          <option value="SET">SET</option>
+                          <option value="UNIT">UNIT</option>
+                          <option value="LITER">LITER</option>
+                          <option value="KG">KG</option>
+                        </select>
+                      </Field>
                     </div>
-                    <div>
-                      <label className="text-[10px] block mb-1 opacity-70">Propulsi:</label>
-                      <div className="flex flex-wrap gap-3">
-                        {['VVVF', 'Rheostatic'].map(p => {
-                          const isChecked = selectedPropulsionList.includes(p);
-                          return (
-                            <label key={p} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
-                              <input type="checkbox" checked={isChecked} onChange={() => togglePropulsion(p)} />
-                              <span>{p}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2 pt-1">
-                  {editingBOM && (
-                    <button onClick={() => setEditingBOM(null)} className="px-4 py-1.5 rounded border text-xs font-bold" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
-                      Batal Edit
-                    </button>
                   )}
-                  <button onClick={handleSaveBOMModal} className="skeuomorphic-btn px-5 py-1.5 rounded text-xs">
-                    {editingBOM ? 'Simpan Perubahan' : 'Tambah Suku Cadang'}
+                </div>
+              )}
+
+              {/* Rules Cards Container */}
+              <div className="space-y-6">
+                {bomModalRules.map((rule, idx) => {
+                  return (
+                    <div key={idx} className="p-5 rounded-xl border space-y-4 relative" 
+                      style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container-low)' }}>
+                      
+                      {/* Rule Card Header */}
+                      <div className="flex justify-between items-center border-b pb-2" style={{ borderColor: 'var(--color-steel-border)' }}>
+                        <span className="text-xs font-black uppercase tracking-wider" style={{ color: 'var(--color-secondary)' }}>
+                          Aturan #{idx + 1} {rule.selectedSeries.length === 0 ? '(Umum / Universal)' : `(Khusus Seri: ${rule.selectedSeries.join(', ')})`}
+                        </span>
+                        {bomModalRules.length > 1 && (
+                          <button onClick={() => deleteRule(idx)} 
+                            className="px-2.5 py-1 rounded text-[10px] font-bold text-white transition-all hover:opacity-85"
+                            style={{ backgroundColor: 'var(--color-led-red)' }}>
+                            Hapus Aturan ini
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Checklist Tipe Perawatan */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <label className="text-[10px] font-black uppercase tracking-wider" style={{ color: 'var(--color-on-surface-variant)' }}>
+                              Tipe Perawatan Terkait *
+                            </label>
+                            <label className="flex items-center gap-1 text-[10px] cursor-pointer select-none font-bold" style={{ color: 'var(--color-secondary)' }}>
+                              <input
+                                type="checkbox"
+                                checked={rule.selectedTypes.length === ALL_MAINTENANCE_TYPES.length}
+                                onChange={() => toggleSelectAllTypes(idx)}
+                              />
+                              <span>Pilih Semua</span>
+                            </label>
+                          </div>
+                          <div className="flex flex-wrap gap-3 p-2.5 rounded border" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+                            {ALL_MAINTENANCE_TYPES.map(type => {
+                              const isChecked = rule.selectedTypes.includes(type);
+                              return (
+                                <label key={type} className="flex items-center gap-1.5 text-xs font-bold cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleType(idx, type)}
+                                  />
+                                  <span style={{ color: isChecked ? 'var(--color-secondary)' : 'var(--color-on-surface-variant)' }}>{type}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Qty Standar Rangkaian */}
+                        <Field label="Qty Standar Rangkaian">
+                          <input type="number" value={rule.qty_standar}
+                            onChange={e => {
+                              const val = Math.max(1, +e.target.value);
+                              updateRuleField(idx, 'qty_standar', val);
+                            }}
+                            className={inputCls} style={inputStyle} min={1} />
+                        </Field>
+                      </div>
+
+                      {/* Formula Kereta */}
+                      <div className="border-t pt-3" style={{ borderColor: 'var(--color-steel-border)' }}>
+                        <p className="text-[11px] font-bold mb-2 opacity-80" style={{ color: 'var(--color-on-surface)' }}>Rumus Dinamis per Kereta (TC / M1 / M2 / T6 / T) — Opsional</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                          {[
+                            { key: 'qty_tc', label: 'Qty TC' },
+                            { key: 'qty_m1', label: 'Qty M1' },
+                            { key: 'qty_m2', label: 'Qty M2' },
+                            { key: 'qty_t6', label: 'Qty T6' },
+                            { key: 'qty_t',  label: 'Qty T' },
+                          ].map(f => (
+                            <Field key={f.key} label={f.label}>
+                              <input type="number" 
+                                value={rule[f.key as keyof typeof rule] as number || 0}
+                                onChange={e => {
+                                  const val = Math.max(0, +e.target.value);
+                                  updateRuleField(idx, f.key, val);
+                                }}
+                                className={inputCls} style={inputStyle} min={0} />
+                            </Field>
+                          ))}
+                        </div>
+                        <p className="text-[10px] mt-2 opacity-50 italic">
+                          *Isi 0 jika kereta bersangkutan tidak menggunakan material ini. Jika semua 0, sistem menggunakan Qty Standar Rangkaian.
+                        </p>
+                      </div>
+
+                      {/* Kompatibilitas Seri & Propulsi */}
+                      <div className="border-t pt-3" style={{ borderColor: 'var(--color-steel-border)' }}>
+                        <p className="text-[11px] font-bold mb-2 opacity-80" style={{ color: 'var(--color-on-surface)' }}>
+                          Kompatibilitas Target (Kosongkan jika bisa untuk SEMUA / Universal)
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="text-[10px] block mb-1 opacity-70">Seri Kereta:</label>
+                            <div className="flex flex-wrap gap-3">
+                              {SERIES_OPTIONS.map(s => {
+                                const isChecked = rule.selectedSeries.includes(s);
+                                return (
+                                  <label key={s} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                                    <input type="checkbox" checked={isChecked} onChange={() => toggleSeries(idx, s)} />
+                                    <span>{s}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[10px] block mb-1 opacity-70">Propulsi:</label>
+                            <div className="flex flex-wrap gap-3">
+                              {PROPULSION_OPTIONS.map(p => {
+                                const isChecked = rule.selectedPropulsion.includes(p);
+                                return (
+                                  <label key={p} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                                    <input type="checkbox" checked={isChecked} onChange={() => togglePropulsion(idx, p)} />
+                                    <span>{p}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Add Rule Button & Action Buttons */}
+              <div className="flex justify-between items-center border-t pt-4" style={{ borderColor: 'var(--color-steel-border)' }}>
+                <button onClick={addRule}
+                  className="px-4 py-2 rounded text-xs flex items-center gap-2 border font-bold transition-all hover:opacity-85"
+                  style={{ borderColor: 'var(--color-secondary)', color: 'var(--color-secondary)' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  + Tambah Aturan Khusus Baru
+                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => { setActiveBOMMaterialModal(null); }} className="px-4 py-2 rounded border text-xs font-bold" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
+                    Batal
+                  </button>
+                  <button onClick={handleSaveBOM} className="skeuomorphic-btn px-5 py-2 rounded text-xs">
+                    Simpan Konfigurasi
                   </button>
                 </div>
-              </div>
-
-              {/* Tabel Material Aktif */}
-              <div className="overflow-x-auto rounded-lg border" style={{ borderColor: 'var(--color-steel-border)' }}>
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                      {['Kode Material', 'Nama Material', 'Satuan', 'Qty Standar Rangkaian', 'Rumus Gerbong (TC/M1/M2/T6/T)', 'Kompatibilitas', 'Aksi'].map(h => (
-                        <th key={h} className="p-2.5 font-bold uppercase tracking-wider" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map(bom => {
-                      const hasFormula = bom.qty_tc || bom.qty_m1 || bom.qty_m2 || bom.qty_t6 || bom.qty_t;
-                      const hasCompat = bom.compat_seri_kereta || bom.compat_propulsi;
-                      return (
-                        <tr key={bom.id} className="border-b" style={{ borderColor: 'var(--color-steel-border)' }}>
-                          <td className="p-2.5 font-bold font-mono" style={{ color: 'var(--color-on-surface)' }}>{bom.nomor_material}</td>
-                          <td className="p-2.5" style={{ color: 'var(--color-on-surface-variant)' }}>{bom.nama_material}</td>
-                          <td className="p-2.5">{bom.satuan}</td>
-                          <td className="p-2.5 font-bold" style={{ color: 'var(--color-on-surface)' }}>{bom.qty_standar} unit</td>
-                          <td className="p-2.5 font-mono">
-                            {hasFormula ? (
-                              <span className="text-[10px]" style={{ color: 'var(--color-secondary)' }}>
-                                TC:{bom.qty_tc ?? 0} | M1:{bom.qty_m1 ?? 0} | M2:{bom.qty_m2 ?? 0} | T6:{bom.qty_t6 ?? 0} | T:{bom.qty_t ?? 0}
-                              </span>
-                            ) : (
-                              <span className="opacity-40 text-[10px]">— (Flat Rangkaian)</span>
-                            )}
-                          </td>
-                          <td className="p-2.5 text-[10px] font-mono">
-                            {hasCompat ? (
-                              <div className="flex flex-col gap-0.5 text-blue-400">
-                                {bom.compat_seri_kereta && <div>Seri: {bom.compat_seri_kereta}</div>}
-                                {bom.compat_propulsi && <div>Propulsi: {bom.compat_propulsi}</div>}
-                              </div>
-                            ) : (
-                              <span className="opacity-40">Semua (Universal)</span>
-                            )}
-                          </td>
-                          <td className="p-2.5">
-                            <div className="flex gap-2">
-                              <button onClick={() => setEditingBOM({ ...bom })} className="px-2 py-1 rounded border text-[10px] font-bold" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>Edit</button>
-                              <button onClick={() => handleDeleteBOM(bom.id)} className="px-2 py-1 rounded border text-[10px] font-bold" style={{ borderColor: 'rgba(220,38,38,0.3)', color: 'var(--color-led-red)' }}>Hapus</button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {items.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="p-5 text-center text-xs opacity-50">
-                          Belum ada suku cadang terdaftar untuk tipe perawatan {type}. Silakan tambah di atas.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex justify-end pt-1">
-                <button onClick={() => { setActiveBOMTypeModal(null); setEditingBOM(null); }} className="skeuomorphic-btn px-5 py-2 rounded text-xs">
-                  Selesai &amp; Tutup
-                </button>
               </div>
             </div>
           </div>

@@ -24,6 +24,7 @@ export default function TrainCompositionPage() {
   const [filterSeri, setFilterSeri] = useState<string>('Semua');
   const [filterPropulsi, setFilterPropulsi] = useState<string>('Semua');
   const [filterDipo, setFilterDipo] = useState<string>('Semua');
+  const [searchRangkaian, setSearchRangkaian] = useState<string>('');
   const [selectedTrainId, setSelectedTrainId] = useState<string>('');
 
   useEffect(() => {
@@ -120,7 +121,8 @@ export default function TrainCompositionPage() {
     const matchSeri = filterSeri === 'Semua' || t.seri === filterSeri;
     const matchPropulsi = filterPropulsi === 'Semua' || t.propulsi === filterPropulsi;
     const matchDipo = filterDipo === 'Semua' || t.dipo === filterDipo;
-    return matchSeri && matchPropulsi && matchDipo;
+    const matchSearch = !searchRangkaian.trim() || t.name.toLowerCase().includes(searchRangkaian.toLowerCase().trim());
+    return matchSeri && matchPropulsi && matchDipo && matchSearch;
   });
 
   // Get active selected KRL Trainset
@@ -165,7 +167,7 @@ export default function TrainCompositionPage() {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
         {/* KPI Card */}
         <div className="tactile-card rounded-lg p-4 flex flex-col justify-center" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
-          <span className="text-[10px] font-black uppercase tracking-wider mb-1" style={{ color: 'var(--color-on-surface-variant)' }}>
+          <span className="text-[10px] font-black tracking-wider mb-1" style={{ color: 'var(--color-on-surface-variant)' }}>
             Jumlah Rangkaian
           </span>
           <span className="text-2xl font-black" style={{ color: 'var(--color-primary)' }}>
@@ -174,9 +176,23 @@ export default function TrainCompositionPage() {
         </div>
 
         {/* Filters */}
-        <div className="tactile-card rounded-lg p-4 grid grid-cols-1 sm:grid-cols-3 gap-4 col-span-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
+        <div className="tactile-card rounded-lg p-4 grid grid-cols-1 sm:grid-cols-4 gap-4 col-span-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
           <div>
-            <label className="block text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+            <label className="block text-[10px] font-black tracking-wider mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+              Cari Rangkaian
+            </label>
+            <input
+              type="text"
+              value={searchRangkaian}
+              onChange={e => { setSearchRangkaian(e.target.value); setSelectedTrainId(''); }}
+              placeholder="Cari nomor rangkaian..."
+              className="w-full rounded px-3 py-2 text-xs border"
+              style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black tracking-wider mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>
               Seri Kereta
             </label>
             <select
@@ -190,7 +206,7 @@ export default function TrainCompositionPage() {
           </div>
 
           <div>
-            <label className="block text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+            <label className="block text-[10px] font-black tracking-wider mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>
               Jenis Propulsi
             </label>
             <select
@@ -204,7 +220,7 @@ export default function TrainCompositionPage() {
           </div>
 
           <div>
-            <label className="block text-[10px] font-black uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+            <label className="block text-[10px] font-black tracking-wider mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>
               Lokasi Dipo
             </label>
             <select
