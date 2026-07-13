@@ -488,24 +488,42 @@ export default function AnomalyStockPage() {
               name,
               level,
               model_no,
-              parent_id,
-              parent:equipment_master!parent_id (
-                id,
-                name,
-                model_no
-              )
+              parent_id
             )
           ` as any)
           .in('order_no', uniqueOrderNos);
-        if (data && !error) {
+          
+        if (error) throw error;
+        
+        if (data) {
+          // Find parents in memory if needed
+          const parentIds = Array.from(new Set(data
+            .map((o: any) => o.equipment_master?.parent_id)
+            .filter((pid: any) => pid !== null && pid !== undefined)
+          )) as string[];
+          
+          const parentMap = new Map<string, { name: string; model_no?: string }>();
+          if (parentIds.length > 0) {
+            const { data: parents, error: pErr } = await supabase
+              .from('equipment_master')
+              .select('id, name, model_no')
+              .in('id', parentIds);
+            if (parents && !pErr) {
+              parents.forEach((p: any) => {
+                parentMap.set(p.id, { name: p.name || '', model_no: p.model_no || '' });
+              });
+            }
+          }
+
           data.forEach((o: any) => {
             let eqName = '';
             let modelNo = '';
             const eq = o.equipment_master;
             if (eq) {
-              if (eq.level === 2 && eq.parent) {
-                eqName = eq.parent.name || '';
-                modelNo = eq.parent.model_no || '';
+              if (eq.level === 2 && eq.parent_id) {
+                const parentInfo = parentMap.get(eq.parent_id);
+                eqName = parentInfo?.name || '';
+                modelNo = parentInfo?.model_no || '';
               } else {
                 eqName = eq.name || '';
                 modelNo = eq.model_no || '';
