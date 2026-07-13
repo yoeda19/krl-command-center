@@ -87,20 +87,20 @@ function PipelineCard({ item, onSelect }: { item: ProcurementItem; onSelect: (it
 
   if (isLelang) {
     steps.push({ label: 'NOD', short: 'NOD', num: item.nomor_nod, planDate: item.tanggal_nod || null, realDate: item.publish_nod || null, active: !!item.publish_nod });
-    steps.push({ label: 'Spektek', short: 'Spektek', num: null, planDate: null, realDate: item.tech_spec_release_date || null, active: !!item.tech_spec_release_date });
-    steps.push({ label: 'CTPE', short: 'CTPE', num: null, planDate: null, realDate: item.rilis_evaluasi_ctpe || null, active: !!item.rilis_evaluasi_ctpe });
-    steps.push({ label: 'CTPP', short: 'CTPP', num: null, planDate: null, realDate: item.rilis_evaluasi_ctpp || null, active: !!item.rilis_evaluasi_ctpp });
-    steps.push({ label: 'RAB', short: 'RAB', num: null, planDate: null, realDate: item.rilis_rab_logistik || null, active: !!item.rilis_rab_logistik });
+    steps.push({ label: 'Spektek', short: 'Spektek', num: null, planDate: item.plan_tech_spec_release_date || null, realDate: item.tech_spec_release_date || null, active: !!item.tech_spec_release_date });
+    steps.push({ label: 'CTPE', short: 'CTPE', num: null, planDate: item.plan_rilis_evaluasi_ctpe || null, realDate: item.rilis_evaluasi_ctpe || null, active: !!item.rilis_evaluasi_ctpe });
+    steps.push({ label: 'CTPP', short: 'CTPP', num: null, planDate: item.plan_rilis_evaluasi_ctpp || null, realDate: item.rilis_evaluasi_ctpp || null, active: !!item.rilis_evaluasi_ctpp });
+    steps.push({ label: 'RAB', short: 'RAB', num: null, planDate: item.plan_rilis_rab_logistik || null, realDate: item.rilis_rab_logistik || null, active: !!item.rilis_rab_logistik });
     steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), planDate: item.tanggal_pr || null, realDate: item.pr_release_date || null, active: !!item.pr_release_date });
     steps.push({ label: 'Approval', short: 'Approval', num: null, planDate: null, realDate: item.approval_sap_status || null, active: !!item.approval_sap_status });
     steps.push({ label: 'Aanwijzing', short: 'Aanwijzing', num: null, planDate: null, realDate: item.aanwijzing_date || null, active: !!item.aanwijzing_date });
     steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), planDate: item.tanggal_po || null, realDate: item.po_release_date || null, active: !!item.po_release_date });
-    steps.push({ label: 'Goods Inspection', short: 'Inspection', num: null, planDate: null, realDate: item.goods_inspection_status || null, active: !!item.goods_inspection_status });
+    steps.push({ label: 'Goods Inspection', short: 'GI', num: null, planDate: item.plan_goods_inspection_status || null, realDate: item.goods_inspection_status || null, active: !!item.goods_inspection_status });
     steps.push({ label: 'GR', short: 'GR', num: item.nomor_gr, planDate: item.tanggal_gr || item.tanggal_rencana_pengiriman || null, realDate: item.gr_release_date || null, active: !!item.gr_release_date });
   } else {
     steps.push({ label: 'NOD', short: 'NOD', num: item.nomor_nod, planDate: item.tanggal_nod || null, realDate: item.publish_nod || null, active: !!item.publish_nod });
-    steps.push({ label: 'RAB', short: 'RAB Log', num: null, planDate: null, realDate: item.rilis_rab_logistik || null, active: !!item.rilis_rab_logistik });
-    steps.push({ label: 'Review Logistik', short: 'Review Log', num: (item.review_logistic_status || null), planDate: null, realDate: null, active: !!item.review_logistic_status });
+    steps.push({ label: 'RAB', short: 'RAB Log', num: null, planDate: item.plan_rilis_rab_logistik || null, realDate: item.rilis_rab_logistik || null, active: !!item.rilis_rab_logistik });
+    steps.push({ label: 'Review Logistik', short: 'Review Log', num: null, planDate: item.plan_review_logistic_status || null, realDate: item.review_logistic_status || null, active: !!item.review_logistic_status });
     steps.push({ label: 'PR', short: 'PR', num: (item.pr_number || item.nomor_pr || null), planDate: item.tanggal_pr || null, realDate: item.pr_release_date || null, active: !!item.pr_release_date });
     steps.push({ label: 'Approval', short: 'Approval', num: null, planDate: null, realDate: item.approval_sap_status || null, active: !!item.approval_sap_status });
     steps.push({ label: 'PO', short: 'PO', num: (item.po_number || item.nomor_po || null), planDate: item.tanggal_po || null, realDate: item.po_release_date || null, active: !!item.po_release_date });
