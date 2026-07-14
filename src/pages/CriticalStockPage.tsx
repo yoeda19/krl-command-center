@@ -311,7 +311,9 @@ export default function CriticalStockPage() {
   const [searchText, setSearchText] = useState(materialParam || '');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(materialParam);
   const [showChartWithPO, setShowChartWithPO] = useState(false);
+  const [calcMode, setCalcMode] = useState<'STANDAR' | 'RIWAYAT'>('STANDAR');
   const [isChartFullScreen, setIsChartFullScreen] = useState(false);
+  const [showInsight, setShowInsight] = useState(true);
 
   const [totalTrains, setTotalTrains] = useState(0);
   const [inMaintenanceCount, setInMaintenanceCount] = useState(0);
@@ -582,6 +584,7 @@ export default function CriticalStockPage() {
 
     // 3. Plan Terkoreksi (Depletion simulation based on spreadsheet logic):
     const corrected: number[] = [];
+    const correctedNonSaldo: (number | null)[] = [];
     let remainingStock = initialStock;
 
     let poYear = 0;
@@ -590,6 +593,30 @@ export default function CriticalStockPage() {
       const d = new Date(referenceItem.tanggal_rencana_pengiriman);
       poYear = d.getFullYear();
       poMonth = d.getMonth() + 1;
+    }
+
+    let runRateMultiplier = 1;
+    if (calcMode === 'RIWAYAT') {
+      let sumActualsForRate = 0;
+      let sumPlansForRate = 0;
+      
+      for (let yr = 2026; yr <= 2026; yr++) {
+        for (let mo = 1; mo <= 7; mo++) {
+           const hist = referenceItem.all_history?.filter(h => {
+             if (!h.tanggal) return false;
+             const dateObj = new Date(h.tanggal);
+             return dateObj.getFullYear() === yr && (dateObj.getMonth() + 1) === mo;
+           }) || [];
+           const sumQty = hist.reduce((sum, item) => sum + (item.qty || 0), 0);
+           sumActualsForRate += sumQty;
+
+           const p = referenceItem.all_plans?.find(pl => pl.tahun === yr && pl.bulan === mo);
+           sumPlansForRate += (p ? p.plan_qty : 0);
+        }
+      }
+      if (sumPlansForRate > 0) {
+        runRateMultiplier = sumActualsForRate / sumPlansForRate;
+      }
     }
 
     rangeMonths.forEach((m, idx) => {
@@ -603,10 +630,15 @@ export default function CriticalStockPage() {
         const actVal = actuals[idx] ?? 0;
         remainingStock -= actVal;
         corrected.push(actVal);
+        correctedNonSaldo.push(null);
       } else if (m.year === 2026 && m.month === 7) {
         // Current month (July 2026): deduct plan - actuals (e.g. 200 - 8 = 192)
         const actVal = actuals[idx] ?? 0;
-        const correctedPlanVal = Math.max(0, plans[idx] - actVal);
+        const adjustedPlan = Math.round(plans[idx] * runRateMultiplier);
+        const correctedPlanVal = Math.max(0, adjustedPlan - actVal);
+        
+        correctedNonSaldo.push(calcMode === 'RIWAYAT' ? correctedPlanVal : null);
+
         if (remainingStock <= 0) {
           corrected.push(0);
         } else if (remainingStock < correctedPlanVal) {
@@ -618,15 +650,18 @@ export default function CriticalStockPage() {
         }
       } else {
         // Future month (> July 2026)
-        const planVal = plans[idx];
+        const adjustedPlan = Math.round(plans[idx] * runRateMultiplier);
+        
+        correctedNonSaldo.push(calcMode === 'RIWAYAT' ? adjustedPlan : null);
+
         if (remainingStock <= 0) {
           corrected.push(0);
-        } else if (remainingStock < planVal) {
+        } else if (remainingStock < adjustedPlan) {
           corrected.push(remainingStock);
           remainingStock = 0;
         } else {
-          corrected.push(planVal);
-          remainingStock -= planVal;
+          corrected.push(adjustedPlan);
+          remainingStock -= adjustedPlan;
         }
       }
     });
@@ -637,7 +672,7 @@ export default function CriticalStockPage() {
       poIdx = rangeMonths.findIndex(m => m.year === poYear && m.month === poMonth);
     }
 
-    return { labels, plans, actuals, corrected, poIdx };
+    return { labels, plans, actuals, corrected, correctedNonSaldo, poIdx };
   })();
 
   // Ambil data dinamis hasil kalkulasi frontend
@@ -662,6 +697,33 @@ export default function CriticalStockPage() {
     return -1;
   })();
   const exhaustLabel = correctedExhaustIdx >= 0 ? chartData.labels[correctedExhaustIdx] : null;
+
+  // Insight data untuk kartu info mode Riwayat
+  const riwayatInsight = (() => {
+    if (!referenceItem || calcMode !== 'RIWAYAT') return null;
+    let sumAct = 0, sumPlan = 0;
+    for (let mo = 1; mo <= 7; mo++) {
+      const hist = referenceItem.all_history?.filter(h => {
+        if (!h.tanggal) return false;
+        const d = new Date(h.tanggal);
+        return d.getFullYear() === 2026 && (d.getMonth() + 1) === mo;
+      }) || [];
+      sumAct += hist.reduce((s, h) => s + (h.qty || 0), 0);
+      const p = referenceItem.all_plans?.find(pl => pl.tahun === 2026 && pl.bulan === mo);
+      sumPlan += p ? p.plan_qty : 0;
+    }
+    const multiplier = sumPlan > 0 ? sumAct / sumPlan : 1;
+    // Rata-rata plan terkoreksi per bulan masa depan (Ags dst)
+    const futureMonths = rangeMonths.filter(m => m.year > 2026 || (m.year === 2026 && m.month > 7));
+    const avgCorrected = futureMonths.length > 0
+      ? futureMonths.reduce((s, m) => {
+          const p = referenceItem.all_plans?.find(pl => pl.tahun === m.year && pl.bulan === m.month);
+          return s + Math.round((p ? p.plan_qty : 0) * multiplier);
+        }, 0) / futureMonths.length
+      : 0;
+    const nonSaldoMax = Math.max(...(chartData.correctedNonSaldo.filter((v): v is number => v !== null)));
+    return { sumAct, sumPlan, multiplier, avgCorrected, nonSaldoMax, exhaustLabel };
+  })();
 
   const gapMonths = referenceItem ? ((referenceItem as any).gap_to_po ?? 0) : 0;
 
@@ -759,7 +821,25 @@ export default function CriticalStockPage() {
                     Komparasi Rencana vs Aktual — <b>{referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})</b>
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Toggle Buttons: Kalkulasi Standar vs Riwayat */}
+                  <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
+                    <button
+                      onClick={() => setCalcMode('STANDAR')}
+                      className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                      style={calcMode === 'STANDAR' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
+                    >
+                      STANDAR
+                    </button>
+                    <button
+                      onClick={() => setCalcMode('RIWAYAT')}
+                      className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                      style={calcMode === 'RIWAYAT' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
+                    >
+                      RIWAYAT
+                    </button>
+                  </div>
+
                   {/* Toggle Buttons: Tanpa PO vs Dengan PO */}
                   <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
                     <button
@@ -879,6 +959,80 @@ export default function CriticalStockPage() {
                 )}
               </div>
             </div>
+
+            {/* Insight Cards — hanya muncul saat fullscreen + mode Riwayat */}
+            {isChartFullScreen && calcMode === 'RIWAYAT' && riwayatInsight && (
+              <div className="flex flex-wrap gap-3 px-5 pb-3">
+                {/* Toggle show/hide */}
+                <div className="w-full flex items-center justify-between mb-0">
+                  <span className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--color-on-surface-variant)' }}>Insight Riwayat</span>
+                  <button
+                    onClick={() => setShowInsight(v => !v)}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded border text-[10px] font-bold transition-all hover:opacity-80"
+                    style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)', backgroundColor: 'var(--color-surface-container-high)' }}
+                  >
+                    {showInsight ? (
+                      <>
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                        Sembunyikan
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        Tampilkan
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {showInsight && (
+                  <>
+                    {/* Card 1: Rumus Run Rate */}
+                    <div className="flex-1 min-w-[180px] rounded-lg border px-4 py-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
+                      <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>Run Rate Historis</p>
+                      <p className="text-xs" style={{ color: 'var(--color-on-surface)' }}>
+                        Aktual Jan–Jul: <b>{riwayatInsight.sumAct.toLocaleString('id-ID')}</b>
+                      </p>
+                      <p className="text-xs" style={{ color: 'var(--color-on-surface)' }}>
+                        Rencana Jan–Jul: <b>{riwayatInsight.sumPlan.toLocaleString('id-ID')}</b>
+                      </p>
+                      <p className="text-xs mt-1 font-bold" style={{ color: '#f59e0b' }}>
+                        Rasio: {riwayatInsight.multiplier.toFixed(2)}× lebih boros dari plan
+                      </p>
+                    </div>
+
+                    {/* Card 2: Plan Terkoreksi */}
+                    <div className="flex-1 min-w-[180px] rounded-lg border px-4 py-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: '#f59e0b' }}>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span style={{ display: 'inline-block', width: 24, height: 4, background: '#f59e0b', borderRadius: 2 }} />
+                        <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: '#f59e0b' }}>Plan Terkoreksi</p>
+                      </div>
+                      <p className="text-xs" style={{ color: 'var(--color-on-surface)' }}>
+                        Rata-rata konsumsi: <b>~{Math.round(riwayatInsight.avgCorrected).toLocaleString('id-ID')} unit/bln</b>
+                      </p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--color-on-surface)' }}>
+                        Estimasi stok habis: <b style={{ color: riwayatInsight.exhaustLabel ? '#ef4444' : 'var(--color-led-green)' }}>{riwayatInsight.exhaustLabel ?? 'Aman dalam periode'}</b>
+                      </p>
+                    </div>
+
+                    {/* Card 3: Plan Terkoreksi Non-Saldo */}
+                    <div className="flex-1 min-w-[180px] rounded-lg border px-4 py-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: '#ef4444' }}>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span style={{ display: 'inline-block', width: 24, height: 4, background: '#ef4444', borderRadius: 2 }} />
+                        <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: '#ef4444' }}>Proyeksi Kebutuhan</p>
+                      </div>
+                      <p className="text-xs" style={{ color: 'var(--color-on-surface)' }}>
+                        Kebutuhan tertinggi: <b>~{riwayatInsight.nonSaldoMax.toLocaleString('id-ID')} unit/bln</b>
+                      </p>
+                      <p className="text-xs mt-1" style={{ color: 'var(--color-on-surface-variant)' }}>
+                        Tanpa mempertimbangkan saldo saat ini
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             <ReactECharts
               option={{
                 backgroundColor: 'transparent',
@@ -914,7 +1068,7 @@ export default function CriticalStockPage() {
                   },
                 },
                 legend: {
-                  data: ['Rencana Awal', 'Realisasi Aktual', 'Plan Terkoreksi'],
+                  data: ['Rencana Awal', 'Realisasi Aktual', 'Plan Terkoreksi', 'Plan Terkoreksi (Non-Saldo)'],
                   bottom: 6,
                   itemWidth: 32,
                   itemHeight: 6,
@@ -1320,6 +1474,25 @@ export default function CriticalStockPage() {
                       };
                     })(),
                   },
+                  {
+                    name: 'Plan Terkoreksi (Non-Saldo)',
+                    type: 'line',
+                    smooth: true,
+                    smoothMonotone: 'x',
+                    symbol: 'none',
+                    lineStyle: {
+                      color: '#ef4444',
+                      width: 2,
+                      type: 'dashed',
+                      shadowColor: 'rgba(239,68,68,0.3)',
+                      shadowBlur: 4,
+                      shadowOffsetY: 2,
+                    },
+                    itemStyle: { color: '#ef4444' },
+                    emphasis: { disabled: true },
+                    z: 1,
+                    data: chartData.correctedNonSaldo,
+                  },
                 ],
               }}
               style={{ height: isChartFullScreen ? 'calc(100vh - 180px)' : 570, backgroundColor: 'var(--color-background-metallic)' }}
@@ -1332,10 +1505,10 @@ export default function CriticalStockPage() {
         <div className="space-y-6">
           {/* KPI Cards (2x2 Grid) */}
           <div className="grid grid-cols-2 gap-4">
-            <KpiCard label="Status Kritis" value={countKritis} unit="Material" borderColor="#ef4444" ledStatus={countKritis > 0 ? "red" : "green"} sparkData={[3, 2, 2, 3, 3, 3]} />
-            <KpiCard label="Status Waspada" value={countWaspada} unit="Material" borderColor="var(--color-led-amber)" ledStatus={countWaspada > 0 ? "amber" : "green"} sparkData={[5, 4, 3, 3, 4, 3]} />
-            <KpiCard label="Status Aman" value={countAman} unit="Material" borderColor="var(--color-led-green)" ledStatus="green" sparkData={[10, 11, 12, 13, 14, 15]} />
-            <KpiCard label="Dead Stock" value={countDeadStock} unit="Material" borderColor="#9ca3af" sparkData={[2, 2, 1, 1, 1, 1]} />
+            <KpiCard label="Status Kritis" value={countKritis} borderColor="#ef4444" ledStatus={countKritis > 0 ? "red" : "green"} sparkData={[3, 2, 2, 3, 3, 3]} />
+            <KpiCard label="Status Waspada" value={countWaspada} borderColor="var(--color-led-amber)" ledStatus={countWaspada > 0 ? "amber" : "green"} sparkData={[5, 4, 3, 3, 4, 3]} />
+            <KpiCard label="Status Aman" value={countAman} borderColor="var(--color-led-green)" ledStatus="green" sparkData={[10, 11, 12, 13, 14, 15]} />
+            <KpiCard label="Dead Stock" value={countDeadStock} borderColor="#9ca3af" sparkData={[2, 2, 1, 1, 1, 1]} />
           </div>
 
           {/* ECharts — Pie Chart Status Distribusi */}

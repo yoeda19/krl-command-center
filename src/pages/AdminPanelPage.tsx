@@ -690,7 +690,7 @@ export default function AdminPanelPage() {
         updatedPO.vendor = updatedPO.vendor_sap || '';
         updatedPO.nomor_po = updatedPO.po_number || '';
         updatedPO.nomor_pr = updatedPO.pr_number || '';
-        updatedPO.tanggal_rencana_pengiriman = updatedPO.tanggal_gr || '';
+        updatedPO.tanggal_rencana_pengiriman = updatedPO.tanggal_gr || null;
         updatedPO.tanggal_penerimaan_barang = updatedPO.gr_release_date || null;
         updatedPO.tanggal_tiba_depo = updatedPO.gr_release_date || null;
 
@@ -734,7 +734,7 @@ export default function AdminPanelPage() {
         finalNewPO.vendor = finalNewPO.vendor_sap || '';
         finalNewPO.nomor_po = finalNewPO.po_number || '';
         finalNewPO.nomor_pr = finalNewPO.pr_number || '';
-        finalNewPO.tanggal_rencana_pengiriman = finalNewPO.tanggal_gr || '';
+        finalNewPO.tanggal_rencana_pengiriman = finalNewPO.tanggal_gr || null;
         finalNewPO.tanggal_penerimaan_barang = finalNewPO.gr_release_date || null;
         finalNewPO.tanggal_tiba_depo = finalNewPO.gr_release_date || null;
 

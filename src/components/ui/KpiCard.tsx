@@ -76,16 +76,19 @@ export default function KpiCard({
             const max = Math.max(...sparkData);
             const pct = max > 0 ? (v / max) * 100 : 0;
             const isLast = i === sparkData.length - 1;
+            // CSS variable colors can't use hex alpha — use opacity instead
+            const isHex = borderColor?.startsWith('#');
+            const barBg = isLast
+              ? (borderColor ?? 'var(--color-secondary)')
+              : (isHex ? `${borderColor}99` : (borderColor ?? 'var(--color-on-surface-variant)'));
             return (
               <div
                 key={i}
                 className="flex-1 rounded-t transition-all"
                 style={{
                   height: `${Math.max(10, pct)}%`,
-                  backgroundColor: isLast
-                    ? (borderColor ?? 'var(--color-secondary)')
-                    : (borderColor ? `${borderColor}40` : 'var(--color-on-surface-variant)'),
-                  opacity: isLast ? 1 : 0.4,
+                  backgroundColor: barBg,
+                  opacity: isLast ? 1 : (isHex ? 0.65 : 0.55),
                 }}
               />
             );
