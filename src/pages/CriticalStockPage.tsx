@@ -314,6 +314,7 @@ export default function CriticalStockPage() {
   const [calcMode, setCalcMode] = useState<'STANDAR' | 'RIWAYAT'>('STANDAR');
   const [isChartFullScreen, setIsChartFullScreen] = useState(false);
   const [showInsight, setShowInsight] = useState(true);
+  const [runRateLookback, setRunRateLookback] = useState<number>(6);
 
   const [totalTrains, setTotalTrains] = useState(0);
   const [inMaintenanceCount, setInMaintenanceCount] = useState(0);
@@ -600,20 +601,25 @@ export default function CriticalStockPage() {
       let sumActualsForRate = 0;
       let sumPlansForRate = 0;
       
-      for (let yr = 2026; yr <= 2026; yr++) {
-        for (let mo = 1; mo <= 7; mo++) {
-           const hist = referenceItem.all_history?.filter(h => {
-             if (!h.tanggal) return false;
-             const dateObj = new Date(h.tanggal);
-             return dateObj.getFullYear() === yr && (dateObj.getMonth() + 1) === mo;
-           }) || [];
-           const sumQty = hist.reduce((sum, item) => sum + (item.qty || 0), 0);
-           sumActualsForRate += sumQty;
-
-           const p = referenceItem.all_plans?.find(pl => pl.tahun === yr && pl.bulan === mo);
-           sumPlansForRate += (p ? p.plan_qty : 0);
-        }
+      const lookbackMonthsList: { year: number; month: number }[] = [];
+      for (let i = 0; i < runRateLookback; i++) {
+        const d = new Date(2026, 6 - i, 1);
+        lookbackMonthsList.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
       }
+
+      lookbackMonthsList.forEach(m => {
+        const hist = referenceItem.all_history?.filter(h => {
+          if (!h.tanggal) return false;
+          const dateObj = new Date(h.tanggal);
+          return dateObj.getFullYear() === m.year && (dateObj.getMonth() + 1) === m.month;
+        }) || [];
+        const sumQty = hist.reduce((sum, item) => sum + (item.qty || 0), 0);
+        sumActualsForRate += sumQty;
+
+        const p = referenceItem.all_plans?.find(pl => pl.tahun === m.year && pl.bulan === m.month);
+        sumPlansForRate += (p ? p.plan_qty : 0);
+      });
+
       if (sumPlansForRate > 0) {
         runRateMultiplier = sumActualsForRate / sumPlansForRate;
       }
@@ -702,16 +708,24 @@ export default function CriticalStockPage() {
   const riwayatInsight = (() => {
     if (!referenceItem || calcMode !== 'RIWAYAT') return null;
     let sumAct = 0, sumPlan = 0;
-    for (let mo = 1; mo <= 7; mo++) {
+    
+    const lookbackMonthsList: { year: number; month: number }[] = [];
+    for (let i = 0; i < runRateLookback; i++) {
+      const d = new Date(2026, 6 - i, 1);
+      lookbackMonthsList.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+    }
+
+    lookbackMonthsList.forEach(m => {
       const hist = referenceItem.all_history?.filter(h => {
         if (!h.tanggal) return false;
         const d = new Date(h.tanggal);
-        return d.getFullYear() === 2026 && (d.getMonth() + 1) === mo;
+        return d.getFullYear() === m.year && (dateObj => dateObj.getMonth() + 1)(new Date(h.tanggal)) === m.month;
       }) || [];
       sumAct += hist.reduce((s, h) => s + (h.qty || 0), 0);
-      const p = referenceItem.all_plans?.find(pl => pl.tahun === 2026 && pl.bulan === mo);
+      const p = referenceItem.all_plans?.find(pl => pl.tahun === m.year && pl.bulan === m.month);
       sumPlan += p ? p.plan_qty : 0;
-    }
+    });
+
     const multiplier = sumPlan > 0 ? sumAct / sumPlan : 1;
     // Rata-rata plan terkoreksi per bulan masa depan (Ags dst)
     const futureMonths = rangeMonths.filter(m => m.year > 2026 || (m.year === 2026 && m.month > 7));
@@ -722,7 +736,20 @@ export default function CriticalStockPage() {
         }, 0) / futureMonths.length
       : 0;
     const nonSaldoMax = Math.max(...(chartData.correctedNonSaldo.filter((v): v is number => v !== null)));
-    return { sumAct, sumPlan, multiplier, avgCorrected, nonSaldoMax, exhaustLabel };
+    
+    // Generate label range bulan dynamic (misalnya "Feb-Jul '26" atau "Nov '25 - Jul '26")
+    const startMObj = lookbackMonthsList[lookbackMonthsList.length - 1];
+    const endMObj = lookbackMonthsList[0];
+    const BULAN_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+    
+    let rangeLabel = "";
+    if (startMObj.year === endMObj.year) {
+      rangeLabel = `${BULAN_SHORT[startMObj.month - 1]}-${BULAN_SHORT[endMObj.month - 1]} '${String(startMObj.year).slice(2)}`;
+    } else {
+      rangeLabel = `${BULAN_SHORT[startMObj.month - 1]} '${String(startMObj.year).slice(2)} - ${BULAN_SHORT[endMObj.month - 1]} '${String(endMObj.year).slice(2)}`;
+    }
+
+    return { sumAct, sumPlan, multiplier, avgCorrected, nonSaldoMax, exhaustLabel, rangeLabel };
   })();
 
   const gapMonths = referenceItem ? ((referenceItem as any).gap_to_po ?? 0) : 0;
@@ -930,6 +957,22 @@ export default function CriticalStockPage() {
                   {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
 
+                {calcMode === 'RIWAYAT' && (
+                  <>
+                    <span className="font-bold text-xs ml-2" style={{ color: 'var(--color-on-surface-variant)' }}>Analisis:</span>
+                    <select
+                      value={runRateLookback}
+                      onChange={e => setRunRateLookback(Number(e.target.value))}
+                      className="rounded px-2 py-1 border font-medium text-xs"
+                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                        <option key={n} value={n}>{n} Bulan Terakhir</option>
+                      ))}
+                    </select>
+                  </>
+                )}
+
                 {/* Error Range */}
                 {isRangeInvalid && (
                   <span className="text-xs font-semibold px-2 py-0.5 rounded ml-auto flex items-center gap-1" style={{ backgroundColor: 'rgba(220,38,38,0.12)', color: 'var(--color-led-red)' }}>
@@ -989,12 +1032,12 @@ export default function CriticalStockPage() {
                   <>
                     {/* Card 1: Rumus Run Rate */}
                     <div className="flex-1 min-w-[180px] rounded-lg border px-4 py-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
-                      <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>Run Rate Historis</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>Run Rate Historis ({riwayatInsight.rangeLabel})</p>
                       <p className="text-xs" style={{ color: 'var(--color-on-surface)' }}>
-                        Aktual Jan–Jul: <b>{riwayatInsight.sumAct.toLocaleString('id-ID')}</b>
+                        Aktual: <b>{riwayatInsight.sumAct.toLocaleString('id-ID')}</b>
                       </p>
                       <p className="text-xs" style={{ color: 'var(--color-on-surface)' }}>
-                        Rencana Jan–Jul: <b>{riwayatInsight.sumPlan.toLocaleString('id-ID')}</b>
+                        Rencana: <b>{riwayatInsight.sumPlan.toLocaleString('id-ID')}</b>
                       </p>
                       <p className="text-xs mt-1 font-bold" style={{ color: '#f59e0b' }}>
                         Rasio: {riwayatInsight.multiplier.toFixed(2)}× lebih boros dari plan
