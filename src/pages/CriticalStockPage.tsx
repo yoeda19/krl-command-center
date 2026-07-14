@@ -1030,7 +1030,7 @@ export default function CriticalStockPage() {
                 {showInsight && (
                   <>
                     {/* Card 1: Rumus Run Rate */}
-                    <div className="flex-1 min-w-[180px] rounded-lg border px-4 py-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
+                    <div className="flex-none w-[280px] rounded-lg border px-4 py-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
                       <p className="text-[10px] font-black uppercase tracking-widest mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>Run Rate Historis ({riwayatInsight.rangeLabel})</p>
                       <p className="text-xs" style={{ color: 'var(--color-on-surface)' }}>
                         Aktual: <b>{riwayatInsight.sumAct.toLocaleString('id-ID')}</b>
@@ -1044,7 +1044,7 @@ export default function CriticalStockPage() {
                     </div>
 
                     {/* Card 2: Plan Terkoreksi */}
-                    <div className="flex-1 min-w-[180px] rounded-lg border px-4 py-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: '#f59e0b' }}>
+                    <div className="flex-none w-[280px] rounded-lg border px-4 py-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: '#f59e0b' }}>
                       <div className="flex items-center gap-2 mb-1.5">
                         <span style={{ display: 'inline-block', width: 24, height: 4, background: '#f59e0b', borderRadius: 2 }} />
                         <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: '#f59e0b' }}>Plan Terkoreksi</p>
@@ -1058,7 +1058,7 @@ export default function CriticalStockPage() {
                     </div>
 
                     {/* Card 3: Plan Terkoreksi Non-Saldo */}
-                    <div className="flex-1 min-w-[180px] rounded-lg border px-4 py-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: '#ef4444' }}>
+                    <div className="flex-none w-[280px] rounded-lg border px-4 py-3" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: '#ef4444' }}>
                       <div className="flex items-center gap-2 mb-1.5">
                         <span style={{ display: 'inline-block', width: 24, height: 4, background: '#ef4444', borderRadius: 2 }} />
                         <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: '#ef4444' }}>Proyeksi Kebutuhan</p>
