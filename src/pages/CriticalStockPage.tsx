@@ -74,8 +74,39 @@ function calculateDynamicMetrics(
   item: CriticalStockItem,
   rangeMonths: { year: number; month: number; label: string }[],
   endYear: number,
-  endMonth: number
+  endMonth: number,
+  calcMode?: 'STANDAR' | 'RIWAYAT',
+  runRateLookback?: number
 ) {
+  let runRateMultiplier = 1;
+  if (calcMode === 'RIWAYAT' && runRateLookback) {
+    let sumActualsForRate = 0;
+    let sumPlansForRate = 0;
+    
+    const lookbackMonthsList: { year: number; month: number }[] = [];
+    for (let i = 0; i < runRateLookback; i++) {
+      const d = new Date(2026, 6 - i, 1);
+      lookbackMonthsList.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+    }
+
+    lookbackMonthsList.forEach(m => {
+      const hist = item.all_history?.filter(h => {
+        if (!h.tanggal) return false;
+        const dateObj = new Date(h.tanggal);
+        return dateObj.getFullYear() === m.year && (dateObj.getMonth() + 1) === m.month;
+      }) || [];
+      const sumQty = hist.reduce((sum, it) => sum + (it.qty || 0), 0);
+      sumActualsForRate += sumQty;
+
+      const p = item.all_plans?.find(pl => pl.tahun === m.year && pl.bulan === m.month);
+      sumPlansForRate += (p ? p.plan_qty : 0);
+    });
+
+    if (sumPlansForRate > 0) {
+      runRateMultiplier = sumActualsForRate / sumPlansForRate;
+    }
+  }
+
   const plans = rangeMonths.map(m => {
     const p = item.all_plans?.find(p => p.tahun === m.year && p.bulan === m.month);
     return p ? p.plan_qty : 0;
@@ -115,7 +146,7 @@ function calculateDynamicMetrics(
   // Helper to project future exhaustion if not depleted within filter range
   const projectExhaustion = (remainingStock: number, lastMonth: { year: number; month: number }) => {
     // Cari rata-rata konsumsi rencana bulanan
-    const avgConsumption = plans.length > 0 ? (plans.reduce((s, p) => s + p, 0) / plans.length) : 0;
+    const avgConsumption = plans.length > 0 ? ((plans.reduce((s, p) => s + p, 0) / plans.length) * runRateMultiplier) : 0;
     if (avgConsumption <= 0 || remainingStock <= 0) {
       return '-'; // Tidak ada konsumsi rencana atau stok kosong
     }
@@ -155,9 +186,13 @@ function calculateDynamicMetrics(
     // Bulan lalu dikurangi realisasi aktual
     if (m.year < 2026 || (m.year === 2026 && m.month < 7)) {
       correctedStockNoPO -= (actuals[i] ?? 0);
+    } else if (m.year === 2026 && m.month === 7) {
+      const actVal = actuals[i] ?? 0;
+      const adjustedPlan = Math.round(plans[i] * runRateMultiplier);
+      correctedStockNoPO -= Math.max(0, adjustedPlan - actVal);
     } else {
       // Bulan berjalan (Juli 2026) dan masa depan dikurangi rencana
-      correctedStockNoPO -= plans[i];
+      correctedStockNoPO -= Math.round(plans[i] * runRateMultiplier);
     }
     if (correctedStockNoPO <= 0) {
       correctedExhaustionIndexNoPO = i;
@@ -182,9 +217,13 @@ function calculateDynamicMetrics(
     // Bulan lalu dikurangi realisasi aktual
     if (m.year < 2026 || (m.year === 2026 && m.month < 7)) {
       correctedStockWithPO -= (actuals[i] ?? 0);
+    } else if (m.year === 2026 && m.month === 7) {
+      const actVal = actuals[i] ?? 0;
+      const adjustedPlan = Math.round(plans[i] * runRateMultiplier);
+      correctedStockWithPO -= Math.max(0, adjustedPlan - actVal);
     } else {
       // Bulan berjalan dan masa depan dikurangi rencana
-      correctedStockWithPO -= plans[i];
+      correctedStockWithPO -= Math.round(plans[i] * runRateMultiplier);
     }
     if (correctedStockWithPO <= 0) {
       correctedExhaustionIndexWithPO = i;
@@ -475,7 +514,7 @@ export default function CriticalStockPage() {
       const t_exhaustion = item.cr_actual > 0 ? Math.round((item.current_stock / item.cr_actual) * 10) / 10 : 99;
       
       // 1. Hitung Plan Exhaustion (Dipengaruhi Filter Periode Layar)
-      const { planExhaustionLabel } = calculateDynamicMetrics(item, rangeMonths, endYear, endMonth);
+      const { planExhaustionLabel } = calculateDynamicMetrics(item, rangeMonths, endYear, endMonth, calcMode, runRateLookback);
 
       // 2. Hitung Penyerapan Riil, Gap, dan Status PO (Absolut / Tidak Terpengaruh Filter)
       const { 
@@ -487,7 +526,7 @@ export default function CriticalStockPage() {
         statusPlanNoPO, 
         statusPlanWithPO, 
         statusPO 
-      } = calculateDynamicMetrics(item, absoluteRangeMonths, 2028, 12);
+      } = calculateDynamicMetrics(item, absoluteRangeMonths, 2028, 12, calcMode, runRateLookback);
 
       // Tanggal Rencana Kirim PO dari database (jika ada)
       const poDate = (item as any).tanggal_rencana_pengiriman;
@@ -683,7 +722,7 @@ export default function CriticalStockPage() {
 
   // Ambil data dinamis hasil kalkulasi frontend
   const planExhaustLabel = referenceItem ? (() => {
-    const { planExhaustionLabel } = calculateDynamicMetrics(referenceItem, rangeMonths, endYear, endMonth);
+    const { planExhaustionLabel } = calculateDynamicMetrics(referenceItem, rangeMonths, endYear, endMonth, calcMode, runRateLookback);
     return planExhaustionLabel !== 'Aman' ? planExhaustionLabel : null;
   })() : null;
 
@@ -691,15 +730,24 @@ export default function CriticalStockPage() {
 
   // Cari titik habis stok dari Plan Terkoreksi (corrected)
   const correctedExhaustIdx = (() => {
+    // Hanya cari titik habis stok dari bulan berjalan (Juli 2026) ke depan
+    const currentMonthIdx = rangeMonths.findIndex(m => m.year === 2026 && m.month === 7);
+    const startScanIdx = currentMonthIdx !== -1 ? currentMonthIdx : 1;
+    
+    // Jika di bulan berjalan (Juli 2026) stoknya memang sudah 0, langsung kembalikan bulan berjalan
+    if ((chartData.corrected[startScanIdx] ?? 0) === 0) {
+      return startScanIdx;
+    }
+    
     // Cari index pertama di mana nilai corrected menjadi 0 setelah sebelumnya > 0
-    for (let i = 1; i < chartData.corrected.length; i++) {
+    for (let i = startScanIdx + 1; i < chartData.corrected.length; i++) {
       const prev = chartData.corrected[i - 1];
       const curr = chartData.corrected[i];
       if ((prev ?? 0) > 0 && (curr ?? 0) === 0) return i;
     }
     // Jika tidak ada titik 0, lihat apakah nilai terakhir = 0
     const lastIdx = chartData.corrected.length - 1;
-    if (lastIdx >= 0 && (chartData.corrected[lastIdx] ?? 0) === 0) return lastIdx;
+    if (lastIdx >= startScanIdx && (chartData.corrected[lastIdx] ?? 0) === 0) return lastIdx;
     return -1;
   })();
   const exhaustLabel = correctedExhaustIdx >= 0 ? chartData.labels[correctedExhaustIdx] : null;
@@ -752,18 +800,24 @@ export default function CriticalStockPage() {
     return { sumAct, sumPlan, multiplier, avgCorrected, nonSaldoMax, exhaustLabel, rangeLabel };
   })();
 
-  const gapMonths = referenceItem ? ((referenceItem as any).gap_to_po ?? 0) : 0;
+  const gapMonths = referenceItem
+    ? (showChartWithPO
+        ? (referenceItem as any).gap_to_po ?? 0
+        : (referenceItem as any).gap_no_po ?? 0)
+    : 0;
 
   const dynamicStatus = (() => {
     if (isRangeInvalid || !referenceItem) return { label: 'TIDAK VALID', color: '#9ca3af', bg: 'rgba(156,163,175,0.12)' };
-    const s = (referenceItem as any).status_po ?? 'BELUM PO';
+    const s = showChartWithPO
+      ? (referenceItem as any).status_po ?? 'BELUM PO'
+      : (referenceItem as any).status_no_po ?? 'KRITIS';
     return {
       label: s,
-      color: s === 'KRITIS' || s === 'BELUM PO' ? 'var(--color-led-red)'
-        : s === 'WASPADA' ? 'var(--color-led-amber)'
+      color: s === 'KRITIS' || s === 'BELUM PO' || s === 'FAST MOVING' ? 'var(--color-led-red)'
+        : s === 'WASPADA' || s === 'SLOW MOVING' ? 'var(--color-led-amber)'
         : 'var(--color-led-green)',
-      bg: s === 'KRITIS' || s === 'BELUM PO' ? 'rgba(220,38,38,0.12)'
-        : s === 'WASPADA' ? 'rgba(217,119,6,0.12)'
+      bg: s === 'KRITIS' || s === 'BELUM PO' || s === 'FAST MOVING' ? 'rgba(220,38,38,0.12)'
+        : s === 'WASPADA' || s === 'SLOW MOVING' ? 'rgba(217,119,6,0.12)'
         : 'rgba(22,163,74,0.12)'
     };
   })();
@@ -1736,11 +1790,11 @@ export default function CriticalStockPage() {
                 ))}
                 {/* Tanpa PO Group */}
                 <th colSpan={5} className="px-2 py-1.5 text-[10px] font-black tracking-widest uppercase text-center whitespace-nowrap border-b border-r" style={{ color: 'var(--color-led-amber)', backgroundColor: 'rgba(217,119,6,0.08)', borderColor: 'var(--color-steel-border)' }}>
-                  TANPA PO
+                  TANPA PO ({calcMode})
                 </th>
                 {/* Dengan PO Group */}
                 <th colSpan={5} className="px-2 py-1.5 text-[10px] font-black tracking-widest uppercase text-center whitespace-nowrap border-b border-r" style={{ color: 'var(--color-led-green)', backgroundColor: 'rgba(16,185,129,0.08)', borderColor: 'var(--color-steel-border)' }}>
-                  DENGAN PO
+                  DENGAN PO ({calcMode})
                 </th>
                 <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-center whitespace-nowrap align-middle border-b" style={{ color: 'var(--color-on-primary-container)' }}>Aksi</th>
               </tr>

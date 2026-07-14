@@ -15,6 +15,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     totalFleet: '101',
     materialCount: '8',
   });
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -42,28 +43,36 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     };
   }, []);
 
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => {
-      let finalEmail = username.trim();
-      let finalName = '';
-      
-      if (finalEmail.includes('@')) {
-        const parts = finalEmail.split('@');
-        finalName = parts[0].split('.')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-      } else {
-        finalName = finalEmail.split('.')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
-        finalEmail = `${finalEmail.toLowerCase()}@krl.co.id`;
+    setErrorMsg(null);
+
+    try {
+      const { supabase } = await import('../lib/supabaseClient');
+      const { data, error } = await supabase
+        .from('app_admins')
+        .select('*')
+        .eq('username', username.trim())
+        .eq('password', password)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Database query error:', error);
+        setErrorMsg('Gagal memverifikasi akun ke sistem. Silakan coba kembali.');
+        setLoading(false);
+        return;
+      }
+
+      if (!data) {
+        setErrorMsg('Nama pengguna atau kata sandi salah.');
+        setLoading(false);
+        return;
       }
 
       const authData = { 
-        email: finalEmail || 'dev@prisma.co.id', 
-        name: finalName || 'Dev Admin', 
+        email: data.email || 'admin@krl.co.id', 
+        name: data.name || 'Admin', 
         role: 'Admin' 
       };
 
@@ -73,7 +82,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
       onLogin?.();
       navigate('/critical-stock');
-    }, 1200);
+    } catch (err) {
+      console.error('Login process error:', err);
+      setErrorMsg('Terjadi kesalahan saat memproses log in.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -117,6 +131,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-5">
+            {errorMsg && (
+              <div className="p-3 rounded bg-red-950/60 border border-red-500 text-xs text-red-100 text-center font-bold">
+                {errorMsg}
+              </div>
+            )}
             {/* Username Input */}
             <div className="space-y-1.5">
               <label className="block text-[10px] font-bold text-red-100 uppercase tracking-widest">
