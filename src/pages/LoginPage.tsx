@@ -92,8 +92,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row" style={{ backgroundColor: '#ffffff' }}>
-      {/* Left panel — PRISMA Branding (White background) */}
-      <div className="flex-1 flex flex-col justify-center p-8 lg:p-16 relative overflow-hidden bg-white">
+      {/* Left panel — PRISMA Branding (White background - hidden on mobile) */}
+      <div className="hidden lg:flex flex-1 flex flex-col justify-center p-8 lg:p-16 relative overflow-hidden bg-white">
         {/* Subtle dot grid pattern */}
         <div
           className="absolute inset-0 opacity-[0.03]"
@@ -118,16 +118,21 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </p>
           </div>
         </div>
-      </div>      {/* Right panel — KAI Red background & Login form */}
+      </div>
+      {/* Right panel — KAI Red background & Login form (Full screen on mobile) */}
       <div 
-        className="w-full lg:w-[480px] flex-shrink-0 flex flex-col justify-center p-8 lg:p-12 relative"
+        className="w-full lg:w-[480px] h-screen lg:min-h-screen flex-shrink-0 flex flex-col justify-center p-8 lg:p-12 relative"
         style={{ backgroundColor: '#c8102e' }}
       >
         {/* Center Form Container (No card wrapper) */}
         <div className="relative z-10 my-auto w-full max-w-[320px] mx-auto">
-          {/* Logo KAI Commuter */}
-          <div className="flex justify-center mb-8">
-            <img src="/kai-commuter.png" alt="KAI Commuter Logo" className="h-14 object-contain" />
+          {/* Logo KAI Commuter & PRISMA */}
+          <div className="flex flex-col items-center gap-3 mb-6">
+            <img src="/kai-commuter.png" alt="KAI Commuter Logo" className="h-10 object-contain" />
+            <div className="flex items-center gap-1.5 lg:hidden">
+              <img src="/logo.svg" alt="PRISMA Logo" className="w-5 h-5 object-contain filter brightness-0 invert" />
+              <span className="text-xs font-bold text-white tracking-widest uppercase">PRISMA Command Center</span>
+            </div>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-5">
