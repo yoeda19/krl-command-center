@@ -24,7 +24,7 @@ interface ProtectedLayoutProps {
 
 function ProtectedLayout({ theme, onThemeToggle, collapsed, onToggle }: ProtectedLayoutProps) {
   const location = useLocation();
-  const { isAuthenticated } = useAppStore();
+  const { isAuthenticated, userRole } = useAppStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
@@ -76,8 +76,22 @@ function ProtectedLayout({ theme, onThemeToggle, collapsed, onToggle }: Protecte
           <Route path="/slow-moving"   element={<StockAgingPage />} />
           <Route path="/work-order"    element={<WorkOrderPage />} />
           <Route path="/composition"   element={<TrainCompositionPage />} />
-          <Route path="/admin-panel"   element={<AdminPanelPage />} />
-          <Route path="/audit-log"     element={<AuditLogPage />} />
+          <Route 
+            path="/admin-panel"   
+            element={
+              userRole?.toLowerCase() === 'viewer'
+                ? <Navigate to="/critical-stock" replace />
+                : <AdminPanelPage />
+            } 
+          />
+          <Route 
+            path="/audit-log"   
+            element={
+              userRole?.toLowerCase() === 'viewer'
+                ? <Navigate to="/critical-stock" replace />
+                : <AuditLogPage />
+            } 
+          />
           <Route path="*"              element={<Navigate to="/critical-stock" replace />} />
         </Routes>
       </div>

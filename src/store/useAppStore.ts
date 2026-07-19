@@ -3,6 +3,7 @@ import type { CriticalStockItem, SlowMovingItem } from '../types';
 
 interface AppState {
   isAuthenticated: boolean;
+  userRole: string;
   criticalStockData: CriticalStockItem[];
   slowMovingData: SlowMovingItem[];
   isDataLoaded: boolean;
@@ -19,6 +20,7 @@ interface AppState {
 
 export const useAppStore = create<AppState>((set) => ({
   isAuthenticated: typeof window !== 'undefined' ? !!localStorage.getItem('krl_auth') : false,
+  userRole: typeof window !== 'undefined' ? (JSON.parse(localStorage.getItem('krl_auth') || '{}').role || 'Admin') : 'Admin',
   criticalStockData: [],
   slowMovingData: [],
   isDataLoaded: false,
@@ -32,13 +34,13 @@ export const useAppStore = create<AppState>((set) => ({
     localStorage.setItem('krl_auth', JSON.stringify(authData));
     localStorage.setItem('krl_admin_email', authData.email);
     localStorage.setItem('krl_admin_name', authData.name);
-    set({ isAuthenticated: true });
+    set({ isAuthenticated: true, userRole: authData.role || 'Admin' });
   },
   logout: () => {
     localStorage.removeItem('krl_auth');
     localStorage.removeItem('krl_admin_email');
     localStorage.removeItem('krl_admin_name');
-    set({ isAuthenticated: false, criticalStockData: [], slowMovingData: [], isDataLoaded: false });
+    set({ isAuthenticated: false, userRole: 'Admin', criticalStockData: [], slowMovingData: [], isDataLoaded: false });
   },
   clearCache: () => set({ criticalStockData: [], slowMovingData: [], isDataLoaded: false }),
 }));

@@ -74,7 +74,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       const authData = { 
         email: data.email || 'admin@krl.co.id', 
         name: data.name || 'Admin', 
-        role: 'Admin' 
+        role: data.role || 'Admin' 
       };
 
       useAppStore.getState().login(authData);
@@ -203,14 +203,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               disabled={loading}
               className="w-full max-w-[120px] mx-auto bg-white hover:bg-red-50 text-red-700 font-bold py-3 px-4 rounded-lg text-sm tracking-widest transition-all shadow-md hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none mt-2 flex items-center justify-center gap-2"
             >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-red-700 border-t-transparent rounded-full animate-spin" />
-                  <span>MEMPROSES...</span>
-                </>
-              ) : (
-                <span>LOG IN</span>
-              )}
+              <span>LOG IN</span>
             </button>
           </form>
 

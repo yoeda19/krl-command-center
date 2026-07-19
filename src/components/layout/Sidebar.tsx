@@ -1,4 +1,5 @@
 import { NavLink } from 'react-router-dom';
+import { useAppStore } from '../../store/useAppStore';
 
 // SVG icon components — bersih, tidak ada AI-generated icon
 const Icons = {
@@ -82,6 +83,15 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: SidebarProps) {
+  const { userRole } = useAppStore();
+  const isViewer = userRole?.toLowerCase() === 'viewer';
+  const visibleNavItems = navItems.filter(item => {
+    if (isViewer && (item.path === '/admin-panel' || item.path === '/audit-log')) {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <>
       {mobileOpen && (
@@ -129,7 +139,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
       {/* ── Nav ── */}
       <div className="flex-1 overflow-y-auto py-2">
         <ul className="space-y-0.5 px-2">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <li key={item.path}>
               <NavLink
                 to={item.path}
