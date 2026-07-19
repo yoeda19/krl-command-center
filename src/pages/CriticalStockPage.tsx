@@ -316,23 +316,7 @@ function calculateDynamicMetrics(
     }
   }
 
-  if (item.nomor_material === '6005530') {
-    console.log('TRACE 6005530:', {
-      initialStock,
-      poYear,
-      poMonth,
-      jumlah_dipesan: item.jumlah_dipesan,
-      planExhaustionLabel,
-      correctedExhaustionLabelNoPO,
-      correctedExhaustionLabelWithPO,
-      gapNoPO,
-      gapWithPO,
-      gapToPO,
-      statusPlanNoPO,
-      statusPlanWithPO,
-      statusPO
-    });
-  }
+
 
   return {
     planExhaustionLabel,
@@ -446,7 +430,7 @@ export default function CriticalStockPage() {
       }
     }
     loadData();
-  }, [isDataLoaded, criticalStockData, setCriticalStockData, setIsDataLoaded]);
+  }, [isDataLoaded]);
 
   // Generate list of months in the selected range
   const rangeMonths = (() => {

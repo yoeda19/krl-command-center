@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getMasterMaterials, getFleetMetrics } from '../services/supabaseService';
+import { useAppStore } from '../store/useAppStore';
 
 interface LoginPageProps {
   onLogin?: () => void;
@@ -76,10 +77,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         role: 'Admin' 
       };
 
-      localStorage.setItem('krl_auth', JSON.stringify(authData));
-      localStorage.setItem('krl_admin_email', authData.email);
-      localStorage.setItem('krl_admin_name', authData.name);
-
+      useAppStore.getState().login(authData);
       onLogin?.();
       navigate('/critical-stock');
     } catch (err) {
@@ -93,10 +91,16 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row" style={{ backgroundColor: '#ffffff' }}>
       {/* Left panel — PRISMA Branding (White background - hidden on mobile) */}
-      <div className="hidden lg:flex flex-1 flex flex-col justify-center p-8 lg:p-16 relative overflow-hidden bg-white">
+      <div 
+        className="hidden lg:flex flex-1 flex flex-col justify-center p-8 lg:p-16 relative overflow-hidden bg-cover bg-center"
+        style={{ backgroundImage: "url('/Picture1.jpg')" }}
+      >
+        {/* Semi-transparent white overlay to ensure text readability */}
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-[1px] z-0" />
+
         {/* Subtle dot grid pattern */}
         <div
-          className="absolute inset-0 opacity-[0.03]"
+          className="absolute inset-0 opacity-[0.03] z-10"
           style={{
             backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)',
             backgroundSize: '24px 24px',
@@ -104,7 +108,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         />
 
         {/* Center Content */}
-        <div className="relative z-10 py-12 max-w-xl mx-auto text-center flex flex-col items-center">
+        <div className="relative z-20 py-12 max-w-xl mx-auto text-center flex flex-col items-center">
           <div className="flex flex-col items-center">
             <img src="/logo.svg" alt="PRISMA Logo" className="w-[120px] h-[120px] mb-6 object-contain" />
             <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 mb-4">
@@ -118,21 +122,24 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </p>
           </div>
         </div>
-      </div>
-      {/* Right panel — KAI Red background & Login form (Full screen on mobile) */}
+      </div>      {/* Right panel — KAI Red background & Login form */}
       <div 
-        className="w-full lg:w-[480px] h-screen lg:min-h-screen flex-shrink-0 flex flex-col justify-center p-8 lg:p-12 relative"
+        className="w-full lg:w-[480px] h-screen lg:min-h-screen flex-shrink-0 flex flex-col justify-center p-6 lg:p-12 relative"
         style={{ backgroundColor: '#c8102e' }}
       >
         {/* Center Form Container (No card wrapper) */}
-        <div className="relative z-10 my-auto w-full max-w-[320px] mx-auto">
-          {/* Logo KAI Commuter & PRISMA */}
-          <div className="flex flex-col items-center gap-3 mb-6">
-            <img src="/kai-commuter.png" alt="KAI Commuter Logo" className="h-10 object-contain" />
-            <div className="flex items-center gap-1.5 lg:hidden">
-              <img src="/logo.svg" alt="PRISMA Logo" className="w-5 h-5 object-contain filter brightness-0 invert" />
-              <span className="text-xs font-bold text-white tracking-widest uppercase">PRISMA Command Center</span>
+        <div className="relative z-10 my-auto w-full max-w-[260px] mx-auto flex flex-col justify-center">
+          {/* Logo KAI Commuter (Hanya Desktop di Atas Form - dengan Background Putih Siku) */}
+          <div className="hidden lg:flex justify-center mb-8">
+            <div className="bg-white px-4 py-2 rounded-none shadow-sm flex items-center justify-center">
+              <img src="/kai-commuter.png" alt="KAI Commuter Logo" className="h-8 object-contain" />
             </div>
+          </div>
+
+          {/* Logo PRISMA & Teks (Hanya Mobile di Atas Form) */}
+          <div className="flex flex-col items-center gap-1 lg:hidden mb-4">
+            <img src="/logo.svg" alt="PRISMA Logo" className="h-12 w-12 object-contain" />
+            <span className="text-xl font-black text-white tracking-widest">PRISMA</span>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-5">
@@ -194,7 +201,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-white hover:bg-red-50 text-red-700 font-bold py-3 px-4 rounded-lg text-sm tracking-widest transition-all shadow-md hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none mt-2 flex items-center justify-center gap-2"
+              className="w-full max-w-[120px] mx-auto bg-white hover:bg-red-50 text-red-700 font-bold py-3 px-4 rounded-lg text-sm tracking-widest transition-all shadow-md hover:shadow-lg active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none mt-2 flex items-center justify-center gap-2"
             >
               {loading ? (
                 <>
@@ -206,6 +213,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               )}
             </button>
           </form>
+
+          {/* Logo KAI Commuter dengan Background Putih (Hanya Mobile di Bawah Form) */}
+          <div className="flex justify-center mt-12 lg:hidden">
+            <div className="bg-white px-4 py-2 rounded-none shadow-sm flex items-center justify-center">
+              <img src="/kai-commuter.png" alt="KAI Commuter Logo" className="h-7 object-contain" />
+            </div>
+          </div>
         </div>
 
         {/* Footer copyrights */}

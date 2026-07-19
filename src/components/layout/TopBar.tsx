@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ThemeMode } from '../../types';
+import { useAppStore } from '../../store/useAppStore';
 
 const pageLabels: Record<string, string> = {
   '/critical-stock': 'Availability Stok',
@@ -143,7 +144,7 @@ export default function TopBar({ collapsed, theme, onThemeToggle, currentPath, o
                 <div className="p-2">
                   <button
                     onClick={() => {
-                      localStorage.removeItem('krl_auth');
+                      useAppStore.getState().logout();
                       setShowProfile(false);
                       navigate('/login');
                     }}

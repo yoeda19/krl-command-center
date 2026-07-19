@@ -108,7 +108,7 @@ export default function StockAgingPage() {
       }
     }
     loadData();
-  }, [isDataLoaded, slowMovingData, setSlowMovingData, setIsDataLoaded]);
+  }, [isDataLoaded]);
 
   const filtered = slowList.filter(row => {
     const matchCat = filterKategori === 'Semua' || row.kategori === filterKategori;
@@ -211,7 +211,7 @@ export default function StockAgingPage() {
     return data;
   })();
 
-  console.log('SLOWLIST:', slowList);
+
 
   const funnelData = agingParameters.map(p => ({
     ...p,

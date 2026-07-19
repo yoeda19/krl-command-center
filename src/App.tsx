@@ -12,6 +12,7 @@ import TrainCompositionPage from './pages/TrainCompositionPage';
 import AdminPanelPage from './pages/AdminPanelPage';
 import AuditLogPage from './pages/AuditLogPage';
 import type { ThemeMode } from './types';
+import { useAppStore } from './store/useAppStore';
 
 // ── Protected Layout ────────────────────────────────────────────
 interface ProtectedLayoutProps {
@@ -23,7 +24,7 @@ interface ProtectedLayoutProps {
 
 function ProtectedLayout({ theme, onThemeToggle, collapsed, onToggle }: ProtectedLayoutProps) {
   const location = useLocation();
-  const isAuth = !!localStorage.getItem('krl_auth');
+  const { isAuthenticated } = useAppStore();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
@@ -39,7 +40,7 @@ function ProtectedLayout({ theme, onThemeToggle, collapsed, onToggle }: Protecte
     setMobileOpen(false);
   }, [location.pathname]);
 
-  if (!isAuth) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
 
   return (
     <div
@@ -90,6 +91,7 @@ export default function App() {
     () => (localStorage.getItem('krl_theme') as ThemeMode) ?? 'light'
   );
   const [collapsed, setCollapsed] = useState(false);
+  const { isAuthenticated } = useAppStore();
 
   // Apply theme class to <html>
   useEffect(() => {
@@ -107,7 +109,7 @@ export default function App() {
         <Route
           path="/login"
           element={
-            localStorage.getItem('krl_auth')
+            isAuthenticated
               ? <Navigate to="/critical-stock" replace />
               : <LoginPage onLogin={() => {}} />
           }
