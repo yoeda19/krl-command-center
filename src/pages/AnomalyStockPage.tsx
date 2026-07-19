@@ -729,6 +729,37 @@ export default function AnomalyStockPage() {
 
   return (
     <PageWrapper fullWidth>
+      <style>{`
+        @media (max-width: 768px) and (orientation: portrait) {
+          .mobile-landscape-fullscreen {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            width: 100vh !important;
+            height: 100vw !important;
+            transform: translate(-50%, -50%) rotate(90deg) !important;
+            transform-origin: center !important;
+            z-index: 9999 !important;
+            padding: 0.5rem !important;
+            border-radius: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
+          }
+          .mobile-landscape-fullscreen .fullscreen-hide {
+            display: none !important;
+          }
+          .mobile-landscape-fullscreen .p-5 {
+            padding: 0.5rem !important;
+            gap: 0.25rem !important;
+          }
+          .mobile-landscape-fullscreen .chart-wrapper-el,
+          .mobile-landscape-fullscreen .echarts-for-react {
+            height: calc(100vw - 80px) !important;
+            width: 100% !important;
+          }
+        }
+      `}</style>
       <div className="h-4" />
 
       {/* Grid Layout for Charts on Large Screens */}
@@ -736,7 +767,7 @@ export default function AnomalyStockPage() {
         
         {/* CHART 1: Grafik Penyerapan Stok Anomali */}
         <div
-          className={`lg:col-span-2 tactile-card rounded-lg overflow-hidden flex flex-col ${isChartFullScreen ? 'fixed inset-0 z-50 p-6 flex flex-col justify-between' : ''}`}
+          className={`lg:col-span-2 tactile-card rounded-lg overflow-hidden flex flex-col ${isChartFullScreen ? 'fixed inset-0 z-50 p-6 flex flex-col justify-between mobile-landscape-fullscreen' : ''}`}
           style={isChartFullScreen ? {
             backgroundColor: 'var(--color-background)',
             borderColor: 'var(--color-steel-border)',
@@ -752,7 +783,7 @@ export default function AnomalyStockPage() {
             <div className="flex flex-wrap justify-between items-center gap-4">
               <div>
                 <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Penyerapan Stok Anomali</h3>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+                <p className="fullscreen-hide text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
                   Komparasi Rencana vs Aktual — <b>{referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})</b>
                 </p>
               </div>
@@ -764,8 +795,8 @@ export default function AnomalyStockPage() {
                     setSelectedMaterial(e.target.value);
                     setSelectedWarehouse('SEMUA');
                   }}
-                  className="rounded px-3 py-1.5 border text-xs font-bold"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)', minWidth: 200 }}
+                  className="rounded px-3 py-1.5 border text-xs font-bold w-full max-w-[150px] sm:max-w-xs"
+                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                 >
                   {uniqueMaterials.map(m => (
                     <option key={m.nomor_material} value={m.nomor_material}>
@@ -778,8 +809,8 @@ export default function AnomalyStockPage() {
                 <select
                   value={selectedWarehouse}
                   onChange={e => setSelectedWarehouse(e.target.value)}
-                  className="rounded px-3 py-1.5 border text-xs font-bold"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)', minWidth: 140 }}
+                  className="rounded px-3 py-1.5 border text-xs font-bold w-full max-w-[110px] sm:max-w-xs"
+                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                 >
                   <option value="SEMUA">Semua Gudang</option>
                   {criticalData
@@ -846,7 +877,7 @@ export default function AnomalyStockPage() {
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs border-t pt-3" style={{ borderColor: 'var(--color-steel-border)' }}>
+            <div className="fullscreen-hide flex flex-wrap items-center gap-3 text-xs border-t pt-3" style={{ borderColor: 'var(--color-steel-border)' }}>
               <span className="font-bold text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
               <select
                 value={startMonth}
@@ -892,8 +923,9 @@ export default function AnomalyStockPage() {
             </div>
           </div>
 
-          <div style={{ height: isChartFullScreen ? 'calc(100vh - 180px)' : 480 }}>
+          <div className="chart-wrapper-el" style={{ height: isChartFullScreen ? 'calc(100vh - 180px)' : 480 }}>
             <ReactECharts
+              className="chart-wrapper-el"
               option={{
                 backgroundColor: 'transparent',
                 animation: true,

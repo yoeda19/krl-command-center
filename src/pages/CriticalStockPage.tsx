@@ -894,6 +894,37 @@ export default function CriticalStockPage() {
 
   return (
     <PageWrapper fullWidth>
+      <style>{`
+        @media (max-width: 768px) and (orientation: portrait) {
+          .mobile-landscape-fullscreen {
+            position: fixed !important;
+            top: 50% !important;
+            left: 50% !important;
+            width: 100vh !important;
+            height: 100vw !important;
+            transform: translate(-50%, -50%) rotate(90deg) !important;
+            transform-origin: center !important;
+            z-index: 9999 !important;
+            padding: 0.5rem !important;
+            border-radius: 0 !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: flex-start !important;
+          }
+          .mobile-landscape-fullscreen .fullscreen-hide {
+            display: none !important;
+          }
+          .mobile-landscape-fullscreen .p-5 {
+            padding: 0.5rem !important;
+            gap: 0.25rem !important;
+          }
+          .mobile-landscape-fullscreen .chart-wrapper-el,
+          .mobile-landscape-fullscreen .echarts-for-react {
+            height: calc(100vw - 80px) !important;
+            width: 100% !important;
+          }
+        }
+      `}</style>
       <div className="h-4" />
 
       {/* Main Dashboard Layout: 2-column grid for large screens */}
@@ -903,7 +934,7 @@ export default function CriticalStockPage() {
         <div className="xl:col-span-2 space-y-6">
           {/* ECharts — Area Chart Proyeksi Penyerapan */}
           <div
-            className={`tactile-card rounded-lg overflow-hidden ${isChartFullScreen ? 'fixed inset-0 z-50 p-6 flex flex-col justify-between' : ''}`}
+            className={`tactile-card rounded-lg overflow-hidden ${isChartFullScreen ? 'fixed inset-0 z-50 p-6 flex flex-col justify-between mobile-landscape-fullscreen' : ''}`}
             style={isChartFullScreen ? {
               backgroundColor: 'var(--color-background)',
               borderColor: 'var(--color-steel-border)',
@@ -919,7 +950,7 @@ export default function CriticalStockPage() {
               <div className="flex flex-wrap justify-between items-center gap-4">
                 <div>
                   <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Penyerapan Stok Kritis</h3>
-                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+                  <p className="fullscreen-hide text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
                     Komparasi Rencana vs Aktual — <b>{referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})</b>
                   </p>
                 </div>
@@ -963,8 +994,8 @@ export default function CriticalStockPage() {
                   <select
                     value={selectedMaterial || '6005530'}
                     onChange={e => setSelectedMaterial(e.target.value)}
-                    className="rounded px-3 py-1.5 border text-xs font-bold"
-                    style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)', minWidth: 240 }}
+                    className="rounded px-3 py-1.5 border text-xs font-bold w-full max-w-[150px] sm:max-w-xs"
+                    style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                   >
                     {aggregatedData.map(m => (
                       <option key={m.nomor_material} value={m.nomor_material}>
@@ -995,7 +1026,7 @@ export default function CriticalStockPage() {
               </div>
 
               {/* Selector Periode Awal & Akhir */}
-              <div className="flex flex-wrap items-center gap-3 text-xs border-t pt-3" style={{ borderColor: 'var(--color-steel-border)' }}>
+              <div className="fullscreen-hide flex flex-wrap items-center gap-3 text-xs border-t pt-3" style={{ borderColor: 'var(--color-steel-border)' }}>
                 <span className="font-bold text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
                 <select
                   value={startMonth}
@@ -1615,6 +1646,7 @@ export default function CriticalStockPage() {
                 ],
               }}
               style={{ height: isChartFullScreen ? 'calc(100vh - 180px)' : 570, backgroundColor: 'var(--color-background-metallic)' }}
+              className="chart-wrapper-el"
               opts={{ renderer: 'canvas' }}
             />
           </div>
@@ -1764,18 +1796,28 @@ export default function CriticalStockPage() {
             className="bg-transparent border-none text-sm flex-1 focus:outline-none" style={{ color: 'var(--color-on-surface)' }} />
         </div>
         <select value={filterDepo} onChange={e => setFilterDepo(e.target.value)}
-          className="rounded px-3 py-2 border text-sm"
+          className="rounded px-3 py-2 border text-sm w-full max-w-[160px] sm:max-w-xs"
           style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>
           {depoOptions.map(d => <option key={d}>{d}</option>)}
         </select>
-        <div className="flex items-center gap-3 text-[11px] font-bold tracking-wider uppercase">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[10px] sm:text-[11px] font-bold tracking-wider">
           <span style={{ color: 'var(--color-on-surface-variant)' }}>Status:</span>
-          {(['KRITIS', 'WASPADA', 'AMAN', 'BELUM PO'] as const).map(s => (
-            <label key={s} className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" checked={filterStatus.includes(s)} onChange={() => toggleStatus(s)} className="rounded" />
-              <span style={{ color: s === 'KRITIS' || s === 'BELUM PO' ? 'var(--color-led-red)' : s === 'WASPADA' ? 'var(--color-led-amber)' : 'var(--color-led-green)' }}>{s === 'BELUM PO' ? 'NO PO' : s}</span>
-            </label>
-          ))}
+          {(['KRITIS', 'WASPADA', 'AMAN', 'BELUM PO'] as const).map(s => {
+            let labelText = '';
+            if (s === 'KRITIS') labelText = 'Kritis';
+            else if (s === 'WASPADA') labelText = 'Waspada';
+            else if (s === 'AMAN') labelText = 'Aman';
+            else if (s === 'BELUM PO') labelText = 'No PO';
+
+            return (
+              <label key={s} className="flex items-center gap-1 cursor-pointer">
+                <input type="checkbox" checked={filterStatus.includes(s)} onChange={() => toggleStatus(s)} className="rounded w-3 h-3 sm:w-4 sm:h-4" />
+                <span style={{ color: s === 'KRITIS' || s === 'BELUM PO' ? 'var(--color-led-red)' : s === 'WASPADA' ? 'var(--color-led-amber)' : 'var(--color-led-green)' }}>
+                  {labelText}
+                </span>
+              </label>
+            );
+          })}
         </div>
       </div>
 
