@@ -6,6 +6,7 @@ import ExportButton from '../components/ui/ExportButton';
 import { getSlowMovingData, getRestockData, getCriticalStockData } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
 import type { AgingKategori, SlowMovingItem, RestockItem, CriticalStockItem } from '../types';
+import { useAppStore } from '../store/useAppStore';
 
 const agingParameters = [
   { category_name: 'Fresh' as AgingKategori,       max_hari: 30,  color: '#16a34a' },
@@ -49,26 +50,55 @@ export default function StockAgingPage() {
   const [searchParams] = useSearchParams();
   const materialParam = searchParams.get('material');
 
-  const [slowList, setSlowList] = useState<SlowMovingItem[]>([]);
+  const { slowMovingData, setSlowMovingData, isDataLoaded, setIsDataLoaded } = useAppStore();
+  const [slowList, setSlowList] = useState<SlowMovingItem[]>(slowMovingData);
   const [restockList, setRestockList] = useState<RestockItem[]>([]);
   const [criticalList, setCriticalList] = useState<CriticalStockItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isDataLoaded);
   const [filterKategori, setFilterKategori] = useState<AgingKategori | 'Semua'>('Semua');
   const [searchText, setSearchText] = useState(materialParam || '');
   const [restockSearchText, setRestockSearchText] = useState(materialParam || '');
   const [selectedRestockMaterial, setSelectedRestockMaterial] = useState<string>('');
   const [isHeatmapFullScreen, setIsHeatmapFullScreen] = useState(false);
   const [heatmapCellHeight, setHeatmapCellHeight] = useState<number>(36);
+  const [isDark, setIsDark] = useState(() => typeof document !== 'undefined' && document.documentElement.classList.contains('dark'));
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setIsDark(document.documentElement.classList.contains('dark'));
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     async function loadData() {
+      if (isDataLoaded && slowMovingData.length > 0) {
+        setSlowList(slowMovingData);
+        setLoading(false);
+        try {
+          const [restockData, criticalData] = await Promise.all([
+            getRestockData(),
+            getCriticalStockData()
+          ]);
+          setRestockList(restockData);
+          setCriticalList(criticalData);
+        } catch (e) {
+          console.error('Background loading error:', e);
+        }
+        return;
+      }
+
       try {
+        setLoading(true);
         const [slowData, restockData, criticalData] = await Promise.all([
           getSlowMovingData(),
           getRestockData(),
           getCriticalStockData()
         ]);
         setSlowList(slowData);
+        setSlowMovingData(slowData); // Simpan ke Zustand
+        setIsDataLoaded(true);
         setRestockList(restockData);
         setCriticalList(criticalData);
       } catch (err) {
@@ -78,7 +108,7 @@ export default function StockAgingPage() {
       }
     }
     loadData();
-  }, []);
+  }, [isDataLoaded, slowMovingData, setSlowMovingData, setIsDataLoaded]);
 
   const filtered = slowList.filter(row => {
     const matchCat = filterKategori === 'Semua' || row.kategori === filterKategori;
@@ -125,7 +155,6 @@ export default function StockAgingPage() {
 
   const warehousesList = ['Gudang Pusat', 'Depo Depok', 'Depo Bukit Duri', 'Overhaul Manggarai', 'Depo Bogor', 'Depo Manggarai', 'TOTAL'];
 
-  const isDark = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
   const textStyleColor = isDark ? '#ffffff' : '#000000';
 
   const displayHeatmapList = isHeatmapFullScreen ? filtered : filtered.slice(0, 10);
@@ -287,40 +316,54 @@ export default function StockAgingPage() {
             option={{
               backgroundColor: 'transparent',
               tooltip: {
+                show: true,
                 trigger: 'axis',
-                formatter: (params: { name: string; value: number }[]) =>
+                confine: true,
+                formatter: (params: any[]) =>
                   params.map(p => `${p.name}: <b>${formatRupiah(p.value)}</b>`).join('<br/>'),
               },
-              grid: { left: 16, right: 16, top: 20, bottom: 65, containLabel: true },
+              grid: { left: 10, right: 20, top: 15, bottom: 15, containLabel: true },
               xAxis: {
+                type: 'value',
+                axisLabel: {
+                  color: textStyleColor, fontSize: 9,
+                  formatter: (v: number) => {
+                    if (v >= 1e9) return `${(v / 1e9).toFixed(v % 1e9 === 0 ? 0 : 1)} M`;
+                    if (v >= 1e6) return `${(v / 1e6).toFixed(0)} Jt`;
+                    if (v >= 1e3) return `${(v / 1e3).toFixed(0)} Rb`;
+                    return String(v);
+                  },
+                },
+                splitLine: { lineStyle: { color: isDark ? '#374151' : '#e2e8f0', type: 'dashed' } },
+              },
+              yAxis: {
                 type: 'category',
                 data: filtered.map(d => d.nama_material),
                 axisLabel: { 
                   color: textStyleColor, 
                   fontSize: 8, 
-                  rotate: 15, 
                   interval: 0,
-                  formatter: (v: string) => v.length > 18 ? v.slice(0, 18) + '...' : v
+                  formatter: (v: string) => {
+                    const max = window.innerWidth <= 768 ? 14 : 24;
+                    return v.length > max ? v.slice(0, max) + '...' : v;
+                  }
                 },
                 axisLine: { lineStyle: { color: '#374151' } },
               },
-              yAxis: {
-                type: 'value',
-                axisLabel: {
-                  color: textStyleColor, fontSize: 9,
-                  formatter: (v: number) => v >= 1e6 ? `${(v/1e6).toFixed(0)}M` : `${(v/1e3).toFixed(0)}K`,
-                },
-                splitLine: { lineStyle: { color: isDark ? '#374151' : '#e2e8f0', type: 'dashed' } },
-              },
               series: [{
                 type: 'bar',
-                barMaxWidth: 36,
+                barMaxHeight: 20,
                 data: filtered.map(d => ({
                   value: d.nilai_aset,
                   itemStyle: {
                     color: catCfg[d.kategori].text,
-                    borderRadius: [4, 4, 0, 0],
+                    borderRadius: [0, 4, 4, 0],
                   },
+                  emphasis: {
+                    itemStyle: {
+                      color: catCfg[d.kategori].text
+                    }
+                  }
                 })),
               }],
             }}
@@ -398,76 +441,93 @@ export default function StockAgingPage() {
           {displayHeatmapList.length === 0 ? (
             <div className="text-center py-8 text-xs text-gray-500">Tidak ada data untuk heatmap.</div>
           ) : (
-            <ReactECharts
-              option={{
-                backgroundColor: 'transparent',
-                tooltip: {
-                  position: 'top',
-                  formatter: (p: any) => {
-                    const xName = warehousesList[p.data.value[0]];
-                    const materialItem = displayHeatmapList[p.data.value[1]];
-                    const yName = materialItem ? `${materialItem.nomor_material} - ${materialItem.nama_material}` : '';
-                    const stock = p.data.value[2];
-                    const plan = p.data.value[3];
-                    return `<b>${yName}</b><br/>Gudang: ${xName}<br/>Stok: <b>${stock}</b><br/>Plan Target: <b>${plan}</b>`;
-                  }
-                },
-                grid: {
-                  top: 30,
-                  bottom: 30,
-                  left: 160,
-                  right: 20,
-                  containLabel: true
-                },
-                xAxis: {
-                  type: 'category',
-                  data: warehousesList,
-                  splitArea: { show: true },
-                  axisLabel: { color: textStyleColor, fontSize: 10, fontWeight: 'bold', rotate: 0 },
-                  axisLine: { lineStyle: { color: '#374151' } }
-                },
-                yAxis: {
-                  type: 'category',
-                  data: displayHeatmapList.map(d => d.nama_material),
-                  splitArea: { show: true },
-                  axisLabel: { color: textStyleColor, fontSize: 9, fontWeight: 'bold' },
-                  axisLine: { lineStyle: { color: '#374151' } }
-                },
-                visualMap: {
-                  show: false
-                },
-                series: [{
-                  name: 'Stok',
-                  type: 'heatmap',
-                  data: heatmapData,
-                  itemStyle: {
-                    borderColor: isDark ? '#374151' : '#cbd5e1',
-                    borderWidth: 2
-                  },
-                  label: {
-                    show: true,
+            <div className="overflow-x-auto w-full">
+              <ReactECharts
+                option={{
+                  backgroundColor: 'transparent',
+                  tooltip: {
+                    show: window.innerWidth > 768,
+                    confine: true,
                     formatter: (p: any) => {
-                      const val = p.data.value[2];
-                      return val !== undefined && val !== null ? String(val) : '0';
-                    },
-                    color: '#fff',
-                    fontSize: 10,
-                    fontWeight: 'bold',
-                    textBorderColor: '#000',
-                    textBorderWidth: 2
-                  },
-                  emphasis: {
-                    itemStyle: {
-                      shadowBlur: 10,
-                      shadowColor: 'rgba(0, 0, 0, 0.5)'
+                      const xName = warehousesList[p.data.value[0]];
+                      const materialItem = displayHeatmapList[p.data.value[1]];
+                      const yName = materialItem ? `${materialItem.nomor_material} - ${materialItem.nama_material}` : '';
+                      const stock = p.data.value[2];
+                      const plan = p.data.value[3];
+                      return `<b>${yName}</b><br/>Gudang: ${xName}<br/>Stok: <b>${stock}</b><br/>Plan Target: <b>${plan}</b>`;
                     }
-                  }
-                }]
-              }}
-              notMerge={true}
-              style={{ height: Math.max(300, displayHeatmapList.length * heatmapCellHeight + 80) }}
-              opts={{ renderer: 'svg' }}
-            />
+                  },
+                  grid: {
+                    top: 30,
+                    bottom: 30,
+                    left: 160,
+                    right: 20,
+                    containLabel: true
+                  },
+                  xAxis: {
+                    type: 'category',
+                    data: warehousesList,
+                    splitArea: { show: true },
+                    axisLabel: {
+                      color: textStyleColor,
+                      fontSize: window.innerWidth <= 768 ? 6.5 : 10,
+                      fontWeight: 'bold',
+                      rotate: 0,
+                      interval: 0,
+                      formatter: (val: string) => val === 'Overhaul Manggarai' ? 'OHM' : val
+                    },
+                    axisLine: { lineStyle: { color: '#374151' } }
+                  },
+                  yAxis: {
+                    type: 'category',
+                    data: displayHeatmapList.map(d => d.nama_material),
+                    splitArea: { show: true },
+                    axisLabel: {
+                      color: textStyleColor,
+                      fontSize: 9,
+                      fontWeight: 'bold'
+                    },
+                    axisLine: { lineStyle: { color: '#374151' } }
+                  },
+                  visualMap: {
+                    show: false
+                  },
+                  series: [{
+                    name: 'Stok',
+                    type: 'heatmap',
+                    data: heatmapData,
+                    itemStyle: {
+                      borderColor: isDark ? '#374151' : '#cbd5e1',
+                      borderWidth: 2
+                    },
+                    label: {
+                      show: true,
+                      formatter: (p: any) => {
+                        const val = p.data.value[2];
+                        return val !== undefined && val !== null ? String(val) : '0';
+                      },
+                      color: '#fff',
+                      fontSize: 10,
+                      fontWeight: 'bold',
+                      textBorderColor: '#000',
+                      textBorderWidth: 2
+                    },
+                    emphasis: {
+                      itemStyle: {
+                        shadowBlur: 10,
+                        shadowColor: 'rgba(0, 0, 0, 0.5)'
+                      }
+                    }
+                  }]
+                }}
+                notMerge={true}
+                style={{
+                  height: Math.max(300, displayHeatmapList.length * heatmapCellHeight + 80),
+                  minWidth: window.innerWidth <= 768 ? '850px' : '100%'
+                }}
+                opts={{ renderer: 'svg' }}
+              />
+            </div>
           )}
           {filtered.length > 0 && (
             <div className="flex flex-wrap justify-center gap-6 mt-4 pt-4 border-t border-gray-800 border-dashed text-xs">

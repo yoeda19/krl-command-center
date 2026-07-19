@@ -24,22 +24,48 @@ interface ProtectedLayoutProps {
 function ProtectedLayout({ theme, onThemeToggle, collapsed, onToggle }: ProtectedLayoutProps) {
   const location = useLocation();
   const isAuth = !!localStorage.getItem('krl_auth');
-  const sidebarWidth = collapsed ? 64 : 260;
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const sidebarWidth = isMobile ? 0 : (collapsed ? 64 : 260);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
 
   if (!isAuth) return <Navigate to="/login" replace />;
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--color-background)' }}>
-      <Sidebar collapsed={collapsed} onToggle={onToggle} />
+    <div
+      className="flex h-screen overflow-hidden"
+      style={{
+        backgroundColor: 'var(--color-background)',
+        // @ts-ignore
+        '--sidebar-width': `${sidebarWidth}px`,
+      }}
+    >
+      <Sidebar
+        collapsed={collapsed}
+        onToggle={onToggle}
+        mobileOpen={mobileOpen}
+        onCloseMobile={() => setMobileOpen(false)}
+      />
       <div
         className="flex flex-col flex-1 content-transition min-w-0"
-        style={{ marginLeft: sidebarWidth }}
+        style={{ marginLeft: 'var(--sidebar-width)' }}
       >
         <TopBar
           collapsed={collapsed}
           theme={theme}
           onThemeToggle={onThemeToggle}
           currentPath={location.pathname}
+          onMenuToggle={() => setMobileOpen(!mobileOpen)}
         />
         <Routes>
           <Route path="/"              element={<Navigate to="/critical-stock" replace />} />

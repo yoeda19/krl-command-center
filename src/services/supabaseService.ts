@@ -915,14 +915,24 @@ export async function saveMaterialBomConfigs(
   nomor_material: string,
   configs: Omit<MaintenanceBomConfig, 'id' | 'nama_material' | 'satuan' | 'current_stock'>[]
 ): Promise<{ error: string | null }> {
-  // First delete all existing configurations for this material
+  // 1. Ambil data konfigurasi lama untuk backup jika nanti butuh rollback
+  const { data: oldConfigs, error: fetchErr } = await supabase
+    .from('maintenance_bom_config')
+    .select('*')
+    .eq('nomor_material', nomor_material);
+
+  if (fetchErr) {
+    return { error: `Gagal mem-backup konfigurasi lama: ${fetchErr.message}` };
+  }
+
+  // 2. Hapus konfigurasi lama
   const { error: deleteErr } = await supabase
     .from('maintenance_bom_config')
     .delete()
     .eq('nomor_material', nomor_material);
 
   if (deleteErr) {
-    return { error: deleteErr.message };
+    return { error: `Gagal menghapus konfigurasi lama: ${deleteErr.message}` };
   }
 
   if (configs.length === 0) {
@@ -943,12 +953,25 @@ export async function saveMaterialBomConfigs(
     compat_propulsi: c.compat_propulsi || null,
   }));
 
-  // Insert the new configurations
+  // 3. Masukkan konfigurasi baru
   const { error: insertErr } = await supabase
     .from('maintenance_bom_config')
     .insert(dbConfigs);
 
-  return { error: insertErr?.message ?? null };
+  // 4. Mekanisme Rollback jika insert baru gagal
+  if (insertErr) {
+    if (oldConfigs && oldConfigs.length > 0) {
+      const rollbackData = oldConfigs.map((oc: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id, ...rest } = oc; // Buang ID agar auto-increment baru/tidak konflik
+        return rest;
+      });
+      await supabase.from('maintenance_bom_config').insert(rollbackData);
+    }
+    return { error: `Gagal menyimpan konfigurasi baru. Konfigurasi lama telah dipulihkan. Detail: ${insertErr.message}` };
+  }
+
+  return { error: null };
 }
 
 
@@ -994,16 +1017,21 @@ export async function getAdminParameters(): Promise<AdminParameter[]> {
 
 export async function saveAdminParameter(param: AdminParameter, adminEmail: string, adminName: string): Promise<void> {
   // Update ideal stock config
-  const { data: existingConfig } = await supabase
+  const { data: existingConfig, error: fetchConfigErr } = await supabase
     .from('ideal_stock_configurations')
     .select('*')
     .eq('nomor_material', param.nomor_material)
     .maybeSingle();
 
+  if (fetchConfigErr) {
+    console.error('Error fetching ideal stock config:', fetchConfigErr);
+    throw fetchConfigErr;
+  }
+
   const originalIdeal = existingConfig?.ideal_qty_manual ?? 0;
   const originalFormula = existingConfig?.use_formula_calculation ?? false;
 
-  await supabase
+  const { error: upsertConfigErr } = await supabase
     .from('ideal_stock_configurations')
     .upsert({
       nomor_material: param.nomor_material,
@@ -1011,19 +1039,34 @@ export async function saveAdminParameter(param: AdminParameter, adminEmail: stri
       use_formula_calculation: param.use_formula
     });
 
+  if (upsertConfigErr) {
+    console.error('Error upserting ideal stock config:', upsertConfigErr);
+    throw upsertConfigErr;
+  }
+
   // Get original lead time from procurement_progress
-  const { data: existingProg } = await supabase
+  const { data: existingProg, error: fetchProgErr } = await supabase
     .from('procurement_progress')
     .select('plan_lead_time')
     .eq('nomor_material', param.nomor_material)
     .maybeSingle();
+
+  if (fetchProgErr) {
+    console.error('Error fetching procurement progress:', fetchProgErr);
+    throw fetchProgErr;
+  }
   const originalLeadTime = existingProg?.plan_lead_time ?? 0;
 
   // Update lead time in procurement_progress
-  await supabase
+  const { error: updateProgErr } = await supabase
     .from('procurement_progress')
     .update({ plan_lead_time: param.lead_time_hari })
     .eq('nomor_material', param.nomor_material);
+
+  if (updateProgErr) {
+    console.error('Error updating lead time:', updateProgErr);
+    throw updateProgErr;
+  }
 
   // Compare and build log details
   const changedFields: string[] = [];
@@ -1038,15 +1081,22 @@ export async function saveAdminParameter(param: AdminParameter, adminEmail: stri
   }
 
   if (changedFields.length > 0) {
-    await addAuditLog({
-      nomor_material: param.nomor_material,
-      parameter_name: 'Update Parameter Material',
-      original_value: `Ideal: ${originalIdeal}, Formula: ${originalFormula}, LeadTime: ${originalLeadTime}`,
-      new_value: changedFields.join(', ').slice(0, 250),
-      admin_email: adminEmail,
-      admin_name: adminName,
-      modul: 'Parameter Material'
-    });
+    const { error: logErr } = await supabase
+      .from('audit_logs')
+      .insert({
+        nomor_material: param.nomor_material,
+        parameter_name: 'Update Parameter Material',
+        original_value: `Ideal: ${originalIdeal}, Formula: ${originalFormula}, LeadTime: ${originalLeadTime}`,
+        new_value: changedFields.join(', ').slice(0, 250),
+        admin_email: adminEmail,
+        admin_name: adminName,
+        modul: 'Parameter Material'
+      });
+
+    if (logErr) {
+      console.error('Error adding audit log:', logErr);
+      throw logErr;
+    }
   }
 }
 

@@ -27,3 +27,9 @@ dist-ssr
 # Audit Report (Local Only)
 report.md
 
+# Developer Tools (Local Only — Token Saving Suite)
+repomix-output.xml
+graphify-out/
+tags
+src/code-outline.json
+performance_audit.json

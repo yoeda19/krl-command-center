@@ -77,19 +77,28 @@ const navItems = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  mobileOpen: boolean;
+  onCloseMobile: () => void;
 }
 
-export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: SidebarProps) {
   return (
-    <nav
-      className="fixed left-0 top-0 h-full z-40 flex flex-col sidebar-transition border-r overflow-hidden"
-      style={{
-        width: collapsed ? 64 : 260,
-        backgroundColor: 'var(--color-background-metallic)',
-        borderColor: 'var(--color-steel-border)',
-        boxShadow: '2px 0 12px rgba(0,0,0,0.06)',
-      }}
-    >
+    <>
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={onCloseMobile}
+        />
+      )}
+      <nav
+        className={`fixed left-0 top-0 h-full z-40 flex flex-col sidebar-transition border-r overflow-hidden ${mobileOpen ? 'mobile-sidebar-open' : 'mobile-sidebar-closed'}`}
+        style={{
+          width: collapsed ? 64 : 260,
+          backgroundColor: 'var(--color-background-metallic)',
+          borderColor: 'var(--color-steel-border)',
+          boxShadow: '2px 0 12px rgba(0,0,0,0.06)',
+        }}
+      >
       {/* ── Brand ── */}
       <div
         className="h-16 flex items-center border-b shrink-0 gap-3"
@@ -166,5 +175,6 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </button>
       </div>
     </nav>
+    </>
   );
 }

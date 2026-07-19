@@ -7,6 +7,30 @@ import { getProcurementData } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
 import type { ProcurementStatus, RisikoLevel, ProcurementItem } from '../types';
 
+// Helper to sanitize URL against Stored XSS
+function validateAndGetSafeUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+  
+  // Block javascript:, data:, vbscript: schemes
+  if (/^(javascript|data|vbscript):/i.test(trimmed)) {
+    return null;
+  }
+  
+  // Must be an absolute URL with http or https protocol
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  
+  // If it's a domain without protocol, default to https
+  if (/^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$/i.test(trimmed)) {
+    return `https://${trimmed}`;
+  }
+  
+  return null;
+}
+
 const statusOptions: Array<'Semua' | ProcurementStatus> = ['Semua', 'Dalam Pengadaan', 'Proses Evaluasi', 'Proses PR & Approval', 'Proses PO', 'Goods Inspection', 'Goods Receipt (GR)'];
 const risikoOptions: Array<'Semua' | RisikoLevel> = ['Semua', 'Rendah', 'Sedang', 'Tinggi'];
 
@@ -485,12 +509,15 @@ export default function ProgressPOPage() {
                       
                       {/* 8. Link Document NOD */}
                       <td className="px-3 py-3 text-xs text-center">
-                        {row.link_document_nod ? (
-                          <a href={row.link_document_nod} target="_blank" rel="noopener noreferrer" 
-                            className="px-2 py-0.5 rounded text-[9px] font-bold bg-gray-500/15 text-gray-300 border border-gray-500/30 hover:bg-gray-500/25 transition-all">
-                            🔗 DOC
-                          </a>
-                        ) : '—'}
+                        {(() => {
+                          const safeUrl = validateAndGetSafeUrl(row.link_document_nod);
+                          return safeUrl ? (
+                            <a href={safeUrl} target="_blank" rel="noopener noreferrer" 
+                              className="px-2 py-0.5 rounded text-[9px] font-bold bg-gray-500/15 text-gray-300 border border-gray-500/30 hover:bg-gray-500/25 transition-all">
+                              🔗 DOC
+                            </a>
+                          ) : '—';
+                        })()}
                       </td>
                       
                       {/* 9. Category */}

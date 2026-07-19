@@ -217,3 +217,157 @@ input:focus, select:focus, textarea:focus {
 }
 
 ::selection { background-color: var(--color-secondary); color: var(--color-on-secondary); }
+
+/* ================================================================
+   MOBILE RESPONSIVE STYLES (Smartphones <= 768px)
+   ================================================================ */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 0px !important;
+  }
+
+  /* Sidebar drawer overlay styling */
+  .mobile-sidebar-closed {
+    transform: translateX(-100%) !important;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .mobile-sidebar-open {
+    transform: translateX(0) !important;
+    width: 260px !important;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* TopBar & Content Layout */
+  header {
+    left: 0 !important;
+    width: 100vw !important;
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Page wrapper container */
+  .pt-16 {
+    padding-top: 4.5rem !important;
+  }
+  .p-6, .p-5, .p-4 {
+    padding: 12px !important;
+  }
+  .px-6 {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Typography scale for smaller screens */
+  h1, .text-3xl {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
+  }
+  h2, .text-2xl {
+    font-size: 1.25rem !important;
+    line-height: 1.75rem !important;
+  }
+  h3, .text-xl {
+    font-size: 1.1rem !important;
+    line-height: 1.5rem !important;
+  }
+
+  /* Forms & Filters */
+  .flex-row, .md\:flex-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .flex.items-center.gap-3.mb-6 {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+  .flex.items-center.gap-2 {
+    flex-wrap: wrap !important;
+  }
+  
+  /* Stack grid layouts to 1 column (excluding grid-cols-2) */
+  .grid-cols-3, .grid-cols-4, .grid-cols-5, .grid-cols-6, .sm\:grid-cols-4, .sm\:grid-cols-5 {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+  
+  /* Keep grid-cols-2 as 2 columns on mobile for compact stat cards */
+  .grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Compact KPI Card style on mobile */
+  .tactile-card .text-5xl {
+    font-size: 1.75rem !important; /* ~28px */
+    line-height: 2.25rem !important;
+  }
+  .tactile-card .h-8 {
+    height: 1.25rem !important; /* smaller sparkline */
+  }
+  .tactile-card .text-xl {
+    font-size: 1rem !important; /* smaller unit */
+  }
+  
+  /* Tables wrapper scroll */
+  .overflow-x-auto {
+    width: 100% !important;
+    display: block !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  table {
+    min-width: 700px !important;
+  }
+
+  /* Chart sizes */
+  .echarts-for-react {
+    height: 260px !important;
+  }
+
+  /* Specific widgets: Train Composition map scroll */
+  .flex.flex-wrap.gap-2.items-center.p-4.rounded-lg {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    padding-bottom: 12px !important;
+  }
+  .flex.flex-wrap.gap-2.items-center.p-4.rounded-lg::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  /* Dialogue / Modal responsive widths */
+  .fixed.inset-0.z-50 .max-w-md,
+  .fixed.inset-0.z-50 .max-w-lg,
+  .fixed.inset-0.z-50 .max-w-xl,
+  .fixed.inset-0.z-50 .max-w-2xl,
+  .fixed.inset-0.z-50 .max-w-3xl,
+  .fixed.inset-0.z-50 .max-w-4xl,
+  .fixed.inset-0.z-50 .max-w-5xl {
+    width: 94vw !important;
+    max-width: 94vw !important;
+    margin: 20px auto !important;
+    padding: 16px !important;
+  }
+
+  /* Compact StockAgingPage filter inputs & buttons */
+  .tactile-card.rounded-lg.p-4.flex.flex-wrap.gap-3.items-center.mt-4 {
+    padding: 8px !important;
+    gap: 6px !important;
+  }
+
+  .px-3.py-1\.5.rounded-full.text-\[11px\] {
+    font-size: 9px !important;
+    padding: 3px 8px !important;
+  }
+
+  .bg-black.bg-opacity-20.px-3.py-1\.5.rounded-lg.border.border-gray-800.w-full {
+    padding: 4px 8px !important;
+  }
+
+  .flex-wrap.justify-center.gap-6.mt-4.pt-4.border-t.border-gray-800.border-dashed.text-xs {
+    gap: 8px 12px !important;
+    font-size: 10px !important;
+    padding-top: 10px !important;
+  }
+}

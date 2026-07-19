@@ -553,16 +553,45 @@ export default function AdminPanelPage() {
       setEditingId(null); setEditValues(null); setMonthlyPlans([]);
       setConfirmModal(null);
       showSuccess(`Parameter dan Rencana Bulanan untuk ${editValues.nomor_material} berhasil disimpan.`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving parameter:', err);
+      const errMsg = err?.message || '';
+      const cleanMsg = errMsg
+        .replace(/supabase/gi, 'Sistem')
+        .replace(/sap/gi, 'Sistem')
+        .replace(/mb51/gi, 'Data Transaksi')
+        .replace(/mb52/gi, 'Data Stok');
+      showError(cleanMsg ? `Gagal menyimpan: ${cleanMsg}` : 'Gagal menyimpan parameter ke Sistem.');
     }
   };
 
   const updateField = <K extends keyof AdminParameter>(key: K, value: AdminParameter[K]) =>
     setEditValues(prev => prev ? { ...prev, [key]: value } : prev);
 
-  const updateMonthlyPlan = (tahun: number, bulan: number, qty: number) =>
-    setMonthlyPlans(prev => prev.map(p => p.gudang === selectedPlanWarehouse && p.tahun === tahun && p.bulan === bulan ? { ...p, plan_qty: qty } : p));
+  const updateMonthlyPlan = (tahun: number, bulan: number, qty: number) => {
+    setMonthlyPlans(prev => {
+      if (selectedPlanWarehouse === 'GLOBAL') {
+        const distributedQty = Math.round(qty / 5);
+        return prev.map(p => {
+          if (p.tahun === tahun && p.bulan === bulan) {
+            if (p.gudang === 'GLOBAL') {
+              return { ...p, plan_qty: qty };
+            } else if (['C007', 'C006', 'C009', 'C008', 'C020'].includes(p.gudang || '')) {
+              return { ...p, plan_qty: distributedQty };
+            }
+          }
+          return p;
+        });
+      } else {
+        const updated = prev.map(p => p.gudang === selectedPlanWarehouse && p.tahun === tahun && p.bulan === bulan ? { ...p, plan_qty: qty } : p);
+        const activeWhs = ['C007', 'C006', 'C009', 'C008', 'C020'];
+        const newGlobalSum = updated
+          .filter(p => p.tahun === tahun && p.bulan === bulan && activeWhs.includes(p.gudang || ''))
+          .reduce((sum, p) => sum + p.plan_qty, 0);
+        return updated.map(p => (p.gudang === 'GLOBAL' || !p.gudang) && p.tahun === tahun && p.bulan === bulan ? { ...p, plan_qty: newGlobalSum } : p);
+      }
+    });
+  };
 
   // ── Procurement tab handlers ─────────────────────────────
   const updatePOField = <K extends keyof ProcurementItem>(key: K, value: ProcurementItem[K]) => {
@@ -1250,20 +1279,60 @@ export default function AdminPanelPage() {
       {/* Header */}
 
       {/* Tabs */}
-      <div className="flex border-b" style={{ borderColor: 'var(--color-steel-border)' }}>
+      <div className="flex border-b w-full" style={{ borderColor: 'var(--color-steel-border)' }}>
         {[
-          ['parameter', 'Parameter Material'],
-          ['pengadaan', 'Manajemen Pengadaan'],
-          ['perawatan', 'Perawatan KRL'],
-          ['bom', 'BOM Standar Perawatan']
-        ].map(([tab, label]) => (
-          <button key={tab} onClick={() => setActiveTab(tab as ActiveTab)}
-            className="px-5 py-3 text-sm font-bold border-b-2 transition-all"
+          {
+            id: 'parameter',
+            full: 'Parameter Material',
+            short: 'Parameter',
+            icon: (
+              <svg className="w-4 h-4 sm:mr-1.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+              </svg>
+            )
+          },
+          {
+            id: 'pengadaan',
+            full: 'Manajemen Pengadaan',
+            short: 'Pengadaan',
+            icon: (
+              <svg className="w-4 h-4 sm:mr-1.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+              </svg>
+            )
+          },
+          {
+            id: 'perawatan',
+            full: 'Perawatan KRL',
+            short: 'Perawatan',
+            icon: (
+              <svg className="w-4 h-4 sm:mr-1.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+              </svg>
+            )
+          },
+          {
+            id: 'bom',
+            full: 'BOM Standar Perawatan',
+            short: 'BOM',
+            icon: (
+              <svg className="w-4 h-4 sm:mr-1.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/>
+              </svg>
+            )
+          }
+        ].map(t => (
+          <button key={t.id} onClick={() => setActiveTab(t.id as ActiveTab)}
+            className="flex-1 flex flex-col sm:flex-row items-center justify-center py-2.5 sm:py-3 px-1 sm:px-4 text-center border-b-2 transition-all"
             style={{
-              borderColor: activeTab === tab ? 'var(--color-secondary)' : 'transparent',
-              color: activeTab === tab ? 'var(--color-secondary)' : 'var(--color-on-surface-variant)',
+              borderColor: activeTab === t.id ? 'var(--color-secondary)' : 'transparent',
+              color: activeTab === t.id ? 'var(--color-secondary)' : 'var(--color-on-surface-variant)',
             }}>
-            {label}
+            {t.icon}
+            <span className="text-[9px] sm:text-xs font-bold block mt-1 sm:mt-0 leading-tight">
+              {window.innerWidth <= 768 ? t.short : t.full}
+            </span>
           </button>
         ))}
       </div>

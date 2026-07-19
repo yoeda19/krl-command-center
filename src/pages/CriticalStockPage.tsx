@@ -7,6 +7,7 @@ import StatusBadge from '../components/ui/StatusBadge';
 import ExportButton from '../components/ui/ExportButton';
 import { getCriticalStockData, getFleetMetrics, getRealSAPTrains, getMaintenanceSchedule, getProcurementData } from '../services/supabaseService';
 import type { CriticalStockItem, FleetMetrics, MaintenanceSchedule, ProcurementItem } from '../types';
+import { useAppStore } from '../store/useAppStore';
 
 const getStatusPlanColor = (status: string) => {
   return 'var(--color-on-surface-variant)';
@@ -78,6 +79,24 @@ function calculateDynamicMetrics(
   calcMode?: 'STANDAR' | 'RIWAYAT',
   runRateLookback?: number
 ) {
+  // Kelompokkan history berdasarkan "tahun-bulan" untuk akses cepat O(1)
+  const historyByMonth = new Map<string, typeof item.all_history>();
+  item.all_history?.forEach(h => {
+    if (!h.tanggal) return;
+    const d = new Date(h.tanggal);
+    const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+    if (!historyByMonth.has(key)) {
+      historyByMonth.set(key, []);
+    }
+    historyByMonth.get(key)!.push(h);
+  });
+
+  // Kelompokkan plans berdasarkan "tahun-bulan" untuk akses cepat O(1)
+  const plansByMonth = new Map<string, number>();
+  item.all_plans?.forEach(p => {
+    plansByMonth.set(`${p.tahun}-${p.bulan}`, p.plan_qty);
+  });
+
   let runRateMultiplier = 1;
   if (calcMode === 'RIWAYAT' && runRateLookback) {
     let sumActualsForRate = 0;
@@ -90,16 +109,12 @@ function calculateDynamicMetrics(
     }
 
     lookbackMonthsList.forEach(m => {
-      const hist = item.all_history?.filter(h => {
-        if (!h.tanggal) return false;
-        const dateObj = new Date(h.tanggal);
-        return dateObj.getFullYear() === m.year && (dateObj.getMonth() + 1) === m.month;
-      }) || [];
+      const hist = historyByMonth.get(`${m.year}-${m.month}`) || [];
       const sumQty = hist.reduce((sum, it) => sum + (it.qty || 0), 0);
       sumActualsForRate += sumQty;
 
-      const p = item.all_plans?.find(pl => pl.tahun === m.year && pl.bulan === m.month);
-      sumPlansForRate += (p ? p.plan_qty : 0);
+      const planQty = plansByMonth.get(`${m.year}-${m.month}`) || 0;
+      sumPlansForRate += planQty;
     });
 
     if (sumPlansForRate > 0) {
@@ -108,19 +123,14 @@ function calculateDynamicMetrics(
   }
 
   const plans = rangeMonths.map(m => {
-    const p = item.all_plans?.find(p => p.tahun === m.year && p.bulan === m.month);
-    return p ? p.plan_qty : 0;
+    return plansByMonth.get(`${m.year}-${m.month}`) || 0;
   });
 
   const actuals = rangeMonths.map(m => {
     if (m.year > 2026 || (m.year === 2026 && m.month > 7)) {
       return null;
     }
-    const hist = item.all_history?.filter(h => {
-      if (!h.tanggal) return false;
-      const d = new Date(h.tanggal);
-      return d.getFullYear() === m.year && (d.getMonth() + 1) === m.month;
-    }) || [];
+    const hist = historyByMonth.get(`${m.year}-${m.month}`) || [];
     return hist.reduce((sum, h) => sum + (h.qty || 0), 0);
   });
 
@@ -341,10 +351,11 @@ export default function CriticalStockPage() {
   const [searchParams] = useSearchParams();
   const materialParam = searchParams.get('material');
 
-  const [criticalData, setCriticalData] = useState<CriticalStockItem[]>([]);
+  const { criticalStockData, isDataLoaded, setCriticalStockData, setIsDataLoaded } = useAppStore();
+  const [criticalData, setCriticalData] = useState<CriticalStockItem[]>(criticalStockData);
   const [metrics, setMetrics] = useState<FleetMetrics | null>(null);
   const [procurements, setProcurements] = useState<ProcurementItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!isDataLoaded);
   const [filterDepo, setFilterDepo] = useState('Semua Depo');
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [searchText, setSearchText] = useState(materialParam || '');
@@ -389,7 +400,31 @@ export default function CriticalStockPage() {
 
   useEffect(() => {
     async function loadData() {
+      if (isDataLoaded && criticalStockData.length > 0) {
+        // Jika data utama sudah ada di cache, set state secara instan
+        setCriticalData(criticalStockData);
+        setLoading(false);
+        
+        // Tetap fetch metrik pendukung di background secara silent
+        try {
+          const [fMetrics, trainData, schedData, pData] = await Promise.all([
+            getFleetMetrics(),
+            getRealSAPTrains(),
+            getMaintenanceSchedule(),
+            getProcurementData()
+          ]);
+          setMetrics(fMetrics);
+          setTotalTrains(trainData.length);
+          setInMaintenanceCount(schedData.filter(s => s.status_pelaksanaan === 'Sedang Dirawat').length);
+          setProcurements(pData);
+        } catch (e) {
+          console.error('Error background loading:', e);
+        }
+        return;
+      }
+
       try {
+        setLoading(true);
         const [cData, fMetrics, trainData, schedData, pData] = await Promise.all([
           getCriticalStockData(),
           getFleetMetrics(),
@@ -398,6 +433,8 @@ export default function CriticalStockPage() {
           getProcurementData()
         ]);
         setCriticalData(cData);
+        setCriticalStockData(cData); // Simpan ke Zustand Cache
+        setIsDataLoaded(true);
         setMetrics(fMetrics);
         setTotalTrains(trainData.length);
         setInMaintenanceCount(schedData.filter(s => s.status_pelaksanaan === 'Sedang Dirawat').length);
@@ -409,7 +446,7 @@ export default function CriticalStockPage() {
       }
     }
     loadData();
-  }, []);
+  }, [isDataLoaded, criticalStockData, setCriticalStockData, setIsDataLoaded]);
 
   // Generate list of months in the selected range
   const rangeMonths = (() => {
@@ -1137,6 +1174,7 @@ export default function CriticalStockPage() {
                 animationEasing: 'cubicInOut',
                 animationDelay: 0,
                 tooltip: {
+                  show: window.innerWidth > 768,
                   trigger: 'axis',
                   axisPointer: {
                     type: 'cross',
@@ -1173,7 +1211,7 @@ export default function CriticalStockPage() {
                   textStyle: { color: ct.legendText, fontSize: 13, fontWeight: '700', fontFamily: 'inherit' },
                   inactiveColor: isDark ? '#334155' : '#d1d5db',
                 },
-                grid: { left: 14, right: 18, top: 18, bottom: 48, containLabel: true },
+                grid: { left: 14, right: 18, top: 18, bottom: window.innerWidth <= 768 ? 68 : 48, containLabel: true },
                 xAxis: {
                   type: 'category',
                   data: chartData.labels,
@@ -1185,6 +1223,7 @@ export default function CriticalStockPage() {
                     fontFamily: 'inherit',
                     interval: Math.max(0, Math.floor(chartData.labels.length / 13) - 1),
                     margin: 10,
+                    rotate: window.innerWidth <= 768 ? 30 : 0,
                   },
                   axisLine: { lineStyle: { color: ct.axisLine, width: 1 } },
                   axisTick: { show: false },

@@ -899,6 +899,7 @@ export default function AnomalyStockPage() {
                 animation: true,
                 animationDuration: 900,
                 tooltip: {
+                  show: window.innerWidth > 768,
                   trigger: 'axis',
                   axisPointer: {
                     type: 'cross',
@@ -929,12 +930,17 @@ export default function AnomalyStockPage() {
                   itemHeight: 5,
                   textStyle: { color: ct.legendText, fontSize: 11, fontWeight: '700' },
                 },
-                grid: { left: 14, right: 18, top: 18, bottom: 48, containLabel: true },
+                grid: { left: 14, right: 18, top: 18, bottom: window.innerWidth <= 768 ? 68 : 48, containLabel: true },
                 xAxis: {
                   type: 'category',
                   data: chartData.labels,
                   boundaryGap: chartMode === 'bar',
-                  axisLabel: { color: ct.axisLabel, fontSize: 10, interval: Math.max(0, Math.floor(chartData.labels.length / 10) - 1) },
+                  axisLabel: {
+                    color: ct.axisLabel,
+                    fontSize: 10,
+                    interval: Math.max(0, Math.floor(chartData.labels.length / 10) - 1),
+                    rotate: window.innerWidth <= 768 ? 30 : 0
+                  },
                   axisLine: { lineStyle: { color: ct.axisLine } },
                   splitLine: { show: true, lineStyle: { color: ct.gridLine, type: 'dashed' } },
                 },

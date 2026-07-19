@@ -18,12 +18,12 @@ interface TopBarProps {
   theme: ThemeMode;
   onThemeToggle: () => void;
   currentPath: string;
+  onMenuToggle: () => void;
 }
 
-export default function TopBar({ collapsed, theme, onThemeToggle, currentPath }: TopBarProps) {
+export default function TopBar({ collapsed, theme, onThemeToggle, currentPath, onMenuToggle }: TopBarProps) {
   const [showProfile, setShowProfile] = useState(false);
   const navigate = useNavigate();
-  const sidebarWidth = collapsed ? 64 : 260;
   const pageTitle = pageLabels[currentPath] ?? '';
 
   const authStr = localStorage.getItem('krl_auth');
@@ -36,7 +36,7 @@ export default function TopBar({ collapsed, theme, onThemeToggle, currentPath }:
     <header
       className="fixed top-0 right-0 z-30 flex justify-between items-center h-16 px-4 border-b"
       style={{
-        left: sidebarWidth,
+        left: 'var(--sidebar-width)',
         backgroundColor: 'var(--color-background-metallic)',
         borderColor: 'var(--color-steel-border)',
         boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
@@ -45,6 +45,18 @@ export default function TopBar({ collapsed, theme, onThemeToggle, currentPath }:
     >
       {/* Left */}
       <div className="flex-1 flex items-center gap-3">
+        <button
+          onClick={onMenuToggle}
+          className="p-2 rounded border md:hidden"
+          style={{ backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)', borderColor: 'var(--color-steel-border)' }}
+          title="Menu"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
         {pageTitle && (
           <span
             className="text-[11px] font-bold tracking-widest uppercase px-2.5 py-0.5 rounded"
