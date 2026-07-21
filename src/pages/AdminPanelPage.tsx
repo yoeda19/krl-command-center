@@ -1492,7 +1492,7 @@ export default function AdminPanelPage() {
                       className="w-full rounded px-3 py-2 text-sm border" style={inputStyle} />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold uppercase mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>Safety Stock Manual (PCS)</label>
+                    <label className="block text-xs font-bold uppercase mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>Safety Stock Manual</label>
                     <input type="number" value={editValues.safety_stock_manual || 0}
                       disabled={editValues.use_formula}
                       placeholder={editValues.use_formula ? 'Otomatis dari Rumus' : 'Input angka SS'}

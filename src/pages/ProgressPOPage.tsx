@@ -417,7 +417,7 @@ export default function ProgressPOPage() {
               <thead>
                 <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
                   {[
-                    'NO', 'NOD Status', 'Progress', 'Proposed by', 'NOD Number', 'Plan NOD', 'Realisasi NOD',
+                    'NO', 'NOD Status', 'Progress', 'Nomor Material', 'Nama Material', 'Proposed by', 'NOD Number', 'Plan NOD', 'Realisasi NOD',
                     'RKAP/NON RKAP', 'Link Doc NOD', 'Category', 
                     'Plan Spektek', 'Realisasi Spektek',
                     'Plan CTPE', 'Realisasi CTPE',
@@ -478,6 +478,16 @@ export default function ProgressPOPage() {
                             </div>
                           );
                         })()}
+                      </td>
+
+                      {/* 4. Nomor Material */}
+                      <td className="px-3 py-3 text-xs font-mono font-bold text-center whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>
+                        {row.nomor_material || '—'}
+                      </td>
+
+                      {/* 5. Nama Material */}
+                      <td className="px-3 py-3 text-xs font-semibold whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface)' }}>
+                        {row.uraian_material || '—'}
                       </td>
                       
                       {/* 4. Proposed by */}
