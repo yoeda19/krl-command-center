@@ -481,10 +481,10 @@ export default function ProgressPOPage() {
                       </td>
                       
                       {/* 4. Proposed by */}
-                      <td className="px-3 py-3 text-xs text-center">{row.proposed_by || 'Unit Perawatan KRL'}</td>
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">{row.proposed_by || 'Unit Perawatan KRL'}</td>
                       
                       {/* 5. NOD Number */}
-                      <td className="px-3 py-3 text-xs font-mono font-bold text-center" style={{ color: cfg.text }}>
+                      <td className="px-3 py-3 text-xs font-mono font-bold text-center whitespace-nowrap" style={{ color: cfg.text }}>
                         {row.nomor_nod || '—'}
                       </td>
                       
@@ -499,8 +499,8 @@ export default function ProgressPOPage() {
                       </td>
                       
                       {/* 7. RKAP/NON RKAP */}
-                      <td className="px-3 py-3 text-xs text-center">
-                        <span className={`text-[9px] font-black tracking-widest px-2 py-0.5 rounded-full ${
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        <span className={`text-[9px] font-black tracking-widest px-2 py-0.5 rounded-full whitespace-nowrap ${
                           row.rkap_non_rkap === 'NON RKAP' ? 'bg-orange-500/10 text-orange-400' : 'bg-blue-500/10 text-blue-400'
                         }`}>
                           {row.rkap_non_rkap || 'RKAP'}
@@ -508,12 +508,12 @@ export default function ProgressPOPage() {
                       </td>
                       
                       {/* 8. Link Document NOD */}
-                      <td className="px-3 py-3 text-xs text-center">
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
                         {(() => {
                           const safeUrl = validateAndGetSafeUrl(row.link_document_nod);
                           return safeUrl ? (
                             <a href={safeUrl} target="_blank" rel="noopener noreferrer" 
-                              className="px-2 py-0.5 rounded text-[9px] font-bold bg-gray-500/15 text-gray-300 border border-gray-500/30 hover:bg-gray-500/25 transition-all">
+                              className="px-2 py-0.5 rounded text-[9px] font-bold bg-gray-500/15 text-gray-300 border border-gray-500/30 hover:bg-gray-500/25 transition-all whitespace-nowrap">
                               🔗 DOC
                             </a>
                           ) : '—';
@@ -521,7 +521,7 @@ export default function ProgressPOPage() {
                       </td>
                       
                       {/* 9. Category */}
-                      <td className="px-3 py-3 text-xs text-center">{row.category || 'Suku Cadang'}</td>
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">{row.category || 'Suku Cadang'}</td>
                       
                       {/* 10. Spektek (Plan vs Realisasi) */}
                       <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
@@ -572,7 +572,7 @@ export default function ProgressPOPage() {
                       </td>
                       
                       {/* 14. Purchase Requisitions Number (SAP) */}
-                      <td className="px-3 py-3 text-xs font-mono font-bold text-center" style={{ color: cfg.text }}>
+                      <td className="px-3 py-3 text-xs font-mono font-bold text-center whitespace-nowrap" style={{ color: cfg.text }}>
                         {row.pr_number || row.nomor_pr || '—'}
                       </td>
                       
@@ -587,8 +587,8 @@ export default function ProgressPOPage() {
                       </td>
                       
                       {/* 16. APPROVAL CEP, CE, C2, CAA (SAP) */}
-                      <td className="px-3 py-3 text-xs text-center">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-500/10 text-green-400">
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-500/10 text-green-400 whitespace-nowrap">
                           {row.approval_sap_status || 'APPROVED'}
                         </span>
                       </td>
@@ -599,10 +599,10 @@ export default function ProgressPOPage() {
                       </td>
                       
                       {/* 18. VENDOR (SAP) */}
-                      <td className="px-3 py-3 text-xs text-center">{row.vendor_sap || row.vendor || '—'}</td>
+                      <td className="px-3 py-3 text-xs text-center whitespace-nowrap min-w-[160px]">{row.vendor_sap || row.vendor || '—'}</td>
                       
                       {/* 19. Purchase Order Number (SAP) */}
-                      <td className="px-3 py-3 text-xs font-mono font-bold text-center" style={{ color: cfg.text }}>
+                      <td className="px-3 py-3 text-xs font-mono font-bold text-center whitespace-nowrap" style={{ color: cfg.text }}>
                         {row.po_number || row.nomor_po || '—'}
                       </td>
                       
@@ -637,8 +637,8 @@ export default function ProgressPOPage() {
                       </td>
                       
                       {/* 23. DURATION */}
-                      <td className="px-3 py-3 text-xs font-bold text-center">
-                        <div className="flex flex-col items-center gap-1.5">
+                      <td className="px-3 py-3 text-xs font-bold text-center whitespace-nowrap">
+                        <div className="flex flex-col items-center gap-1.5 whitespace-nowrap">
                           <span>
                             {(() => {
                               const start = row.publish_nod || row.tanggal_nod ? new Date(row.publish_nod || row.tanggal_nod!) : null;
@@ -662,7 +662,7 @@ export default function ProgressPOPage() {
                       </td>
                       
                       {/* 24. STATUS */}
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-3 py-3 text-center whitespace-nowrap">
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
                           style={{ backgroundColor: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}>
                           {row.status}
@@ -670,7 +670,7 @@ export default function ProgressPOPage() {
                       </td>
                       
                       {/* 25. COST */}
-                      <td className="px-3 py-3 text-xs font-bold text-right" style={{ color: 'var(--color-secondary)' }}>
+                      <td className="px-3 py-3 text-xs font-bold text-right whitespace-nowrap" style={{ color: 'var(--color-secondary)' }}>
                         {formatRupiah(row.cost || row.total_harga)}
                       </td>
                     </tr>

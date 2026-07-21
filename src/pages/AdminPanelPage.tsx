@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useAppStore } from '../store/useAppStore';
 import PageWrapper from '../components/layout/PageWrapper';
 import {
   getAdminParameters, saveAdminParameter, getMonthlyPlans, saveMonthlyPlans, addAuditLog,
@@ -108,7 +109,7 @@ const emptySchedule = (): Omit<MaintenanceSchedule, 'id'> => ({
   seri_kereta: 'JR205',
   jenis_propulsi: 'VVVF',
   tipe_perawatan: 'P1',
-  tanggal_rencana: new Date('2026-07-11').toISOString().split('T')[0],
+  tanggal_rencana: new Date().toISOString().split('T')[0],
   status_pelaksanaan: 'Rencana',
   dipo: 'Depo Depok',
 });
@@ -123,16 +124,16 @@ const emptyWO = (): Omit<WorkOrder, 'id' | 'nomor_rangkaian' | 'nama_material' |
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <label className="block text-[10px] font-black uppercase tracking-wider mb-1.5"
-        style={{ color: 'var(--color-on-surface-variant)' }}>{label}</label>
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <label className="text-[11px] font-extrabold uppercase tracking-wider block truncate"
+        style={{ color: 'var(--color-on-surface)' }}>{label}</label>
       {children}
     </div>
   );
 }
 
-const inputCls = "w-full rounded px-3 py-2 text-sm border";
-const inputStyle = { backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' };
+const inputCls = "w-full rounded-lg px-3.5 py-2.5 text-xs font-semibold border transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50 shadow-sm";
+const inputStyle = { backgroundColor: 'var(--color-background)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' };
 
 export default function AdminPanelPage() {
   const [searchParams] = useSearchParams();
@@ -543,6 +544,8 @@ export default function AdminPanelPage() {
     }
   };
 
+  const { clearCache } = useAppStore();
+
   const handleSave = async () => {
     if (!editValues) return;
     try {
@@ -552,6 +555,7 @@ export default function AdminPanelPage() {
       setParams(prev => prev.map(p => p.nomor_material === editingId ? { ...p, ...editValues } : p));
       setEditingId(null); setEditValues(null); setMonthlyPlans([]);
       setConfirmModal(null);
+      clearCache(); // Invalidate Zustand cache agar CriticalStockPage re-fetch data terbaru
       showSuccess(`Parameter dan Rencana Bulanan untuk ${editValues.nomor_material} berhasil disimpan.`);
     } catch (err: any) {
       console.error('Error saving parameter:', err);
@@ -1011,13 +1015,13 @@ export default function AdminPanelPage() {
 
         {/* Scrollable Form Area with Neatly Spaced Card Groups */}
         <div className="p-6 space-y-6 max-h-[66vh] overflow-y-auto" style={{ backgroundColor: 'var(--color-surface-container-low)' }}>
-          
+
           {/* Card 1: Data Material */}
-          <div className="p-5 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
-            <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
+          <div className="p-5 rounded-xl border space-y-4 shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+            <h5 className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Data Material &amp; Detail Cost
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Field label="Kode Material *">
                 <select value={poData.nomor_material || ''} onChange={e => {
                   const m = masterMaterials.find(x => x.nomor_material === e.target.value);
@@ -1046,7 +1050,7 @@ export default function AdminPanelPage() {
                 <input type="number" value={poData.harga_satuan || 0} onChange={e => updateNewPOHarga('harga_satuan', +e.target.value)} className={inputCls} style={inputStyle} />
               </Field>
               <Field label="Total Harga (Rp)">
-                <div className="px-3 py-2 rounded border text-sm font-bold h-[38px] flex items-center" style={{ ...inputStyle, color: 'var(--color-secondary)', minHeight: 38 }}>
+                <div className="px-3.5 py-2.5 rounded-lg border text-xs font-black h-[42px] flex items-center shadow-sm" style={{ ...inputStyle, color: 'var(--color-secondary)', minHeight: 42 }}>
                   {formatRupiah((poData.jumlah_dipesan ?? 0) * (poData.harga_satuan ?? 0))}
                 </div>
               </Field>
@@ -1057,22 +1061,16 @@ export default function AdminPanelPage() {
           </div>
 
           {/* Card 2: Tahap 1 — Nota Dinas (NOD) */}
-          <div className="p-5 rounded-xl border space-y-4" style={getCardStyle('tahap1')}>
-            <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
+          <div className="p-5 rounded-xl border space-y-4 shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+            <h5 className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 1 — Nota Dinas (NOD)
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Field label="Proposed By">
                 <input value={poData.proposed_by || ''} onChange={e => updatePOField('proposed_by', e.target.value)} className={inputCls} style={inputStyle} placeholder="Unit Perawatan KRL" />
               </Field>
               <Field label="Nomor NOD">
                 <input value={poData.nomor_nod || ''} onChange={e => updatePOField('nomor_nod', e.target.value)} className={inputCls} style={inputStyle} placeholder="NOD-2026-001" />
-              </Field>
-              <Field label="Plan NOD Date">
-                <input type="date" value={poData.tanggal_nod || ''} onChange={e => updatePOField('tanggal_nod', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Realisasi NOD Date">
-                <input type="date" value={poData.publish_nod || ''} onChange={e => updatePOField('publish_nod', e.target.value || null)} className={inputCls} style={inputStyle} />
               </Field>
               <Field label="RKAP / NON RKAP">
                 <select value={poData.rkap_non_rkap || 'RKAP'} onChange={e => updatePOField('rkap_non_rkap', e.target.value)} className={inputCls} style={inputStyle}>
@@ -1084,144 +1082,217 @@ export default function AdminPanelPage() {
                 <input value={poData.link_document_nod || ''} onChange={e => updatePOField('link_document_nod', e.target.value)} className={inputCls} style={inputStyle} placeholder="https://..." />
               </Field>
             </div>
+            {/* Tanggal NOD */}
+            <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+              <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>Jadwal Tanggal Nota Dinas</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Plan NOD Date">
+                  <input type="date" value={poData.tanggal_nod || ''} onChange={e => updatePOField('tanggal_nod', e.target.value || null)} className={inputCls} style={inputStyle} />
+                </Field>
+                <Field label="Realisasi NOD Date">
+                  <input type="date" value={poData.publish_nod || ''} onChange={e => updatePOField('publish_nod', e.target.value || null)} className={inputCls} style={inputStyle} />
+                </Field>
+              </div>
+            </div>
           </div>
 
           {/* Card 3: Tahap 2 — Spesifikasi Teknis & RAB */}
-          <div className="p-5 rounded-xl border space-y-4" style={getCardStyle('tahap2', 'tahap3')}>
-            <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
+          <div className="p-5 rounded-xl border space-y-4 shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+            <h5 className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 2 — Spesifikasi Teknis &amp; RAB
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
-              <div className="space-y-2 border-r pr-3 border-gray-700/50">
-                <Field label="Plan Spektek Date">
-                  <input type="date" value={poData.plan_tech_spec_release_date || ''} onChange={e => updatePOField('plan_tech_spec_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
-                </Field>
-                <Field label="Realisasi Spektek Date">
-                  <input type="date" value={poData.tech_spec_release_date || ''} onChange={e => updatePOField('tech_spec_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
-                </Field>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Spektek */}
+              <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>1. Spesifikasi Teknis (Spektek)</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Plan Spektek Date">
+                    <input type="date" value={poData.plan_tech_spec_release_date || ''} onChange={e => updatePOField('plan_tech_spec_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                  <Field label="Realisasi Spektek Date">
+                    <input type="date" value={poData.tech_spec_release_date || ''} onChange={e => updatePOField('tech_spec_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                </div>
               </div>
 
-              <div className="space-y-2 border-r pr-3 border-gray-700/50">
-                <Field label="Plan Evaluasi ke CTPE">
-                  <input type="date" value={poData.plan_rilis_evaluasi_ctpe || ''} onChange={e => updatePOField('plan_rilis_evaluasi_ctpe', e.target.value || null)} className={inputCls} style={inputStyle} />
-                </Field>
-                <Field label="Realisasi Evaluasi ke CTPE">
-                  <input type="date" value={poData.rilis_evaluasi_ctpe || ''} onChange={e => updatePOField('rilis_evaluasi_ctpe', e.target.value || null)} className={inputCls} style={inputStyle} />
-                </Field>
+              {/* CTPE */}
+              <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>2. Rilis Evaluasi CTPE</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Plan Evaluasi CTPE">
+                    <input type="date" value={poData.plan_rilis_evaluasi_ctpe || ''} onChange={e => updatePOField('plan_rilis_evaluasi_ctpe', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                  <Field label="Realisasi Evaluasi CTPE">
+                    <input type="date" value={poData.rilis_evaluasi_ctpe || ''} onChange={e => updatePOField('rilis_evaluasi_ctpe', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                </div>
               </div>
 
-              <div className="space-y-2 border-r pr-3 border-gray-700/50">
-                <Field label="Plan Evaluasi ke CTPP">
-                  <input type="date" value={poData.plan_rilis_evaluasi_ctpp || ''} onChange={e => updatePOField('plan_rilis_evaluasi_ctpp', e.target.value || null)} className={inputCls} style={inputStyle} />
-                </Field>
-                <Field label="Realisasi Evaluasi ke CTPP">
-                  <input type="date" value={poData.rilis_evaluasi_ctpp || ''} onChange={e => updatePOField('rilis_evaluasi_ctpp', e.target.value || null)} className={inputCls} style={inputStyle} />
-                </Field>
+              {/* CTPP */}
+              <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>3. Rilis Evaluasi CTPP</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Plan Evaluasi CTPP">
+                    <input type="date" value={poData.plan_rilis_evaluasi_ctpp || ''} onChange={e => updatePOField('plan_rilis_evaluasi_ctpp', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                  <Field label="Realisasi Evaluasi CTPP">
+                    <input type="date" value={poData.rilis_evaluasi_ctpp || ''} onChange={e => updatePOField('rilis_evaluasi_ctpp', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                </div>
               </div>
 
-              <div className="space-y-2 border-r pr-3 border-gray-700/50">
-                <Field label="Plan RAB ke Logistik">
-                  <input type="date" value={poData.plan_rilis_rab_logistik || ''} onChange={e => updatePOField('plan_rilis_rab_logistik', e.target.value || null)} className={inputCls} style={inputStyle} />
-                </Field>
-                <Field label="Realisasi RAB ke Logistik">
-                  <input type="date" value={poData.rilis_rab_logistik || ''} onChange={e => updatePOField('rilis_rab_logistik', e.target.value || null)} className={inputCls} style={inputStyle} />
-                </Field>
+              {/* RAB Logistik */}
+              <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>4. Rilis RAB ke Logistik</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Plan RAB Logistik">
+                    <input type="date" value={poData.plan_rilis_rab_logistik || ''} onChange={e => updatePOField('plan_rilis_rab_logistik', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                  <Field label="Realisasi RAB Logistik">
+                    <input type="date" value={poData.rilis_rab_logistik || ''} onChange={e => updatePOField('rilis_rab_logistik', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Field label="Plan Review Logistik">
-                  <input type="date" value={poData.plan_review_logistic_status || ''} onChange={e => updatePOField('plan_review_logistic_status', e.target.value || null)} className={inputCls} style={inputStyle} />
-                </Field>
-                <Field label="Realisasi Review Logistik">
-                  <input type="date" value={poData.review_logistic_status || ''} onChange={e => updatePOField('review_logistic_status', e.target.value || null)} className={inputCls} style={inputStyle} placeholder="Tanggal selesai atau teks..." />
-                </Field>
+              {/* Review Logistik */}
+              <div className="p-3.5 rounded-lg border space-y-2 md:col-span-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>5. Review Logistik</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Plan Review Logistik">
+                    <input type="date" value={poData.plan_review_logistic_status || ''} onChange={e => updatePOField('plan_review_logistic_status', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                  <Field label="Realisasi Review Logistik">
+                    <input type="date" value={poData.review_logistic_status || ''} onChange={e => updatePOField('review_logistic_status', e.target.value || null)} className={inputCls} style={inputStyle} placeholder="Tanggal selesai / status..." />
+                  </Field>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Card 4: Tahap 3 — PR (Permintaan Pembelian) */}
-          <div className="p-5 rounded-xl border space-y-4" style={getCardStyle('tahap4')}>
-            <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
+          <div className="p-5 rounded-xl border space-y-4 shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+            <h5 className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 3 — Purchase Requisitions (PR)
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              <Field label="PR Number">
-                <input value={poData.pr_number || ''} onChange={e => { updatePOField('pr_number', e.target.value); updatePOField('nomor_pr', e.target.value); }} className={inputCls} style={inputStyle} placeholder="PR-5000xxxxx" />
-              </Field>
-              <Field label="Plan PR Date">
-                <input type="date" value={poData.tanggal_pr || ''} onChange={e => updatePOField('tanggal_pr', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Realisasi PR Date">
-                <input type="date" value={poData.pr_release_date || ''} onChange={e => updatePOField('pr_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Plan Approval Date">
-                <input type="date" value={poData.plan_approval_sap_status || ''} onChange={e => updatePOField('plan_approval_sap_status', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Realisasi Approval Date">
-                <input type="date" value={poData.approval_sap_status || ''} onChange={e => updatePOField('approval_sap_status', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="flex flex-col justify-center">
+                <Field label="PR Number">
+                  <input value={poData.pr_number || ''} onChange={e => { updatePOField('pr_number', e.target.value); updatePOField('nomor_pr', e.target.value); }} className={inputCls} style={inputStyle} placeholder="PR-5000xxxxx" />
+                </Field>
+              </div>
+
+              <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>1. Rilis PR</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Plan PR Date">
+                    <input type="date" value={poData.tanggal_pr || ''} onChange={e => updatePOField('tanggal_pr', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                  <Field label="Realisasi PR Date">
+                    <input type="date" value={poData.pr_release_date || ''} onChange={e => updatePOField('pr_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>2. Approval PR</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Plan Approval Date">
+                    <input type="date" value={poData.plan_approval_sap_status || ''} onChange={e => updatePOField('plan_approval_sap_status', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                  <Field label="Realisasi Approval Date">
+                    <input type="date" value={poData.approval_sap_status || ''} onChange={e => updatePOField('approval_sap_status', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Card 5: Tahap 4 — Aanwijzing & PO */}
-          <div className="p-5 rounded-xl border space-y-4" style={getCardStyle('tahap5')}>
-            <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
+          <div className="p-5 rounded-xl border space-y-4 shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+            <h5 className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 4 — Aanwijzing &amp; Purchase Order (PO)
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-5">
-              <Field label="Plan Aanwijzing Date">
-                <input type="date" value={poData.plan_aanwijzing_date || ''} onChange={e => updatePOField('plan_aanwijzing_date', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Realisasi Aanwijzing Date">
-                <input type="date" value={poData.aanwijzing_date || ''} onChange={e => updatePOField('aanwijzing_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label="PO Number">
+                <input value={poData.po_number || ''} onChange={e => { updatePOField('po_number', e.target.value); updatePOField('nomor_po', e.target.value); }} className={inputCls} style={inputStyle} placeholder="PO-4500xxxxx" />
               </Field>
               <Field label="Vendor">
                 <input value={poData.vendor_sap || ''} onChange={e => { updatePOField('vendor_sap', e.target.value); updatePOField('vendor', e.target.value); }} className={inputCls} style={inputStyle} placeholder="Nama Vendor" />
               </Field>
-              <Field label="PO Number">
-                <input value={poData.po_number || ''} onChange={e => { updatePOField('po_number', e.target.value); updatePOField('nomor_po', e.target.value); }} className={inputCls} style={inputStyle} placeholder="PO-4500xxxxx" />
-              </Field>
-              <Field label="Plan PO Date">
-                <input type="date" value={poData.tanggal_po || ''} onChange={e => updatePOField('tanggal_po', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Realisasi PO Date">
-                <input type="date" value={poData.po_release_date || ''} onChange={e => updatePOField('po_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>1. Aanwijzing</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Plan Aanwijzing Date">
+                    <input type="date" value={poData.plan_aanwijzing_date || ''} onChange={e => updatePOField('plan_aanwijzing_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                  <Field label="Realisasi Aanwijzing Date">
+                    <input type="date" value={poData.aanwijzing_date || ''} onChange={e => updatePOField('aanwijzing_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>2. Purchase Order (PO)</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Plan PO Date">
+                    <input type="date" value={poData.tanggal_po || ''} onChange={e => updatePOField('tanggal_po', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                  <Field label="Realisasi PO Date">
+                    <input type="date" value={poData.po_release_date || ''} onChange={e => updatePOField('po_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Card 6: Goods Inspection & GR */}
-          <div className="p-5 rounded-xl border space-y-4" style={getCardStyle('tahap6')}>
-            <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
+          <div className="p-5 rounded-xl border space-y-4 shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+            <h5 className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Tahap 5 — Goods Receipt &amp; Inspection (GR)
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-5">
-              <Field label="Plan Goods Inspection Date">
-                <input type="date" value={poData.plan_goods_inspection_status || ''} onChange={e => updatePOField('plan_goods_inspection_status', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Realisasi Goods Inspection Date">
-                <input type="date" value={poData.goods_inspection_status || ''} onChange={e => updatePOField('goods_inspection_status', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Plan GR Date">
-                <input type="date" value={poData.tanggal_gr || ''} onChange={e => { updatePOField('tanggal_gr', e.target.value || null); updatePOField('tanggal_rencana_pengiriman', e.target.value || ''); }} className={inputCls} style={inputStyle} />
-              </Field>
-              <Field label="Realisasi GR Date">
-                <input type="date" value={poData.gr_release_date || ''} onChange={e => updatePOField('gr_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
-              </Field>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>1. Goods Inspection</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Plan Goods Inspection Date">
+                    <input type="date" value={poData.plan_goods_inspection_status || ''} onChange={e => updatePOField('plan_goods_inspection_status', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                  <Field label="Realisasi Goods Inspection Date">
+                    <input type="date" value={poData.goods_inspection_status || ''} onChange={e => updatePOField('goods_inspection_status', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-lg border space-y-2" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <span className="text-[10px] font-black uppercase tracking-wider block" style={{ color: 'var(--color-secondary)' }}>2. Goods Receipt (GR)</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Plan GR Date">
+                    <input type="date" value={poData.tanggal_gr || ''} onChange={e => { updatePOField('tanggal_gr', e.target.value || null); updatePOField('tanggal_rencana_pengiriman', e.target.value || ''); }} className={inputCls} style={inputStyle} />
+                  </Field>
+                  <Field label="Realisasi GR Date">
+                    <input type="date" value={poData.gr_release_date || ''} onChange={e => updatePOField('gr_release_date', e.target.value || null)} className={inputCls} style={inputStyle} />
+                  </Field>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-1">
               <Field label="Sisa Stok Sebelum GR">
                 <input type="number" value={poData.sisa_stok || 0} onChange={e => updatePOField('sisa_stok', +e.target.value)} className={inputCls} style={inputStyle} />
               </Field>
             </div>
           </div>
 
-
-
-          {/* Card 8: Status & Risk */}
-          <div className="p-5 rounded-xl border space-y-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
-            <h5 className="text-xs font-black uppercase tracking-wider text-secondary flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
+          {/* Card 7: Status & Kontrol */}
+          <div className="p-5 rounded-xl border space-y-4 shadow-sm" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container)' }}>
+            <h5 className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
               Status &amp; Kontrol
             </h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <Field label="Status Pengadaan">
                 <select value={poData.status || 'Dalam Pengadaan'} onChange={e => updatePOField('status', e.target.value as ProcurementStatus)} className={inputCls} style={inputStyle}>
                   {PROCUREMENT_STATUSES.map(s => <option key={s}>{s}</option>)}
@@ -1362,25 +1433,28 @@ export default function AdminPanelPage() {
               <table className="w-full text-left border-collapse min-w-[950px] data-table">
                 <thead>
                   <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                    {['Kode Material','Nama Material','Stok Ideal','Lead Time (hari)','Metode','Aksi'].map(h => (
-                      <th key={h} className="px-4 py-3 text-[11px] font-black tracking-widest uppercase" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
+                    {['Kode Material','Nama Material','Stok Ideal','Safety Stock','Lead Time (hari)','Metode','Aksi'].map(h => (
+                      <th key={h} className="px-4 py-3 text-[11px] font-black tracking-widest uppercase whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {params.map((row, i) => (
                     <tr key={row.nomor_material} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
-                      <td className="px-4 py-3 font-bold text-xs" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
-                      <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.ideal_qty} PCS</td>
-                      <td className="px-4 py-3 text-xs">{row.lead_time_hari} hari</td>
-                      <td className="px-4 py-3">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      <td className="px-4 py-3 font-bold text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
+                      <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.ideal_qty} PCS</td>
+                      <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>
+                        {row.use_formula ? `Otomatis (${row.safety_stock_days || 30} hari)` : (row.safety_stock_manual ? `${row.safety_stock_manual} PCS` : 'Otomatis')}
+                      </td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">{row.lead_time_hari} hari</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
                           style={{ backgroundColor: row.use_formula ? 'rgba(59,130,246,0.12)' : 'var(--color-surface-container-high)', color: row.use_formula ? '#60a5fa' : 'var(--color-on-surface-variant)' }}>
                           {row.use_formula ? 'Rumus Dinamis' : 'Input Manual'}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <button onClick={() => handleEdit(row.nomor_material)}
                           className="flex items-center gap-1 px-3 py-1.5 rounded border text-[10px] font-bold transition-all hover:opacity-85"
                           style={{ borderColor: 'var(--color-on-surface-variant)', color: 'var(--color-on-surface)', backgroundColor: 'transparent' }}>
@@ -1410,12 +1484,27 @@ export default function AdminPanelPage() {
                     <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
                   <div>
                     <label className="block text-xs font-bold uppercase mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>Stok Ideal</label>
                     <input type="number" value={editValues.ideal_qty}
                       onChange={e => updateField('ideal_qty', parseInt(e.target.value) || 0)}
                       className="w-full rounded px-3 py-2 text-sm border" style={inputStyle} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>Safety Stock Manual (PCS)</label>
+                    <input type="number" value={editValues.safety_stock_manual || 0}
+                      disabled={editValues.use_formula}
+                      placeholder={editValues.use_formula ? 'Otomatis dari Rumus' : 'Input angka SS'}
+                      onChange={e => updateField('safety_stock_manual', parseInt(e.target.value) || 0)}
+                      className="w-full rounded px-3 py-2 text-sm border disabled:opacity-50" style={inputStyle} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>Safety Stock (Hari)</label>
+                    <input type="number" value={editValues.safety_stock_days || 30}
+                      disabled={!editValues.use_formula}
+                      onChange={e => updateField('safety_stock_days', parseInt(e.target.value) || 30)}
+                      className="w-full rounded px-3 py-2 text-sm border disabled:opacity-50" style={inputStyle} />
                   </div>
                   <div>
                     <label className="block text-xs font-bold uppercase mb-1.5" style={{ color: 'var(--color-on-surface-variant)' }}>Lead Time (Hari)</label>
@@ -1428,7 +1517,7 @@ export default function AdminPanelPage() {
                     <label className="flex items-center gap-2 mt-2.5 cursor-pointer text-sm">
                       <input type="checkbox" checked={editValues.use_formula}
                         onChange={e => updateField('use_formula', e.target.checked)} />
-                      <span style={{ color: 'var(--color-on-surface)' }}>Gunakan Rumus Dinamis</span>
+                      <span style={{ color: 'var(--color-on-surface)' }}>Rumus Dinamis</span>
                     </label>
                   </div>
                 </div>
@@ -1508,7 +1597,7 @@ export default function AdminPanelPage() {
               <button onClick={() => { setShowAddForm(true); setEditingPO(null); setNewPO(emptyPO()); setInvalidStages([]); }}
                 className="skeuomorphic-btn px-4 py-2 rounded text-sm flex items-center gap-2">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                + Buat NOD / PO Baru
+                Buat NOD / PO Baru
               </button>
             )}
           </div>
@@ -1542,21 +1631,21 @@ export default function AdminPanelPage() {
                     const nil = <span style={{ color: 'var(--color-on-surface-variant)', opacity: 0.35 }}>—</span>;
                     return (
                       <tr key={row.id} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
-                        <td className="px-3 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                        <td className="px-3 py-3 text-xs max-w-[160px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.uraian_material}</td>
-                        <td className="px-3 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{row.vendor}</td>
-                        <td className="px-3 py-3 text-xs font-mono" style={{ color: sc.color }}>{row.nomor_nod || nil}</td>
-                        <td className="px-3 py-3 text-xs font-mono" style={{ color: sc.color }}>{row.nomor_pr || nil}</td>
-                        <td className="px-3 py-3 text-xs font-mono font-bold" style={{ color: sc.color }}>{row.nomor_po || nil}</td>
+                        <td className="px-3 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
+                        <td className="px-3 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.uraian_material}</td>
+                        <td className="px-3 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{row.vendor}</td>
+                        <td className="px-3 py-3 text-xs font-mono whitespace-nowrap" style={{ color: sc.color }}>{row.nomor_nod || nil}</td>
+                        <td className="px-3 py-3 text-xs font-mono whitespace-nowrap" style={{ color: sc.color }}>{row.nomor_pr || nil}</td>
+                        <td className="px-3 py-3 text-xs font-mono font-bold whitespace-nowrap" style={{ color: sc.color }}>{row.nomor_po || nil}</td>
                         <td className="px-3 py-3 text-xs whitespace-nowrap">{row.tanggal_po ? formatTanggal(row.tanggal_po) : nil}</td>
-                        <td className="px-3 py-3 text-xs font-mono" style={{ color: 'var(--color-led-green)' }}>{row.nomor_gr || nil}</td>
+                        <td className="px-3 py-3 text-xs font-mono whitespace-nowrap" style={{ color: 'var(--color-led-green)' }}>{row.nomor_gr || nil}</td>
                         <td className="px-3 py-3 text-xs whitespace-nowrap">{(row.tanggal_gr || row.tanggal_penerimaan_barang) ? formatTanggal((row.tanggal_gr || row.tanggal_penerimaan_barang)!) : nil}</td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 whitespace-nowrap">
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
                             style={{ backgroundColor: `${sc.color}20`, color: sc.color }}>{row.status}</span>
                         </td>
-                        <td className="px-3 py-3 text-xs">{row.risiko_keterlambatan}</td>
-                        <td className="px-3 py-3">
+                        <td className="px-3 py-3 text-xs whitespace-nowrap">{row.risiko_keterlambatan}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
                           <div className="flex gap-1.5">
                             <button onClick={() => { setEditingPO({ ...row }); setShowAddForm(false); setInvalidStages([]); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
                               className="px-2 py-1 rounded border text-[10px] font-bold hover:opacity-85 transition-all"
@@ -1713,21 +1802,21 @@ export default function AdminPanelPage() {
                 <thead>
                   <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
                     {['Nomor Rangkaian', 'Seri Kereta', 'Propulsi', 'Tipe Perawatan', 'Tanggal Rencana', 'Status Pelaksanaan', 'Lokasi Dipo', 'Aksi'].map(h => (
-                      <th key={h} className="px-4 py-2 text-[10px] font-black uppercase tracking-wider" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
+                      <th key={h} className="px-4 py-2 text-[10px] font-black uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {schedules.map(row => (
                     <tr key={row.id}>
-                      <td className="px-4 py-2.5 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_rangkaian}</td>
-                      <td className="px-4 py-2.5 text-xs">{row.seri_kereta}</td>
-                      <td className="px-4 py-2.5 text-xs">{row.jenis_propulsi}</td>
-                      <td className="px-4 py-2.5 text-xs font-bold" style={{ color: 'var(--color-secondary)' }}>{row.tipe_perawatan}</td>
-                      <td className="px-4 py-2.5 text-xs">{formatTanggal(row.tanggal_rencana)}</td>
-                      <td className="px-4 py-2.5 text-xs font-bold">{row.status_pelaksanaan}</td>
-                      <td className="px-4 py-2.5 text-xs">{row.dipo || 'Depo Depok'}</td>
-                      <td className="px-4 py-2.5">
+                      <td className="px-4 py-2.5 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_rangkaian}</td>
+                      <td className="px-4 py-2.5 text-xs whitespace-nowrap">{row.seri_kereta}</td>
+                      <td className="px-4 py-2.5 text-xs whitespace-nowrap">{row.jenis_propulsi}</td>
+                      <td className="px-4 py-2.5 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-secondary)' }}>{row.tipe_perawatan}</td>
+                      <td className="px-4 py-2.5 text-xs whitespace-nowrap">{formatTanggal(row.tanggal_rencana)}</td>
+                      <td className="px-4 py-2.5 text-xs font-bold whitespace-nowrap">{row.status_pelaksanaan}</td>
+                      <td className="px-4 py-2.5 text-xs whitespace-nowrap">{row.dipo || 'Depo Depok'}</td>
+                      <td className="px-4 py-2.5 whitespace-nowrap">
                         <div className="flex gap-2">
                           <button onClick={() => setSelectedScheduleForBOM(row)} className="px-2.5 py-1 rounded text-[10px] font-bold text-white transition-all hover:opacity-85" style={{ backgroundColor: 'var(--color-secondary)' }}>Detail BOM</button>
                           <button onClick={() => { setEditingSchedule({ ...row }); setShowScheduleForm(false); }} className="px-2 py-1 rounded border text-[10px] font-bold" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>Edit</button>
@@ -1885,23 +1974,23 @@ export default function AdminPanelPage() {
                 <table className="w-full text-left border-collapse data-table">
                   <thead>
                     <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider w-[100px]" style={{ color: 'var(--color-on-primary-container)' }}>Kode Material</th>
-                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider" style={{ color: 'var(--color-on-primary-container)' }}>Nama Material</th>
-                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider w-[140px]" style={{ color: 'var(--color-on-primary-container)' }}>Jenis Perawatan</th>
-                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider w-[80px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>Qty Std</th>
-                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider w-[40px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>TC</th>
-                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider w-[40px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>M1</th>
-                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider w-[40px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>M2</th>
-                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider w-[40px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>T6</th>
-                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider w-[40px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>T</th>
-                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider w-[180px]" style={{ color: 'var(--color-on-primary-container)' }}>Kompatibilitas</th>
-                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider w-[140px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>Aksi</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)' }}>Kode Material</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-primary-container)' }}>Nama Material</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)' }}>Jenis Perawatan</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-center" style={{ color: 'var(--color-on-primary-container)' }}>Qty Std</th>
+                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-center" style={{ color: 'var(--color-on-primary-container)' }}>TC</th>
+                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-center" style={{ color: 'var(--color-on-primary-container)' }}>M1</th>
+                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-center" style={{ color: 'var(--color-on-primary-container)' }}>M2</th>
+                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-center" style={{ color: 'var(--color-on-primary-container)' }}>T6</th>
+                      <th className="px-2 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-center" style={{ color: 'var(--color-on-primary-container)' }}>T</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)' }}>Kompatibilitas</th>
+                      <th className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider whitespace-nowrap text-center" style={{ color: 'var(--color-on-primary-container)' }}>Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredMaterials.length === 0 ? (
                       <tr>
-                        <td colSpan={11} className="px-4 py-8 text-center text-xs opacity-50 italic">
+                        <td colSpan={11} className="px-4 py-8 text-center text-xs opacity-50 italic whitespace-nowrap">
                           Belum ada material terdaftar di BOM atau kata kunci tidak cocok.
                         </td>
                       </tr>
@@ -1909,30 +1998,30 @@ export default function AdminPanelPage() {
                       filteredMaterials.map(m => {
                         return (
                           <tr key={m.nomor_material}>
-                            <td className="px-4 py-3 text-xs font-black" style={{ color: 'var(--color-on-surface)' }}>{m.nomor_material}</td>
-                            <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>
+                            <td className="px-4 py-3 text-xs font-black whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{m.nomor_material}</td>
+                            <td className="px-4 py-3 text-xs font-bold whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface)' }}>
                               {m.nama_material} <span className="opacity-50 font-normal">({m.satuan})</span>
                             </td>
-                            <td className="px-4 py-3 text-[10px] font-bold" style={{ color: 'var(--color-secondary)' }}>
+                            <td className="px-4 py-3 text-[10px] font-bold whitespace-nowrap" style={{ color: 'var(--color-secondary)' }}>
                               {m.types.join(', ')}
                             </td>
-                            <td className="px-4 py-3 text-xs font-bold text-center" style={{ color: 'var(--color-on-surface)' }}>{m.qty_standar}</td>
-                            <td className="px-2 py-3 text-xs font-bold font-mono text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_tc}</td>
-                            <td className="px-2 py-3 text-xs font-bold font-mono text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_m1}</td>
-                            <td className="px-2 py-3 text-xs font-bold font-mono text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_m2}</td>
-                            <td className="px-2 py-3 text-xs font-bold font-mono text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_t6}</td>
-                            <td className="px-2 py-3 text-xs font-bold font-mono text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_t}</td>
-                            <td className="px-4 py-3 text-xs font-bold">
+                            <td className="px-4 py-3 text-xs font-bold text-center whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{m.qty_standar}</td>
+                            <td className="px-2 py-3 text-xs font-bold font-mono text-center whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_tc}</td>
+                            <td className="px-2 py-3 text-xs font-bold font-mono text-center whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_m1}</td>
+                            <td className="px-2 py-3 text-xs font-bold font-mono text-center whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_m2}</td>
+                            <td className="px-2 py-3 text-xs font-bold font-mono text-center whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_t6}</td>
+                            <td className="px-2 py-3 text-xs font-bold font-mono text-center whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{m.qty_t}</td>
+                            <td className="px-4 py-3 text-xs font-bold whitespace-nowrap">
                               {m.compat_seri_kereta || m.compat_propulsi ? (
-                                <div className="flex flex-col gap-0.5">
-                                  {m.compat_seri_kereta && <div className="text-[10px]" style={{ color: 'var(--color-on-surface)' }}>Seri: {m.compat_seri_kereta}</div>}
-                                  {m.compat_propulsi && <div className="text-[10px]" style={{ color: 'var(--color-secondary)' }}>Propulsi: {m.compat_propulsi}</div>}
+                                <div className="flex flex-col gap-0.5 whitespace-nowrap">
+                                  {m.compat_seri_kereta && <div className="text-[10px] whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>Seri: {m.compat_seri_kereta}</div>}
+                                  {m.compat_propulsi && <div className="text-[10px] whitespace-nowrap" style={{ color: 'var(--color-secondary)' }}>Propulsi: {m.compat_propulsi}</div>}
                                 </div>
                               ) : (
-                                <span className="opacity-40 italic">Semua (Universal)</span>
+                                <span className="opacity-40 italic whitespace-nowrap">Semua (Universal)</span>
                               )}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex gap-2 justify-center">
                                 <button onClick={() => handleEditBOMMaterialClick(m)}
                                   className="px-3 py-1.5 rounded text-[10px] font-bold text-white transition-all hover:opacity-85"

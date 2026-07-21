@@ -162,33 +162,33 @@ export default function AuditLogPage() {
             <thead>
               <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
                 {['#','Waktu Perubahan','Admin','Kode Material','Parameter','Nilai Sebelumnya','Nilai Baru','Modul'].map(h => (
-                  <th key={h} className="px-4 py-3 text-[11px] font-black tracking-widest uppercase" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
+                  <th key={h} className="px-4 py-3 text-[11px] font-black tracking-widest uppercase whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.map((row, i) => (
                 <tr key={row.id} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
-                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>#{row.id}</td>
-                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface)' }}>{formatDateTime(row.changed_at)}</td>
-                  <td className="px-4 py-3 text-xs">
+                  <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>#{row.id}</td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{formatDateTime(row.changed_at)}</td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap">
                     <p className="font-bold" style={{ color: 'var(--color-secondary)' }}>{row.admin_name}</p>
                     <p style={{ color: 'var(--color-on-surface-variant)' }}>{row.admin_email}</p>
                   </td>
-                  <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material ?? '—'}</td>
-                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface)' }}>{row.parameter_name}</td>
-                  <td className="px-4 py-3">
-                    <span className="text-[10px] px-2 py-0.5 rounded border font-mono" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
+                  <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material ?? '—'}</td>
+                  <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.parameter_name}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="text-[10px] px-2 py-0.5 rounded border font-mono whitespace-nowrap" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
                       {row.original_value || '(kosong)'}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="text-[10px] px-2 py-0.5 rounded border font-mono" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="text-[10px] px-2 py-0.5 rounded border font-mono whitespace-nowrap" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>
                       {row.new_value}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
                       style={{ backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)', border: '1px solid var(--color-steel-border)' }}>
                       {row.modul}
                     </span>

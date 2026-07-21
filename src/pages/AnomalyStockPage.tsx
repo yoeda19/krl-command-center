@@ -1271,7 +1271,7 @@ export default function AnomalyStockPage() {
                   <thead className="sticky top-0 z-10 shadow-sm">
                     <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
                       {['Bulan', 'Target Rencana', 'Realisasi Aktual', 'Deviasi Qty', 'Deviasi Persentase', 'Status', 'Aksi'].map(h => (
-                        <th key={h} className="px-3 py-2 text-[10px] font-black tracking-widest uppercase first:text-left text-right last:text-center"
+                        <th key={h} className="px-3 py-2 text-[10px] font-black tracking-widest uppercase whitespace-nowrap first:text-left text-right last:text-center"
                           style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>{h}</th>
                       ))}
                     </tr>
@@ -1289,27 +1289,27 @@ export default function AnomalyStockPage() {
                       const nil = <span style={{ color: 'var(--color-on-surface-variant)', opacity: 0.35 }}>—</span>;
                       return (
                         <tr key={row.bulan_label} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
-                          <td className="px-3 py-2.5 font-bold text-xs" style={{ color: 'var(--color-on-surface)' }}>{row.bulan_label}</td>
-                          <td className="px-3 py-2.5 text-xs text-right" style={{ color: 'var(--color-on-surface-variant)' }}>{row.plan_qty} {referenceItem.satuan}</td>
-                          <td className="px-3 py-2.5 text-xs text-right font-medium" style={{ color: 'var(--color-on-surface)' }}>
+                          <td className="px-3 py-2.5 font-bold text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.bulan_label}</td>
+                          <td className="px-3 py-2.5 text-xs text-right whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{row.plan_qty} {referenceItem.satuan}</td>
+                          <td className="px-3 py-2.5 text-xs text-right font-medium whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>
                             {row.actual_qty !== null ? `${row.actual_qty} ${referenceItem.satuan}` : nil}
                           </td>
-                          <td className="px-3 py-2.5 text-xs text-right font-bold" style={{ color: row.deviasi_qty !== null ? (row.deviasi_qty > 0 ? 'var(--color-led-red)' : 'var(--color-led-green)') : 'inherit' }}>
+                          <td className="px-3 py-2.5 text-xs text-right font-bold whitespace-nowrap" style={{ color: row.deviasi_qty !== null ? (row.deviasi_qty > 0 ? 'var(--color-led-red)' : 'var(--color-led-green)') : 'inherit' }}>
                             {row.deviasi_qty !== null ? `${row.deviasi_qty > 0 ? '+' : ''}${row.deviasi_qty} ${referenceItem.satuan}` : nil}
                           </td>
-                          <td className="px-3 py-2.5 text-xs text-right font-bold" style={{ color: row.deviasi_pct !== null ? ((row.deviasi_pct > tolerancePlus || row.deviasi_pct < -toleranceMinus) ? 'var(--color-led-red)' : 'var(--color-led-green)') : 'inherit' }}>
+                          <td className="px-3 py-2.5 text-xs text-right font-bold whitespace-nowrap" style={{ color: row.deviasi_pct !== null ? ((row.deviasi_pct > tolerancePlus || row.deviasi_pct < -toleranceMinus) ? 'var(--color-led-red)' : 'var(--color-led-green)') : 'inherit' }}>
                             {row.deviasi_pct !== null ? `${row.deviasi_pct > 0 ? '+' : ''}${row.deviasi_pct}%` : nil}
                           </td>
-                          <td className="px-3 py-2.5 text-center">
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
                             {row.actual_qty !== null ? (
-                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
                                 isAnomaly ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'
                               }`}>
                                 {row.status === 'ANOMALI' ? 'ANOMALI' : 'DALAM TOLERANSI'}
                               </span>
                             ) : nil}
                           </td>
-                          <td className="px-3 py-2.5 text-center">
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
                             {row.actual_qty !== null && row.actual_qty > 0 ? (
                               <button
                                 onClick={() => {
@@ -1364,7 +1364,7 @@ export default function AnomalyStockPage() {
                 <thead className="sticky top-0 z-10 shadow-sm">
                   <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
                     {['Kode Material','Deskripsi Material','Target (Rerata)','Aktual Rata-rata','Gap (Qty)','Deviasi','Status'].map(h => (
-                      <th key={h} className="px-3 py-2 text-[10px] font-black tracking-widest uppercase first:text-left text-right last:text-center"
+                      <th key={h} className="px-3 py-2 text-[10px] font-black tracking-widest uppercase whitespace-nowrap first:text-left text-right last:text-center"
                         style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>{h}</th>
                     ))}
                   </tr>
@@ -1383,18 +1383,18 @@ export default function AnomalyStockPage() {
                             : (i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)')
                         }}
                       >
-                        <td className="px-3 py-2.5 font-bold text-xs" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                        <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
-                        <td className="px-3 py-2.5 text-xs text-right" style={{ color: 'var(--color-on-surface-variant)' }}>{row.plan_bulanan} {row.satuan}</td>
-                        <td className="px-3 py-2.5 text-xs text-right font-medium" style={{ color: 'var(--color-on-surface)' }}>{row.actual_monthly_avg} {row.satuan}</td>
-                        <td className="px-3 py-2.5 text-xs text-right font-bold" style={{ color: row.deviasi_qty > 0 ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>
+                        <td className="px-3 py-2.5 font-bold text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
+                        <td className="px-3 py-2.5 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
+                        <td className="px-3 py-2.5 text-xs text-right whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{row.plan_bulanan} {row.satuan}</td>
+                        <td className="px-3 py-2.5 text-xs text-right font-medium whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.actual_monthly_avg} {row.satuan}</td>
+                        <td className="px-3 py-2.5 text-xs text-right font-bold whitespace-nowrap" style={{ color: row.deviasi_qty > 0 ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>
                           {row.deviasi_qty > 0 ? '+' : ''}{row.deviasi_qty}
                         </td>
-                        <td className="px-3 py-2.5 text-xs text-right font-bold" style={{ color: (row.deviasi_pct > tolerancePlus || row.deviasi_pct < -toleranceMinus) ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>
+                        <td className="px-3 py-2.5 text-xs text-right font-bold whitespace-nowrap" style={{ color: (row.deviasi_pct > tolerancePlus || row.deviasi_pct < -toleranceMinus) ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>
                           {row.deviasi_pct > 0 ? '+' : ''}{row.deviasi_pct}%
                         </td>
-                        <td className="px-3 py-2.5 text-center">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
                             isAnomaly ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'
                           }`}>
                             {row.status === 'ANOMALI' ? 'ANOMALI' : 'DALAM TOLERANSI'}
@@ -1483,7 +1483,7 @@ export default function AnomalyStockPage() {
                     <thead className="sticky top-0 z-10 shadow-sm">
                       <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
                         {['Tanggal', 'Nomor Order', 'Deskripsi Order', 'Qty', ...(selectedWarehouse === 'SEMUA' ? ['Gudang'] : []), 'Status'].map(h => (
-                          <th key={h} className="px-3 py-2.5 text-[10px] font-black tracking-widest uppercase first:text-left text-right last:text-center"
+                          <th key={h} className="px-3 py-2.5 text-[10px] font-black tracking-widest uppercase whitespace-nowrap first:text-left text-right last:text-center"
                             style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>{h}</th>
                         ))}
                       </tr>
@@ -1493,14 +1493,14 @@ export default function AnomalyStockPage() {
                         const isAnomaly = row.status === 'ANOMALI';
                         return (
                           <tr key={i} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
-                            <td className="px-3 py-2.5 text-xs" style={{ color: 'var(--color-on-surface)' }}>{row.tanggal}</td>
-                            <td className="px-3 py-2.5 text-xs font-mono font-bold" style={{ color: 'var(--color-on-surface-variant)' }}>{row.order_no}</td>
-                            <td className="px-3 py-2.5 text-xs font-medium" style={{ color: 'var(--color-on-surface)' }}>{row.description}</td>
-                            <td className="px-3 py-2.5 text-xs text-right font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.qty} {referenceItem?.satuan}</td>
+                            <td className="px-3 py-2.5 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.tanggal}</td>
+                            <td className="px-3 py-2.5 text-xs font-mono font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{row.order_no}</td>
+                            <td className="px-3 py-2.5 text-xs font-medium whitespace-nowrap min-w-[180px]" style={{ color: 'var(--color-on-surface)' }}>{row.description}</td>
+                            <td className="px-3 py-2.5 text-xs text-right font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.qty} {referenceItem?.satuan}</td>
                             {selectedWarehouse === 'SEMUA' && (
-                              <td className="px-3 py-2.5 text-xs text-center font-bold" style={{ color: 'var(--color-on-surface-variant)' }}>{row.gudang}</td>
+                              <td className="px-3 py-2.5 text-xs text-center font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{row.gudang}</td>
                             )}
-                            <td className="px-3 py-2.5 text-center">
+                            <td className="px-3 py-2.5 text-center whitespace-nowrap">
                               <div className="relative group inline-block">
                                 <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full whitespace-nowrap cursor-help ${
                                   isAnomaly ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-green-500/10 text-green-500 border border-green-500/20'

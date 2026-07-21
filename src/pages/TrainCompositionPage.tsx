@@ -8,6 +8,7 @@ interface EquipmentItem {
   level: number;
   name: string;
   model_no?: string | null;
+  funct_loc_descrip?: string | null;
 }
 
 interface ScheduleItem {
@@ -63,13 +64,15 @@ export default function TrainCompositionPage() {
   // Helper to parse Seri Kereta
   const getSeriKereta = (name: string) => {
     const upper = name.toUpperCase();
+    if (upper.includes('SARANA KERETA API LISTRIK')) return null; // Root container row
     if (upper.includes('CLI125') || upper.includes('125CLI')) return 'CLI125';
     if (upper.includes('CLI225') || upper.includes('225CLI') || upper.includes('225-')) return 'CLI225';
     if (upper.includes('EA203') || upper.includes('203')) return 'EA203';
     if (upper.includes('KFW')) return 'KFW';
     if (upper.includes('METRO') || upper.includes('05TM') || upper.includes('6000TM') || upper.startsWith('05-') || upper.startsWith('6000')) return 'Metro';
     if (upper.includes('JR') || upper.startsWith('205') || upper.startsWith('103') || upper.startsWith('203')) return 'JR205';
-    return null; // Not a trainset
+    if (upper.includes('C2000M') || upper.includes('CP')) return 'Refurbish';
+    return 'Lainnya';
   };
 
   // Helper to parse Propulsi
@@ -85,20 +88,41 @@ export default function TrainCompositionPage() {
   };
 
   // Helper to get Dipo
-  const getDipo = (trainName: string) => {
-    // Try exact match
-    let match = schedules.find(s => s.nomor_rangkaian === trainName);
-    
-    // Try substring match if no exact match (e.g. "JR205-10" matches parent "205JR10")
+  const getDipo = (item: EquipmentItem) => {
+    const desc = (item.funct_loc_descrip || '').toUpperCase().trim();
+    if (desc.includes('MANGGARAI')) return 'Dipo Manggarai';
+    if (desc.includes('BUKITDURI') || desc.includes('BUKIT DURI')) return 'Dipo Bukit Duri';
+    if (desc.includes('DEPOK')) return 'Dipo Depok';
+    if (desc.includes('BOGOR')) return 'Dipo Bogor';
+    if (desc.includes('SARANA') || desc.includes('TSGO')) return 'TSGO';
+
+    const text = `${item.name} ${item.model_no || ''}`.toUpperCase();
+    if (text.includes('MANGGARAI')) return 'Dipo Manggarai';
+    if (text.includes('BUKITDURI') || text.includes('BUKIT DURI')) return 'Dipo Bukit Duri';
+    if (text.includes('DEPOK')) return 'Dipo Depok';
+    if (text.includes('BOGOR')) return 'Dipo Bogor';
+    if (text.includes('SARANA') || text.includes('TSGO')) return 'TSGO';
+
+    // Try schedule exact match
+    let match = schedules.find(s => s.nomor_rangkaian === item.name);
     if (!match) {
       match = schedules.find(s => {
         const sNorm = s.nomor_rangkaian.replace(/[-/]/g, '').toUpperCase();
-        const tNorm = trainName.replace(/[-/]/g, '').toUpperCase();
+        const tNorm = item.name.replace(/[-/]/g, '').toUpperCase();
         return sNorm.includes(tNorm) || tNorm.includes(sNorm);
       });
     }
-    
-    return match?.dipo || 'Depo Depok';
+
+    if (match?.dipo) {
+      const d = match.dipo.toUpperCase();
+      if (d.includes('MANGGARAI')) return 'Dipo Manggarai';
+      if (d.includes('BUKIT')) return 'Dipo Bukit Duri';
+      if (d.includes('BOGOR')) return 'Dipo Bogor';
+      if (d.includes('DEPOK')) return 'Dipo Depok';
+      if (d.includes('SARANA') || d.includes('TSGO')) return 'TSGO';
+    }
+
+    return 'Dipo Depok';
   };
 
   // Get Level 1 Trainsets mapped with metadata (filtering out non-KRL rows)
@@ -111,7 +135,7 @@ export default function TrainCompositionPage() {
         ...t,
         seri,
         propulsi: getPropulsi(t),
-        dipo: getDipo(t.name),
+        dipo: getDipo(t),
       };
     })
     .filter((t): t is NonNullable<typeof t> => t !== null);
@@ -154,10 +178,11 @@ export default function TrainCompositionPage() {
     return { bg: 'rgba(245,158,11,0.1)', text: 'text-amber-400', border: 'rgba(245,158,11,0.3)' };
   };
 
-  // Dynamically compute options based on actual KRL trainsets data
+  // Dynamically compute options based on actual KRL trainsets data combined with standard dipo list
+  const standardDipos = ['Dipo Depok', 'Dipo Bukit Duri', 'Dipo Manggarai', 'Dipo Bogor', 'TSGO'];
   const seriOptions = ['Semua', ...Array.from(new Set(allTrainsets.map(t => t.seri))).sort()];
   const propulsiOptions = ['Semua', ...Array.from(new Set(allTrainsets.map(t => t.propulsi))).sort()];
-  const dipoOptions = ['Semua', ...Array.from(new Set(allTrainsets.map(t => t.dipo))).sort()];
+  const dipoOptions = ['Semua', ...Array.from(new Set([...standardDipos, ...allTrainsets.map(t => t.dipo.replace(/^(Depo|Dipo) TSGO$/i, 'TSGO'))])).filter(d => !d.includes('TSGO') || d === 'TSGO').sort()];
 
   return (
     <PageWrapper fullWidth>
@@ -352,10 +377,10 @@ export default function TrainCompositionPage() {
                         const type = getCoachType(c.name);
                         return (
                           <tr key={c.id} style={{ borderColor: 'var(--color-steel-border)' }}>
-                            <td className="px-4 py-3 font-bold" style={{ color: 'var(--color-on-surface)' }}>{idx + 1}</td>
-                            <td className="px-4 py-3" style={{ color: 'var(--color-on-surface-variant)' }}>{c.name}</td>
-                            <td className="px-4 py-3">
-                              <span className="font-bold text-xs uppercase" style={{ color: 'var(--color-primary)' }}>{type}</span>
+                            <td className="px-4 py-3 font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{idx + 1}</td>
+                            <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{c.name}</td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span className="font-bold text-xs uppercase whitespace-nowrap" style={{ color: 'var(--color-primary)' }}>{type}</span>
                             </td>
                           </tr>
                         );

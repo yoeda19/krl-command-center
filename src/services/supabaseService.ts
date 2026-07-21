@@ -6,6 +6,58 @@ import type {
   RestockItem, AgingKategori, ProcurementStatus
 } from '../types';
 
+// ── IndexedDB Cache Helper (High Capacity Storage) ────────
+const DB_NAME = 'PrismaAppCacheDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'app_cache';
+
+function getIDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof window === 'undefined' || !window.indexedDB) {
+      return reject('IndexedDB not supported');
+    }
+    const request = window.indexedDB.open(DB_NAME, DB_VERSION);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = (e: any) => {
+      const db = e.target.result as IDBDatabase;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+  });
+}
+
+async function idbGet<T = any>(key: string): Promise<T | null> {
+  try {
+    const db = await getIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function idbSet(key: string, value: any): Promise<boolean> {
+  try {
+    const db = await getIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.put(value, key);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => resolve(false);
+    });
+  } catch {
+    return false;
+  }
+}
+
 // ── 1. FLEET METRICS ──────────────────────────────────────
 export async function getFleetMetrics(): Promise<FleetMetrics> {
   try {
@@ -135,7 +187,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
 
   const { data: adminParams } = await supabase
     .from('procurement_progress')
-    .select('nomor_material, plan_lead_time, tanggal_rencana_pengiriman, jumlah_dipesan, status');
+    .select('nomor_material, plan_lead_time, tanggal_rencana_pengiriman, jumlah_dipesan, status, tanggal_gr, gr_release_date, po_release_date, tanggal_po');
 
   // Caching mechanism for recent_history (cutoff dari Januari 2025)
   let history: { id: number; nomor_material: string; qty: number; tanggal: string | null; gudang: string; order_no: string | null }[] = [];
@@ -143,13 +195,18 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
 
   try {
     const cacheKey = 'skcd_recent_history_cache_v12';
-    const cachedStr = typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null;
     let cachedData: any[] = [];
-    if (cachedStr) {
-      try {
-        cachedData = JSON.parse(cachedStr);
-      } catch (e) {
-        console.error('Failed to parse recent_history cache:', e);
+    const idbCached = await idbGet<any[]>(cacheKey);
+    if (idbCached && Array.isArray(idbCached)) {
+      cachedData = idbCached;
+    } else {
+      const cachedStr = typeof window !== 'undefined' ? localStorage.getItem(cacheKey) : null;
+      if (cachedStr) {
+        try {
+          cachedData = JSON.parse(cachedStr);
+        } catch (e) {
+          console.error('Failed to parse recent_history cache:', e);
+        }
       }
     }
 
@@ -199,7 +256,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
       } else {
         hasMore = false;
       }
-      if (page > 30) break; // safety cutoff
+      // Fetch continuously until no more data (hasMore = false)
     }
 
     const newData = dbNewData || [];
@@ -218,12 +275,13 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
       return item.tanggal && item.tanggal >= cutoffStr;
     });
 
-    // Simpan kembali ke localStorage
+    // Simpan ke IndexedDB (High Capacity) dengan Fallback ke localStorage
+    await idbSet(cacheKey, allHistory);
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(cacheKey, JSON.stringify(allHistory));
       } catch (e) {
-        console.warn('Storage quota exceeded, could not write recent_history cache:', e);
+        // Fallback to IndexedDB already succeeded
       }
     }
     history = allHistory;
@@ -254,7 +312,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
           page++;
         }
       }
-      if (page > 30) break;
+      // Fetch continuously until no more data (hasMore = false)
     }
     history = fallbackData;
   }
@@ -267,7 +325,10 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
 
   materials.forEach(mat => {
     const config = configs?.find(c => c.nomor_material === mat.nomor_material);
-    const param = adminParams?.find(p => p.nomor_material === mat.nomor_material && p.status !== 'Tiba di Depo');
+    const activeParam = adminParams?.find(p => p.nomor_material === mat.nomor_material && p.status !== 'Goods Receipt (GR)');
+    const anyParam = adminParams?.find(p => p.nomor_material === mat.nomor_material);
+    const param = activeParam || anyParam;
+    const deliveryDateStr = param?.tanggal_rencana_pengiriman || param?.tanggal_gr || param?.gr_release_date || param?.po_release_date || param?.tanggal_po || null;
     const matHistory = history?.filter(h => h.nomor_material === mat.nomor_material) || [];
     const matPlans = (monthlyPlans || []).filter(p => p.nomor_material === mat.nomor_material).map(p => ({
       ...p,
@@ -278,14 +339,22 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
 
     // Rencana kedatangan
     let t_arrival = 99;
-    if (param?.tanggal_rencana_pengiriman) {
-      const deliveryDate = new Date(param.tanggal_rencana_pengiriman);
+    if (deliveryDateStr) {
+      const deliveryDate = new Date(deliveryDateStr);
       const today = new Date();
       const diffMonths = (deliveryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30.4);
       t_arrival = diffMonths > 0 ? Math.round(diffMonths * 10) / 10 : 0;
     }
 
-    const lead_time = param?.plan_lead_time ? Math.round((param.plan_lead_time / 30) * 10) / 10 : 4.0;
+    // Lead time: prioritas dari ideal_stock_configurations (diatur di Admin Panel),
+    // fallback ke procurement_progress jika tidak ada
+    const configLeadTime = config?.plan_lead_time
+      ? Math.round((config.plan_lead_time / 30) * 10) / 10
+      : null;
+    const paramLeadTime = param?.plan_lead_time
+      ? Math.round((param.plan_lead_time / 30) * 10) / 10
+      : null;
+    const lead_time = configLeadTime ?? paramLeadTime ?? 1.0;
 
     // 6 Warehouse definitions based on master_materials columns
     const warehouses = [
@@ -356,6 +425,9 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
       if (gap_analisis <= 2.0) status = 'KRITIS';
       else if (gap_analisis <= 3.0) status = 'WASPADA';
 
+      const safety_stock = Math.round(cr_actual * 1.0);
+      const rop = Math.round((cr_actual * lead_time) + safety_stock);
+
       // Data realisasi per bulan dari history nyata (Jan–Des tahun berjalan)
       const monthlyRealisasi: (number | null)[] = Array(12).fill(null);
       const monthlyPlanArray: number[] = [];
@@ -408,6 +480,11 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
         gap_defisit: gap_analisis,
         pct_ketersediaan,
         status,
+        safety_stock_manual: config?.safety_stock_manual || undefined,
+        safety_stock_days: config?.safety_stock_days || 30,
+        use_formula: config?.use_formula_calculation || false,
+        safety_stock,
+        rop,
         rencana_awal: monthlyPlanArray,
         realisasi: monthlyRealisasi,
         all_plans: (() => {
@@ -427,7 +504,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
           });
         })(),
         all_history: whHistory.map(h => ({ qty: h.qty, tanggal: h.tanggal, gudang: h.gudang, order_no: h.order_no })),
-        tanggal_rencana_pengiriman: param?.tanggal_rencana_pengiriman || null,
+        tanggal_rencana_pengiriman: deliveryDateStr,
         jumlah_dipesan: param?.jumlah_dipesan || 0,
       });
     });
@@ -587,7 +664,7 @@ export async function getSlowMovingData(): Promise<SlowMovingItem[]> {
     .in('nomor_material', matIds)
     .order('tanggal', { ascending: false });
 
-  const today = new Date('2026-07-11'); // Anchor to system current date
+  const today = new Date(); // Dynamic system current date
 
   // Map history to get latest movement and average unit price per material
   const matStats: Record<string, { lastDate: Date; harga: number }> = {};
@@ -614,10 +691,13 @@ export async function getSlowMovingData(): Promise<SlowMovingItem[]> {
     const rec = recs?.find(r => r.nomor_material === m.nomor_material);
     const stats = matStats[m.nomor_material];
     
-    const lastDate = stats ? stats.lastDate : new Date('2025-06-01');
-    const harga_satuan = stats?.harga || 45000;
+    // Utamakan Harga Satuan Stok Saat Ini dari Nilai Aset resmi (karena harga cenderung naik), fallback ke transaksi riwayat
+    const matValue = Number((m as any).value || (m as any).total_value || (m as any).nilai_aset || 0);
+    const calculatedCurrentPrice = m.total_stock > 0 ? Math.round(matValue / m.total_stock) : 0;
+    const harga_satuan = calculatedCurrentPrice > 0 ? calculatedCurrentPrice : (stats?.harga && stats.harga > 0 ? stats.harga : 0);
     
     // Calculate difference in days
+    const lastDate = stats?.lastDate ?? today;
     const diffTime = Math.abs(today.getTime() - lastDate.getTime());
     const usia_pengendapan_hari = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
@@ -806,7 +886,7 @@ export async function getRealSAPTrains(): Promise<{ id: string; name: string; mo
   return data;
 }
 
-export async function getAllEquipment(): Promise<{ id: string; parent_id: string | null; level: number; name: string; model_no?: string | null }[]> {
+export async function getAllEquipment(): Promise<{ id: string; parent_id: string | null; level: number; name: string; model_no?: string | null; funct_loc_descrip?: string | null }[]> {
   let allData: any[] = [];
   let from = 0;
   const limit = 1000;
@@ -814,7 +894,7 @@ export async function getAllEquipment(): Promise<{ id: string; parent_id: string
   while (true) {
     const { data, error } = await supabase
       .from('equipment_master')
-      .select('id, parent_id, level, name, model_no')
+      .select('id, parent_id, level, name, model_no, funct_loc_descrip')
       .order('name', { ascending: true })
       .range(from, from + limit - 1);
 
@@ -824,7 +904,7 @@ export async function getAllEquipment(): Promise<{ id: string; parent_id: string
     from += limit;
   }
 
-  return allData as { id: string; parent_id: string | null; level: number; name: string; model_no?: string | null }[];
+  return allData as { id: string; parent_id: string | null; level: number; name: string; model_no?: string | null; funct_loc_descrip?: string | null }[];
 }
 
 export async function getRealSAPOrders(): Promise<{ order_no: string; description: string }[]> {
@@ -1008,7 +1088,9 @@ export async function getAdminParameters(): Promise<AdminParameter[]> {
       nomor_material: m.nomor_material,
       nama_material: m.nama_material,
       ideal_qty: config?.ideal_qty_manual || 0,
-      lead_time_hari: prog?.plan_lead_time || 0,
+      safety_stock_manual: config?.safety_stock_manual || 0,
+      safety_stock_days: config?.safety_stock_days || 30,
+      lead_time_hari: config?.plan_lead_time || prog?.plan_lead_time || 0,
       plan_bulanan: config?.ideal_qty_manual ? Math.round(config.ideal_qty_manual / 12) : 0,
       use_formula: config?.use_formula_calculation || false,
     };
@@ -1036,7 +1118,10 @@ export async function saveAdminParameter(param: AdminParameter, adminEmail: stri
     .upsert({
       nomor_material: param.nomor_material,
       ideal_qty_manual: param.ideal_qty,
-      use_formula_calculation: param.use_formula
+      safety_stock_manual: param.safety_stock_manual || null,
+      safety_stock_days: param.safety_stock_days || 30,
+      use_formula_calculation: param.use_formula,
+      plan_lead_time: param.lead_time_hari
     });
 
   if (upsertConfigErr) {

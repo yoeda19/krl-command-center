@@ -30,6 +30,7 @@ const exportCols = [
   { key: 'satuan', header: 'Satuan' },
   { key: 'current_stock', header: 'Stok Saat Ini' },
   { key: 'nilai_aset', header: 'Nilai Aset (Rp)' },
+  { key: 'holding_cost', header: 'Est. Holding Cost (Rp)' },
   { key: 'last_movement', header: 'Pergerakan Terakhir' },
   { key: 'usia_pengendapan_hari', header: 'Usia Pengendapan (Hari)' },
   { key: 'kategori', header: 'Kategori' },
@@ -117,6 +118,10 @@ export default function StockAgingPage() {
     return matchCat && matchSearch;
   });
   const totalNilai = slowList.reduce((sum, r) => sum + r.nilai_aset, 0);
+  const totalHoldingCost = slowList.reduce((sum, r) => {
+    if (r.kategori === 'Fresh' || r.kategori === 'Stock Out') return sum;
+    return sum + (r.nilai_aset * 0.10 * (r.usia_pengendapan_hari / 365));
+  }, 0);
 
   const validMatIds = new Set(slowList.map(m => m.nomor_material));
   const filteredRestockList = restockList.filter(r => r.nomor_material && validMatIds.has(r.nomor_material));
@@ -240,7 +245,7 @@ export default function StockAgingPage() {
       <div className="h-4" />
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {funnelData.map(cat => {
           const c = catCfg[cat.category_name];
           return (
@@ -252,6 +257,12 @@ export default function StockAgingPage() {
             </div>
           );
         })}
+        <div className="tactile-card rounded-lg p-5" style={{ borderLeft: '4px solid #ef4444' }}>
+          <p className="text-[10px] font-black tracking-widest uppercase mb-2" style={{ color: '#ef4444' }}>Est. Holding Cost</p>
+          <p className="text-2xl font-black" style={{ color: '#ef4444' }}>{formatRupiah(totalHoldingCost)}</p>
+          <p className="text-xs mt-1" style={{ color: 'var(--color-on-surface-variant)' }}>beban modal pengendapan</p>
+          <p className="text-[10px] font-bold mt-2 text-red-500">Rate 10% p.a.</p>
+        </div>
       </div>
 
       {/* ECharts — Funnel + Bar Charts */}
@@ -592,7 +603,14 @@ export default function StockAgingPage() {
           );
         })}
         <div className="ml-auto">
-          <ExportButton data={filtered as unknown as Record<string, unknown>[]} filename="slow_moving_dead_stock" columns={exportCols} />
+          <ExportButton
+            data={filtered.map(row => {
+              const hc = (row.kategori === 'Fresh' || row.kategori === 'Stock Out') ? 0 : Math.round(row.nilai_aset * 0.10 * (row.usia_pengendapan_hari / 365));
+              return { ...row, holding_cost: hc };
+            }) as unknown as Record<string, unknown>[]}
+            filename="slow_moving_dead_stock"
+            columns={exportCols}
+          />
         </div>
       </div>
 
@@ -602,26 +620,28 @@ export default function StockAgingPage() {
           <table className="w-full text-left border-collapse min-w-[900px] data-table">
             <thead>
               <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                {['Kode Material','Nama Material','Stok','Nilai Aset','Pergerakan Terakhir','Usia Pengendapan','Kategori','Rekomendasi'].map(h => (
-                  <th key={h} className="px-4 py-3 text-[11px] font-black tracking-widest uppercase" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
+                {['Kode Material','Nama Material','Stok','Nilai Aset','Holding Cost (10%/th)','Pergerakan Terakhir','Usia Pengendapan','Kategori','Rekomendasi'].map(h => (
+                  <th key={h} className="px-4 py-3 text-[11px] font-black tracking-widest uppercase whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.map((row, i) => {
                 const c = catCfg[row.kategori];
+                const hc = (row.kategori === 'Fresh' || row.kategori === 'Stock Out') ? 0 : Math.round(row.nilai_aset * 0.10 * (row.usia_pengendapan_hari / 365));
                 return (
                   <tr key={row.nomor_material} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
-                    <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface)' }}>{row.current_stock} {row.satuan}</td>
-                    <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-secondary)' }}>{formatRupiah(row.nilai_aset)}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{formatTanggal(row.last_movement)}</td>
-                    <td className="px-4 py-3 text-xs font-bold" style={{ color: c.text }}>{row.usia_pengendapan_hari} hari</td>
-                    <td className="px-4 py-3">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: c.bg, color: c.text, border: `1px solid ${c.border}` }}>{row.kategori}</span>
+                    <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.current_stock} {row.satuan}</td>
+                    <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-secondary)' }}>{formatRupiah(row.nilai_aset)}</td>
+                    <td className="px-4 py-3 text-xs font-bold text-red-500 whitespace-nowrap">{hc > 0 ? formatRupiah(hc) : '-'}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{formatTanggal(row.last_movement)}</td>
+                    <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: c.text }}>{row.usia_pengendapan_hari} hari</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap" style={{ backgroundColor: c.bg, color: c.text, border: `1px solid ${c.border}` }}>{row.kategori}</span>
                     </td>
-                    <td className="px-4 py-3 text-xs max-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.rekomendasi}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap min-w-[220px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.rekomendasi}</td>
                   </tr>
                 );
               })}
@@ -805,7 +825,7 @@ export default function StockAgingPage() {
                 {['Tanggal','Kode Material','Nama Material','Jumlah','Total Nilai'].map(h => (
                   <th 
                     key={h} 
-                    className="px-4 py-3 text-[11px] font-black tracking-widest uppercase" 
+                    className="px-4 py-3 text-[11px] font-black tracking-widest uppercase whitespace-nowrap" 
                     style={{ 
                       color: 'var(--color-on-primary-container)',
                       backgroundColor: 'var(--color-primary-container)',
@@ -822,18 +842,18 @@ export default function StockAgingPage() {
             <tbody>
               {filteredRestock.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>
+                  <td colSpan={5} className="px-4 py-6 text-center text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>
                     Tidak ada data restock yang cocok.
                   </td>
                 </tr>
               ) : (
                 filteredRestock.map((row, i) => (
                   <tr key={row.id} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{formatTanggal(row.tanggal)}</td>
-                    <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface)' }}>{row.qty} {row.satuan}</td>
-                    <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-secondary)' }}>{formatRupiah(row.amount)}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{formatTanggal(row.tanggal)}</td>
+                    <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
+                    <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.qty} {row.satuan}</td>
+                    <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-secondary)' }}>{formatRupiah(row.amount)}</td>
                   </tr>
                 ))
               )}

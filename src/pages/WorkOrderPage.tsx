@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import PageWrapper from '../components/layout/PageWrapper';
@@ -66,6 +66,7 @@ export default function WorkOrderPage() {
   const [filterMode, setFilterMode]               = useState<'monthly' | 'accumulative'>('monthly');
   const [procurementList, setProcurementList]     = useState<ProcurementItem[]>([]);
   const [validasiMsg, setValidasiMsg]             = useState<{ text: string; ok: boolean } | null>(null);
+  const [expandedTrainRows, setExpandedTrainRows] = useState<Record<string, boolean>>({});
 
   const [filterMonth, setFilterMonth] = useState<number>(6); // Juli (0-indexed)
   const [filterYear, setFilterYear]   = useState<number>(2026);
@@ -587,7 +588,7 @@ export default function WorkOrderPage() {
                           {bom.nomor_material}
                         </Link>
                       </td>
-                      <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{bom.nama_material}</td>
+                      <td className="px-4 py-2.5 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{bom.nama_material}</td>
                       <td className="px-4 py-2.5 text-xs">{bom.satuan}</td>
                       <td className="px-4 py-2.5 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{bom.qty_standar} unit</td>
                       <td className="px-4 py-2.5 text-xs font-mono">
@@ -869,12 +870,12 @@ export default function WorkOrderPage() {
             </>
           )}
         </div>
-        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '250px', minHeight: '200px' }}>
+        <div className="overflow-x-auto overflow-y-auto" style={{ maxHeight: '550px', minHeight: '380px' }}>
           <table className="w-full text-left border-collapse min-w-[800px] data-table">
             <thead>
               <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
                 {(filterMode === 'monthly'
-                  ? ['Rangkaian','Propulsi','Seri Kereta','Kode Material','Nama Material','Qty Reservasi','Stok Saat Ini','Status Kecukupan','Status Pemenuhan','Aksi']
+                  ? ['Rangkaian','Propulsi','Seri Kereta','Tipe Perawatan','Tanggal Rencana','Ringkasan Material','Status Pemenuhan','Detail']
                   : ['Kode Material','Nama Material','Stok Sekarang','Total Kebutuhan','Incoming PO','Net Proyeksi','Status Kelayakan','Aksi']
                 ).map(h => (
                   <th key={h} className="px-4 py-3 text-[11px] font-black tracking-widest uppercase whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
@@ -882,57 +883,141 @@ export default function WorkOrderPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredWO.map((row, i) => {
-                const currentStock = row.current_stock ?? 0;
+              {filterMode === 'monthly' ? (
+                (() => {
+                  const groupedTrainMap = new Map<string, typeof filteredWO>();
+                  filteredWO.forEach(item => {
+                    const key = item.nomor_rangkaian || 'Lainnya';
+                    if (!groupedTrainMap.has(key)) {
+                      groupedTrainMap.set(key, []);
+                    }
+                    groupedTrainMap.get(key)!.push(item);
+                  });
 
-                if (filterMode === 'monthly') {
-                  const fCfg = fulfillCfg[row.status_pemenuhan];
-                  const pCfg = propulsiCfg(row.propulsi ?? '—');
-                  const isSufficient = currentStock >= row.qty_reservasi;
+                  return Array.from(groupedTrainMap.entries()).map(([trainNo, items], i) => {
+                    const firstItem = items[0] as any;
+                    const pCfg = propulsiCfg(firstItem?.propulsi ?? '—');
+                    const fulfilledCount = items.filter(x => x.status_pemenuhan === 'Fulfilled').length;
+                    const outstandingCount = items.filter(x => x.status_pemenuhan === 'Outstanding').length;
+                    const overallStatus: PemenuhStatus = outstandingCount === 0 ? 'Fulfilled' : 'Outstanding';
+                    const fCfg = fulfillCfg[overallStatus];
+                    const isExpanded = expandedTrainRows[trainNo] ?? false;
 
-                  return (
-                    <tr key={row.id} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
-                      <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_rangkaian}</td>
-                      <td className="px-4 py-3"><span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: pCfg.bg, color: pCfg.text }}>{row.propulsi}</span></td>
-                      <td className="px-4 py-3"><span className="text-[10px] font-bold px-2 py-0.5 rounded border" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)', backgroundColor: 'var(--color-surface-container-high)' }}>{row.seri_kereta}</span></td>
-                      <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>
-                        <Link to={`/critical-stock?material=${encodeURIComponent(row.nomor_material)}`} className="hover:underline">
-                          {row.nomor_material}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
-                      <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{row.qty_reservasi} unit</td>
-                      <td className="px-4 py-3 text-xs font-bold" style={{ color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)' }}>
-                        {currentStock} unit
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                          style={{
-                            backgroundColor: isSufficient ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)',
-                            color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)',
-                            border: isSufficient ? '1px solid rgba(22,163,74,0.3)' : '1px solid rgba(220,38,38,0.3)'
-                          }}>
-                          {isSufficient ? 'Cukup' : 'Kurang'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3"><span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: fCfg.bg, color: fCfg.text }}>{row.status_pemenuhan}</span></td>
-                      <td className="px-4 py-3">
-                        <div className="flex gap-1.5">
-                          <Link to={`/critical-stock?material=${encodeURIComponent(row.nomor_material)}`}
-                            className="text-[9px] font-bold px-2 py-1 rounded border transition-all hover:opacity-80"
-                            style={{ backgroundColor: 'rgba(220,38,38,0.08)', borderColor: 'rgba(220,38,38,0.3)', color: 'var(--color-led-red)' }}>
-                            Stok
-                          </Link>
-                          <Link to={`/progress-po?material=${encodeURIComponent(row.nomor_material)}`}
-                            className="text-[9px] font-bold px-2 py-1 rounded border transition-all hover:opacity-80"
-                            style={{ backgroundColor: 'rgba(37,99,235,0.08)', borderColor: 'rgba(37,99,235,0.3)', color: '#60a5fa' }}>
-                            PO
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                } else {
+                    return (
+                      <React.Fragment key={trainNo}>
+                        <tr style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
+                          <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{trainNo}</td>
+                          <td className="px-4 py-3"><span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: pCfg.bg, color: pCfg.text }}>{firstItem.propulsi}</span></td>
+                          <td className="px-4 py-3"><span className="text-[10px] font-bold px-2 py-0.5 rounded border" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)', backgroundColor: 'var(--color-surface-container-high)' }}>{firstItem.seri_kereta}</span></td>
+                          <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{firstItem.tipe_perawatan || 'P1'}</td>
+                          <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{formatTanggal(firstItem.tanggal_rencana || '')}</td>
+                          <td className="px-4 py-3 text-xs">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold px-2 py-0.5 rounded text-[10px]" style={{ backgroundColor: 'rgba(22,163,74,0.12)', color: 'var(--color-led-green)' }}>
+                                {fulfilledCount} Terpenuhi
+                              </span>
+                              {outstandingCount > 0 && (
+                                <span className="font-bold px-2 py-0.5 rounded text-[10px]" style={{ backgroundColor: 'rgba(220,38,38,0.12)', color: 'var(--color-led-red)' }}>
+                                  {outstandingCount} Kurang
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: fCfg.bg, color: fCfg.text }}>
+                              {overallStatus}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => setExpandedTrainRows(prev => ({ ...prev, [trainNo]: !isExpanded }))}
+                              className="text-[10px] font-bold px-2.5 py-1 rounded border transition-all flex items-center gap-1 hover:opacity-85"
+                              style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                            >
+                              <span>{isExpanded ? '▲ Tutup' : `▼ Rincian (${items.length})`}</span>
+                            </button>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={8} className="p-3" style={{ backgroundColor: 'var(--color-surface-container-low)', borderBottom: '1px solid var(--color-steel-border)' }}>
+                              <div className="rounded-lg p-3 border" style={{ backgroundColor: 'var(--color-background)', borderColor: 'var(--color-steel-border)' }}>
+                                <div className="text-xs font-bold mb-2 flex items-center justify-between" style={{ color: 'var(--color-on-surface)' }}>
+                                  <span>Rincian Material Perawatan Rangkaian: {trainNo}</span>
+                                  <span className="text-[11px] font-normal" style={{ color: 'var(--color-on-surface-variant)' }}>Total: {items.length} Komponen</span>
+                                </div>
+                                <table className="w-full text-left text-xs border-collapse">
+                                  <thead>
+                                    <tr style={{ backgroundColor: 'var(--color-surface-container-high)' }}>
+                                      <th className="px-3 py-1.5 font-bold">Kode Material</th>
+                                      <th className="px-3 py-1.5 font-bold">Nama Material</th>
+                                      <th className="px-3 py-1.5 font-bold text-center">Qty Reservasi</th>
+                                      <th className="px-3 py-1.5 font-bold text-center">Stok Gudang</th>
+                                      <th className="px-3 py-1.5 font-bold text-center">Kecukupan</th>
+                                      <th className="px-3 py-1.5 font-bold text-center">Status</th>
+                                      <th className="px-3 py-1.5 font-bold text-center">Aksi</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {items.map((sub, idx) => {
+                                      const curStk = sub.current_stock ?? 0;
+                                      const isSuf = curStk >= sub.qty_reservasi;
+                                      const subFCfg = fulfillCfg[sub.status_pemenuhan];
+                                      return (
+                                        <tr key={sub.id || idx} className="border-t" style={{ borderColor: 'var(--color-steel-border)' }}>
+                                          <td className="px-3 py-2 font-bold" style={{ color: 'var(--color-on-surface)' }}>
+                                            <Link to={`/critical-stock?material=${encodeURIComponent(sub.nomor_material)}`} className="hover:underline">
+                                              {sub.nomor_material}
+                                            </Link>
+                                          </td>
+                                          <td className="px-3 py-2" style={{ color: 'var(--color-on-surface-variant)' }}>{sub.nama_material}</td>
+                                          <td className="px-3 py-2 text-center font-bold">{sub.qty_reservasi} unit</td>
+                                          <td className="px-3 py-2 text-center font-bold" style={{ color: isSuf ? 'var(--color-led-green)' : 'var(--color-led-red)' }}>{curStk} unit</td>
+                                          <td className="px-3 py-2 text-center">
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                              style={{
+                                                backgroundColor: isSuf ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)',
+                                                color: isSuf ? 'var(--color-led-green)' : 'var(--color-led-red)',
+                                                border: isSuf ? '1px solid rgba(22,163,74,0.3)' : '1px solid rgba(220,38,38,0.3)'
+                                              }}>
+                                              {isSuf ? 'Cukup' : 'Kurang'}
+                                            </span>
+                                          </td>
+                                          <td className="px-3 py-2 text-center">
+                                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ backgroundColor: subFCfg.bg, color: subFCfg.text }}>
+                                              {sub.status_pemenuhan}
+                                            </span>
+                                          </td>
+                                          <td className="px-3 py-2 text-center">
+                                            <div className="flex justify-center gap-1.5">
+                                              <Link to={`/critical-stock?material=${encodeURIComponent(sub.nomor_material)}`}
+                                                className="text-[9px] font-bold px-2 py-0.5 rounded border"
+                                                style={{ backgroundColor: 'rgba(220,38,38,0.08)', borderColor: 'rgba(220,38,38,0.3)', color: 'var(--color-led-red)' }}>
+                                                Stok
+                                              </Link>
+                                              <Link to={`/progress-po?material=${encodeURIComponent(sub.nomor_material)}`}
+                                                className="text-[9px] font-bold px-2 py-0.5 rounded border"
+                                                style={{ backgroundColor: 'rgba(37,99,235,0.08)', borderColor: 'rgba(37,99,235,0.3)', color: '#60a5fa' }}>
+                                                PO
+                                              </Link>
+                                            </div>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  });
+                })()
+              ) : (
+                filteredWO.map((row, i) => {
+                  const currentStock = row.current_stock ?? 0;
                   const totalRequired = row.qty_reservasi ?? 0;
                   const incomingPO = (row as any).incoming_po ?? 0;
                   const netProj = (row as any).net_projection ?? 0;
@@ -945,7 +1030,7 @@ export default function WorkOrderPage() {
                           {row.nomor_material}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
                       <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{currentStock} unit</td>
                       <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-secondary)' }}>{totalRequired} unit</td>
                       <td className="px-4 py-3 text-xs font-bold" style={{ color: '#60a5fa' }}>{incomingPO} unit</td>
@@ -978,8 +1063,8 @@ export default function WorkOrderPage() {
                       </td>
                     </tr>
                   );
-                }
-              })}
+                })
+              )}
             </tbody>
           </table>
         </div>

@@ -6,7 +6,7 @@ interface KpiCardProps {
   trendValue?: string;
   trendIcon?: string;
   borderColor?: string;
-  ledStatus?: 'red' | 'amber' | 'green';
+  ledStatus?: 'red' | 'amber' | 'green' | 'blue';
   sparkData?: number[];
 }
 
@@ -26,7 +26,12 @@ export default function KpiCard({
       {ledStatus && (
         <div
           className={`absolute top-4 right-4 led-indicator led-${ledStatus} ${ledStatus === 'red' ? 'animate-led-pulse' : ''}`}
-          style={{ width: 10, height: 10 }}
+          style={{
+            width: 10,
+            height: 10,
+            backgroundColor: ledStatus === 'blue' ? '#3b82f6' : undefined,
+            boxShadow: ledStatus === 'blue' ? '0 0 8px #3b82f6' : undefined
+          }}
         />
       )}
       {/* Label */}

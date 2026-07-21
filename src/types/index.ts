@@ -58,6 +58,11 @@ export interface CriticalStockItem {
   all_plans?: { tahun: number; bulan: number; plan_qty: number }[];
   all_history?: { qty: number; tanggal: string | null; gudang?: string; order_no?: string | null }[];
   jumlah_dipesan?: number;
+  safety_stock?: number;
+  safety_stock_manual?: number;
+  safety_stock_days?: number;
+  use_formula?: boolean;
+  rop?: number;
   tanggal_rencana_pengiriman?: string | null;
 }
 
@@ -229,6 +234,8 @@ export interface AdminParameter {
   nomor_material: string;
   nama_material: string;
   ideal_qty: number;
+  safety_stock_manual?: number;
+  safety_stock_days?: number;
   lead_time_hari: number;
   plan_bulanan: number;
   use_formula: boolean;

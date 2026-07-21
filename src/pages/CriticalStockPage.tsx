@@ -17,7 +17,7 @@ const getStatusPlanColor = (status: string) => {
 function buildBulanLabels(): string[] {
   const BULAN_NAMES = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
   const labels: string[] = [];
-  const now = new Date('2026-07-11');
+  const now = new Date();
   for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     labels.push(`${BULAN_NAMES[d.getMonth()]} '${String(d.getFullYear()).slice(2)}`);
@@ -34,6 +34,8 @@ const exportCols = [
   { key: 'satuan', header: 'Satuan' },
   { key: 'current_stock', header: 'Stok Saat Ini' },
   { key: 'stok_ideal', header: 'Stok Ideal' },
+  { key: 'safety_stock', header: 'Safety Stock' },
+  { key: 'rop', header: 'ROP' },
   { key: 'pct_ketersediaan', header: '% Ketersediaan' },
   { key: 'plan_habis_label', header: 'Habis (Plan)' },
   // Tanpa PO
@@ -97,6 +99,10 @@ function calculateDynamicMetrics(
     plansByMonth.set(`${p.tahun}-${p.bulan}`, p.plan_qty);
   });
 
+  const TODAY = new Date();
+  const todayYear = TODAY.getFullYear();
+  const todayMonth = TODAY.getMonth() + 1; // 1-based
+
   let runRateMultiplier = 1;
   if (calcMode === 'RIWAYAT' && runRateLookback) {
     let sumActualsForRate = 0;
@@ -104,7 +110,7 @@ function calculateDynamicMetrics(
     
     const lookbackMonthsList: { year: number; month: number }[] = [];
     for (let i = 0; i < runRateLookback; i++) {
-      const d = new Date(2026, 6 - i, 1);
+      const d = new Date(todayYear, (todayMonth - 1) - i, 1);
       lookbackMonthsList.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
     }
 
@@ -127,7 +133,7 @@ function calculateDynamicMetrics(
   });
 
   const actuals = rangeMonths.map(m => {
-    if (m.year > 2026 || (m.year === 2026 && m.month > 7)) {
+    if (m.year > todayYear || (m.year === todayYear && m.month > todayMonth)) {
       return null;
     }
     const hist = historyByMonth.get(`${m.year}-${m.month}`) || [];
@@ -136,7 +142,7 @@ function calculateDynamicMetrics(
 
   // Calculate starting stock at the beginning of the range
   const actualsBeforeToday = rangeMonths.map((m, idx) => {
-    if (m.year < 2026 || (m.year === 2026 && m.month <= 7)) {
+    if (m.year < todayYear || (m.year === todayYear && m.month <= todayMonth)) {
       return actuals[idx] ?? 0;
     }
     return 0;
@@ -194,9 +200,9 @@ function calculateDynamicMetrics(
   for (let i = 0; i < rangeMonths.length; i++) {
     const m = rangeMonths[i];
     // Bulan lalu dikurangi realisasi aktual
-    if (m.year < 2026 || (m.year === 2026 && m.month < 7)) {
+    if (m.year < todayYear || (m.year === todayYear && m.month < todayMonth)) {
       correctedStockNoPO -= (actuals[i] ?? 0);
-    } else if (m.year === 2026 && m.month === 7) {
+    } else if (m.year === todayYear && m.month === todayMonth) {
       const actVal = actuals[i] ?? 0;
       const adjustedPlan = Math.round(plans[i] * runRateMultiplier);
       correctedStockNoPO -= Math.max(0, adjustedPlan - actVal);
@@ -225,9 +231,9 @@ function calculateDynamicMetrics(
       correctedStockWithPO += (item.jumlah_dipesan || 0);
     }
     // Bulan lalu dikurangi realisasi aktual
-    if (m.year < 2026 || (m.year === 2026 && m.month < 7)) {
+    if (m.year < todayYear || (m.year === todayYear && m.month < todayMonth)) {
       correctedStockWithPO -= (actuals[i] ?? 0);
-    } else if (m.year === 2026 && m.month === 7) {
+    } else if (m.year === todayYear && m.month === todayMonth) {
       const actVal = actuals[i] ?? 0;
       const adjustedPlan = Math.round(plans[i] * runRateMultiplier);
       correctedStockWithPO -= Math.max(0, adjustedPlan - actVal);
@@ -349,12 +355,16 @@ export default function CriticalStockPage() {
   const [isChartFullScreen, setIsChartFullScreen] = useState(false);
   const [showInsight, setShowInsight] = useState(true);
   const [runRateLookback, setRunRateLookback] = useState<number>(6);
+  const [chartViewMode, setChartViewMode] = useState<'KONSUMSI' | 'SALDO'>('KONSUMSI');
 
   const [totalTrains, setTotalTrains] = useState(0);
   const [inMaintenanceCount, setInMaintenanceCount] = useState(0);
 
   // Period filter states
-  const currentYear = new Date().getFullYear();
+  const currentToday = new Date();
+  const currentYear = currentToday.getFullYear();
+  const currentTodayYear = currentToday.getFullYear();
+  const currentTodayMonth = currentToday.getMonth() + 1;
   const [startMonth, setStartMonth] = useState<number>(1); // Januari
   const [startYear, setStartYear] = useState<number>(currentYear);
   const [endMonth, setEndMonth] = useState<number>(12); // Desember
@@ -463,7 +473,7 @@ export default function CriticalStockPage() {
   const absoluteRangeMonths = (() => {
     const months: { year: number; month: number; label: string }[] = [];
     const BULAN_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
-    let curYear = 2026;
+    let curYear = currentTodayYear;
     let curMonth = 1;
     for (let i = 0; i < 36; i++) {
       months.push({
@@ -496,6 +506,8 @@ export default function CriticalStockPage() {
           current_stock: 0,
           cr_actual: 0,
           plan_bulanan: 0,
+          safety_stock: 0,
+          rop: 0,
           all_history: [],
           all_plans: []
         };
@@ -503,6 +515,8 @@ export default function CriticalStockPage() {
       groups[row.nomor_material].current_stock += row.current_stock;
       groups[row.nomor_material].cr_actual += (row.cr_actual || 0);
       groups[row.nomor_material].plan_bulanan += (row.plan_bulanan || 0);
+      groups[row.nomor_material].safety_stock = (groups[row.nomor_material].safety_stock || 0) + (row.safety_stock || 0);
+      groups[row.nomor_material].rop = (groups[row.nomor_material].rop || 0) + (row.rop || 0);
       
       if (row.all_history && Array.isArray(row.all_history)) {
         groups[row.nomor_material].all_history!.push(...row.all_history);
@@ -523,6 +537,35 @@ export default function CriticalStockPage() {
     });
 
     return Object.values(groups).map(item => {
+      const TODAY_AGG = new Date();
+      const todayYearAgg = TODAY_AGG.getFullYear();
+      const todayMonthAgg = TODAY_AGG.getMonth() + 1;
+      const cutoff = new Date(todayYearAgg, (todayMonthAgg - 1) - runRateLookback, 1);
+      const filteredHistory = item.all_history?.filter(h => {
+        if (!h.tanggal) return false;
+        const d = new Date(h.tanggal);
+        return d >= cutoff && d <= TODAY_AGG;
+      }) || [];
+      const totalQty = filteredHistory.reduce((sum, h) => sum + (h.qty || 0), 0);
+      const dynamicCrActual = totalQty > 0 ? Math.round((totalQty / runRateLookback) * 10) / 10 : 0;
+      
+      // Lead time: diambil dari database (dalam bulan). Default 1 jika tidak tersedia.
+      // plan_lead_time di DB dalam hari, sudah dikonversi ke bulan di supabaseService
+      const lead_time = (item.lead_time && item.lead_time > 0) ? item.lead_time : 1.0;
+      const manualSS = item.safety_stock_manual;
+      const ssDays = item.safety_stock_days && item.safety_stock_days > 0 ? item.safety_stock_days : 30;
+      const ssMonths = ssDays / 30;
+      const isManualMode = !item.use_formula;
+      const safety_stock = (isManualMode && manualSS && manualSS > 0)
+        ? manualSS
+        : Math.round(dynamicCrActual * ssMonths);
+      const rop = Math.round((dynamicCrActual * lead_time) + safety_stock);
+
+      // Override values dynamically so the rest of the application uses the selected lookback
+      item.cr_actual = dynamicCrActual;
+      item.safety_stock = safety_stock;
+      item.rop = rop;
+
       // Hitung stok ideal dari sum plan_qty pada rangeMonths terpilih (Dipengaruhi Filter Periode Layar)
       const dynamicPlans = rangeMonths.map(m => {
         const p = item.all_plans?.find(p => p.tahun === m.year && p.bulan === m.month);
@@ -609,6 +652,109 @@ export default function CriticalStockPage() {
       return { labels: [], plans: [], actuals: [], corrected: [] };
     }
 
+    if (chartViewMode === 'SALDO') {
+      const labels = rangeMonths.map(m => m.label);
+      const actualsRaw = rangeMonths.map(m => {
+        if (m.year > currentTodayYear || (m.year === currentTodayYear && m.month > currentTodayMonth)) return 0;
+        const hist = referenceItem.all_history?.filter(h => {
+          if (!h.tanggal) return false;
+          const d = new Date(h.tanggal);
+          return d.getFullYear() === m.year && (d.getMonth() + 1) === m.month;
+        }) || [];
+        return hist.reduce((sum, item) => sum + (item.qty || 0), 0);
+      });
+
+      const julyIdx = rangeMonths.findIndex(m => m.year === currentTodayYear && m.month === currentTodayMonth);
+      
+      let runRateMultiplier = 1;
+      if (calcMode === 'RIWAYAT') {
+        let sumActualsForRate = 0;
+        let sumPlansForRate = 0;
+        const lookbackMonthsList: { year: number; month: number }[] = [];
+        for (let i = 0; i < runRateLookback; i++) {
+          const d = new Date(currentTodayYear, (currentTodayMonth - 1) - i, 1);
+          lookbackMonthsList.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+        }
+        lookbackMonthsList.forEach(m => {
+          const hist = referenceItem.all_history?.filter(h => {
+            if (!h.tanggal) return false;
+            const dateObj = new Date(h.tanggal);
+            return dateObj.getFullYear() === m.year && (dateObj.getMonth() + 1) === m.month;
+          }) || [];
+          sumActualsForRate += hist.reduce((sum, item) => sum + (item.qty || 0), 0);
+
+          const p = referenceItem.all_plans?.find(pl => pl.tahun === m.year && pl.bulan === m.month);
+          sumPlansForRate += (p ? p.plan_qty : 0);
+        });
+        if (sumPlansForRate > 0) {
+          runRateMultiplier = sumActualsForRate / sumPlansForRate;
+        }
+      }
+
+      let poYear = 0;
+      let poMonth = 0;
+      if (referenceItem.tanggal_rencana_pengiriman) {
+        const d = new Date(referenceItem.tanggal_rencana_pengiriman);
+        poYear = d.getFullYear();
+        poMonth = d.getMonth() + 1;
+      }
+      const poQty = referenceItem.jumlah_dipesan || 0;
+
+      const plansBalance: (number | null)[] = Array(rangeMonths.length).fill(null);
+      const correctedBalance: (number | null)[] = Array(rangeMonths.length).fill(null);
+      const actualsBalance: (number | null)[] = Array(rangeMonths.length).fill(null);
+
+      if (julyIdx !== -1) {
+        plansBalance[julyIdx] = referenceItem.current_stock;
+        correctedBalance[julyIdx] = referenceItem.current_stock;
+        actualsBalance[julyIdx] = referenceItem.current_stock;
+
+        // Populate forward
+        for (let i = julyIdx + 1; i < rangeMonths.length; i++) {
+          const m = rangeMonths[i];
+          const hasPO = showChartWithPO && m.year === poYear && m.month === poMonth;
+          
+          const p = referenceItem.all_plans?.find(pl => pl.tahun === m.year && pl.bulan === m.month);
+          const pQty = p ? p.plan_qty : 0;
+          
+          const prevPlansBal = plansBalance[i - 1] ?? referenceItem.current_stock;
+          plansBalance[i] = Math.max(0, prevPlansBal - pQty + (hasPO ? poQty : 0));
+
+          const adjustedPlan = Math.round(pQty * runRateMultiplier);
+          const prevCorrectedBal = correctedBalance[i - 1] ?? referenceItem.current_stock;
+          correctedBalance[i] = Math.max(0, prevCorrectedBal - adjustedPlan + (hasPO ? poQty : 0));
+        }
+      }
+
+      let poIdx = rangeMonths.findIndex(m => m.year === poYear && m.month === poMonth);
+
+      // Cari bulan di mana garis kuning (correctedBalance) PERTAMA KALI menyentuh Safety Stock
+      // Lalu mundurkan lead_time bulan ke belakang → posisi Batas Order (ROP)
+      let ropExhaustIdx = -1;
+      const ssVal = referenceItem.safety_stock ?? 0;
+      const leadTimeMonths = Math.round(referenceItem.lead_time ?? 2);
+      if (julyIdx !== -1) {
+        for (let i = julyIdx + 1; i < rangeMonths.length; i++) {
+          const val = correctedBalance[i];
+          if (val !== null && val <= ssVal) {
+            // ROP = leadTimeMonths sebelum SS tersentuh
+            ropExhaustIdx = Math.max(julyIdx + 1, i - leadTimeMonths);
+            break;
+          }
+        }
+      }
+
+      return {
+        labels,
+        plans: plansBalance,
+        actuals: actualsBalance,
+        corrected: correctedBalance,
+        correctedNonSaldo: [],
+        poIdx,
+        ropExhaustIdx
+      };
+    }
+
     const labels = rangeMonths.map(m => m.label);
     
     // 1. Rencana Awal: lookup in all_plans
@@ -619,8 +765,8 @@ export default function CriticalStockPage() {
 
     // 2. Realisasi Aktual: lookup in all_history (sum qty for that month/year)
     const actuals = rangeMonths.map(m => {
-      // Future month (after July 2026)
-      if (m.year > 2026 || (m.year === 2026 && m.month > 7)) {
+      // Future month (after current month)
+      if (m.year > currentTodayYear || (m.year === currentTodayYear && m.month > currentTodayMonth)) {
         return null;
       }
       
@@ -635,7 +781,7 @@ export default function CriticalStockPage() {
 
     // Calculate starting stock at the beginning of the range
     const actualsBeforeToday = rangeMonths.map((m, idx) => {
-      if (m.year < 2026 || (m.year === 2026 && m.month <= 7)) {
+      if (m.year < currentTodayYear || (m.year === currentTodayYear && m.month <= currentTodayMonth)) {
         return actuals[idx] ?? 0;
       }
       return 0;
@@ -663,7 +809,7 @@ export default function CriticalStockPage() {
       
       const lookbackMonthsList: { year: number; month: number }[] = [];
       for (let i = 0; i < runRateLookback; i++) {
-        const d = new Date(2026, 6 - i, 1);
+        const d = new Date(currentTodayYear, (currentTodayMonth - 1) - i, 1);
         lookbackMonthsList.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
       }
 
@@ -692,12 +838,12 @@ export default function CriticalStockPage() {
       }
 
       // Past month (< July 2026)
-      if (m.year < 2026 || (m.year === 2026 && m.month < 7)) {
+      if (m.year < currentTodayYear || (m.year === currentTodayYear && m.month < currentTodayMonth)) {
         const actVal = actuals[idx] ?? 0;
         remainingStock -= actVal;
         corrected.push(actVal);
         correctedNonSaldo.push(null);
-      } else if (m.year === 2026 && m.month === 7) {
+      } else if (m.year === currentTodayYear && m.month === currentTodayMonth) {
         // Current month (July 2026): deduct plan - actuals (e.g. 200 - 8 = 192)
         const actVal = actuals[idx] ?? 0;
         const adjustedPlan = Math.round(plans[idx] * runRateMultiplier);
@@ -751,8 +897,8 @@ export default function CriticalStockPage() {
 
   // Cari titik habis stok dari Plan Terkoreksi (corrected)
   const correctedExhaustIdx = (() => {
-    // Hanya cari titik habis stok dari bulan berjalan (Juli 2026) ke depan
-    const currentMonthIdx = rangeMonths.findIndex(m => m.year === 2026 && m.month === 7);
+    // Hanya cari titik habis stok dari bulan berjalan ke depan
+    const currentMonthIdx = rangeMonths.findIndex(m => m.year === currentTodayYear && m.month === currentTodayMonth);
     const startScanIdx = currentMonthIdx !== -1 ? currentMonthIdx : 1;
     
     // Jika di bulan berjalan (Juli 2026) stoknya memang sudah 0, langsung kembalikan bulan berjalan
@@ -780,7 +926,7 @@ export default function CriticalStockPage() {
     
     const lookbackMonthsList: { year: number; month: number }[] = [];
     for (let i = 0; i < runRateLookback; i++) {
-      const d = new Date(2026, 6 - i, 1);
+      const d = new Date(currentTodayYear, (currentTodayMonth - 1) - i, 1);
       lookbackMonthsList.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
     }
 
@@ -788,7 +934,7 @@ export default function CriticalStockPage() {
       const hist = referenceItem.all_history?.filter(h => {
         if (!h.tanggal) return false;
         const d = new Date(h.tanggal);
-        return d.getFullYear() === m.year && (dateObj => dateObj.getMonth() + 1)(new Date(h.tanggal)) === m.month;
+        return d.getFullYear() === m.year && (d.getMonth() + 1) === m.month;
       }) || [];
       sumAct += hist.reduce((s, h) => s + (h.qty || 0), 0);
       const p = referenceItem.all_plans?.find(pl => pl.tahun === m.year && pl.bulan === m.month);
@@ -796,8 +942,8 @@ export default function CriticalStockPage() {
     });
 
     const multiplier = sumPlan > 0 ? sumAct / sumPlan : 1;
-    // Rata-rata plan terkoreksi per bulan masa depan (Ags dst)
-    const futureMonths = rangeMonths.filter(m => m.year > 2026 || (m.year === 2026 && m.month > 7));
+    // Rata-rata plan terkoreksi per bulan masa depan
+    const futureMonths = rangeMonths.filter(m => m.year > currentTodayYear || (m.year === currentTodayYear && m.month > currentTodayMonth));
     const avgCorrected = futureMonths.length > 0
       ? futureMonths.reduce((s, m) => {
           const p = referenceItem.all_plans?.find(pl => pl.tahun === m.year && pl.bulan === m.month);
@@ -843,16 +989,34 @@ export default function CriticalStockPage() {
     };
   })();
 
-  // Dynamic status-based KPI calculations based on active scenario (with/without PO) and selected period/depo
-  const countKritis = aggregatedData.filter(d => (d as any).status_po === 'KRITIS' || (d as any).status_po === 'BELUM PO').length;
-  const countWaspada = aggregatedData.filter(d => (d as any).status_po === 'WASPADA').length;
-  const countAman = aggregatedData.filter(d => (d as any).status_po === 'AMAN').length;
-  const countDeadStock = aggregatedData.filter(d => {
-    const plansInRange = d.all_plans?.filter(p => 
-      rangeMonths.some(m => m.year === p.tahun && m.month === p.bulan)
-    ) || [];
-    const totalPlan = plansInRange.reduce((sum, p) => sum + p.plan_qty, 0);
-    return totalPlan === 0;
+  // Dynamic status-based KPI calculations based on Safety Stock, ROP, and PO Status
+  const countKritis = aggregatedData.filter(d => {
+    const ss = d.safety_stock ?? 0;
+    const sPo = (d as any).status_po;
+    return d.current_stock <= ss || sPo === 'KRITIS';
+  }).length;
+
+  const countWaspada = aggregatedData.filter(d => {
+    const ss = d.safety_stock ?? 0;
+    const rop = d.rop ?? 0;
+    const sPo = (d as any).status_po;
+    return d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
+  }).length;
+
+  const countReorder = aggregatedData.filter(d => {
+    const rop = d.rop ?? 0;
+    const sPo = (d as any).status_po;
+    return d.current_stock <= rop && sPo === 'BELUM PO';
+  }).length;
+
+  const countAman = aggregatedData.filter(d => {
+    const ss = d.safety_stock ?? 0;
+    const rop = d.rop ?? 0;
+    const sPo = (d as any).status_po;
+    const isKritis = d.current_stock <= ss || sPo === 'KRITIS';
+    const isWaspada = d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
+    const isReorder = d.current_stock <= rop && sPo === 'BELUM PO';
+    return !isKritis && !isWaspada && !isReorder;
   }).length;
 
   // Heatmap dinamis: hitung avg pct_ketersediaan per depo dari criticalData
@@ -973,6 +1137,24 @@ export default function CriticalStockPage() {
                     </button>
                   </div>
 
+                  {/* Toggle Buttons: Konsumsi vs Saldo Stok */}
+                  <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
+                    <button
+                      onClick={() => setChartViewMode('KONSUMSI')}
+                      className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                      style={chartViewMode === 'KONSUMSI' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
+                    >
+                      KONSUMSI
+                    </button>
+                    <button
+                      onClick={() => setChartViewMode('SALDO')}
+                      className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                      style={chartViewMode === 'SALDO' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
+                    >
+                      SALDO STOK
+                    </button>
+                  </div>
+
                   {/* Toggle Buttons: Tanpa PO vs Dengan PO */}
                   <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
                     <button
@@ -1063,21 +1245,17 @@ export default function CriticalStockPage() {
                   {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
 
-                {calcMode === 'RIWAYAT' && (
-                  <>
-                    <span className="font-bold text-xs ml-2" style={{ color: 'var(--color-on-surface-variant)' }}>Analisis:</span>
-                    <select
-                      value={runRateLookback}
-                      onChange={e => setRunRateLookback(Number(e.target.value))}
-                      className="rounded px-2 py-1 border font-medium text-xs"
-                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                    >
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
-                        <option key={n} value={n}>{n} Bulan Terakhir</option>
-                      ))}
-                    </select>
-                  </>
-                )}
+                <span className="font-bold text-xs ml-2" style={{ color: 'var(--color-on-surface-variant)' }}>Analisis:</span>
+                <select
+                  value={runRateLookback}
+                  onChange={e => setRunRateLookback(Number(e.target.value))}
+                  className="rounded px-2 py-1 border font-medium text-xs"
+                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                    <option key={n} value={n}>{n} Bulan Terakhir</option>
+                  ))}
+                </select>
 
                 {/* Error Range */}
                 {isRangeInvalid && (
@@ -1217,7 +1395,9 @@ export default function CriticalStockPage() {
                   },
                 },
                 legend: {
-                  data: ['Rencana Awal', 'Realisasi Aktual', 'Plan Terkoreksi', 'Plan Terkoreksi (Non-Saldo)'],
+                  data: chartViewMode === 'SALDO'
+                    ? ['Proyeksi Saldo (Rencana)', 'Saldo Aktual', 'Proyeksi Saldo (Terkoreksi)']
+                    : ['Rencana Awal', 'Realisasi Aktual', 'Plan Terkoreksi', 'Plan Terkoreksi (Non-Saldo)'],
                   bottom: 6,
                   itemWidth: 32,
                   itemHeight: 6,
@@ -1263,7 +1443,7 @@ export default function CriticalStockPage() {
                 series: [
                   // 1. Rencana Awal — violet dashed, referensi plan
                   {
-                    name: 'Rencana Awal',
+                    name: chartViewMode === 'SALDO' ? 'Proyeksi Saldo (Rencana)' : 'Rencana Awal',
                     type: 'line',
                     smooth: true,
                     smoothMonotone: 'x',
@@ -1379,7 +1559,7 @@ export default function CriticalStockPage() {
                     })() : {}),
                   },
                   {
-                    name: 'Realisasi Aktual',
+                    name: chartViewMode === 'SALDO' ? 'Saldo Aktual' : 'Realisasi Aktual',
                     type: 'line',
                     smooth: true,
                     smoothMonotone: 'x',
@@ -1419,7 +1599,7 @@ export default function CriticalStockPage() {
                     data: chartData.actuals,
                   },
                   {
-                    name: 'Plan Terkoreksi',
+                    name: chartViewMode === 'SALDO' ? 'Proyeksi Saldo (Terkoreksi)' : 'Plan Terkoreksi',
                     type: 'line',
                     smooth: true,
                     smoothMonotone: 'x',
@@ -1469,144 +1649,241 @@ export default function CriticalStockPage() {
                       const markLineData: any[] = [];
                       const markPointData: any[] = [];
 
-                      if (poLabel && showChartWithPO) {
-                        const yPopupPO = yMax * 0.76;
-                        markLineData.push({
-                          xAxis: poLabel,
-                          lineStyle: {
-                            color: '#10b981',
-                            width: 2,
-                            type: 'solid',
-                            shadowColor: 'rgba(16,185,129,0.45)',
-                            shadowBlur: 8,
-                          },
-                          label: { show: false }
-                        });
-                        markPointData.push(
-                          {
-                            name: 'PO Masuk Label',
-                            coord: [poLabel, yPopupPO],
-                            symbol: 'roundRect',
-                            symbolSize: [90, 36],
-                            symbolOffset: [0, 0],
-                            itemStyle: {
-                              color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
-                              borderColor: '#10b981',
-                              borderWidth: 1.5,
-                              shadowColor: 'rgba(16,185,129,0.3)',
-                              shadowBlur: 10,
-                            },
-                            label: {
-                              show: true,
-                              position: 'inside',
-                              formatter: [
-                                `{title|RENCANA GR}`,
-                                `{date|${poLabel}}`,
-                              ].join('\n'),
-                              rich: {
-                                title: { color: '#10b981', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                date: { color: isDark ? '#a7f3d0' : '#047857', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
-                              },
-                              align: 'center',
-                            }
-                          },
-                          {
-                            name: 'PO Masuk Dot',
-                            coord: [poLabel, 0],
-                            symbol: 'circle',
-                            symbolSize: 14,
-                            itemStyle: {
-                              color: '#10b981',
-                              borderColor: '#fff',
-                              borderWidth: 2.5,
-                              shadowColor: 'rgba(16,185,129,0.7)',
-                              shadowBlur: 10,
-                            },
-                            label: { show: false }
-                          }
-                        );
-                      }
+                      if (chartViewMode === 'SALDO') {
+                        // safety_stock sudah dihitung ulang di aggregatedData berdasarkan runRateLookback
+                        const ss = referenceItem.safety_stock ?? 0;
 
-                      // Garis Vertikal Hari Ini (Bulan Berjalan - Juli '26)
-                      const currentMonthLabel = "Jul '26";
-                      if (chartData.labels.includes(currentMonthLabel)) {
-                        markLineData.push({
-                          xAxis: currentMonthLabel,
-                          lineStyle: {
-                            color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
-                            width: 1.5,
-                            type: 'dashed'
-                          },
-                          label: {
-                            show: true,
-                            position: 'end',
-                            formatter: 'Hari Ini',
-                            color: isDark ? '#cbd5e1' : '#475569',
-                            fontSize: 8,
-                            fontWeight: 'bold',
-                            backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
-                            padding: [2, 4],
-                            borderRadius: 2
-                          }
-                        });
-                      }
-
-                      if (exhaustLabel) {
-                        const yPopupEx = yMax * 0.62;
-                        markLineData.push({
-                          xAxis: exhaustLabel,
-                          lineStyle: {
-                            color: '#ef4444',
-                            width: 2,
-                            type: 'solid',
-                            shadowColor: 'rgba(239,68,68,0.45)',
-                            shadowBlur: 8,
-                          },
-                          label: { show: false }
-                        });
-                        markPointData.push(
+                        markLineData.push(
                           {
-                            name: 'Stok Habis Label',
-                            coord: [exhaustLabel, yPopupEx],
-                            symbol: 'roundRect',
-                            symbolSize: [90, 36],
-                            symbolOffset: [0, 0],
-                            itemStyle: {
-                              color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
-                              borderColor: '#ef4444',
-                              borderWidth: 1.5,
-                              shadowColor: 'rgba(239,68,68,0.3)',
-                              shadowBlur: 10,
-                            },
-                            label: {
-                              show: true,
-                              position: 'inside',
-                              formatter: [
-                                `{title|STOK HABIS}`,
-                                `{date|${exhaustLabel}}`,
-                              ].join('\n'),
-                              rich: {
-                                title: { color: '#ef4444', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                date: { color: isDark ? '#fca5a5' : '#dc2626', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
-                              },
-                              align: 'center',
-                            }
-                          },
-                          {
-                            name: 'Stok Habis Dot',
-                            coord: [exhaustLabel, 0],
-                            symbol: 'circle',
-                            symbolSize: 14,
-                            itemStyle: {
+                            yAxis: ss,
+                            lineStyle: {
                               color: '#ef4444',
-                              borderColor: '#fff',
-                              borderWidth: 2.5,
-                              shadowColor: 'rgba(239,68,68,0.7)',
-                              shadowBlur: 10,
+                              width: 1.5,
+                              type: 'dashed'
                             },
-                            label: { show: false }
+                            label: {
+                              show: true,
+                              position: 'insideEndTop',
+                              formatter: `Safety Stock: ${ss} Unit`,
+                              color: '#ef4444',
+                              fontWeight: 'bold',
+                              fontSize: 9,
+                              backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
+                              padding: [2, 4],
+                              borderRadius: 2
+                            }
                           }
                         );
+
+                        const ropExhaustLabel = (chartData as any).ropExhaustIdx >= 0 ? chartData.labels[(chartData as any).ropExhaustIdx] : null;
+                        if (ropExhaustLabel) {
+                          markLineData.push({
+                            xAxis: ropExhaustLabel,
+                            lineStyle: {
+                              color: '#3b82f6',
+                              width: 2,
+                              type: 'solid',
+                              shadowColor: 'rgba(59,130,246,0.45)',
+                              shadowBlur: 8,
+                            },
+                            label: {
+                              show: true,
+                              position: 'insideStartTop',
+                              formatter: 'Batas Order (ROP)',
+                              color: '#3b82f6',
+                              fontSize: 9,
+                              fontWeight: 'bold',
+                              backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
+                              padding: [2, 4],
+                              borderRadius: 2
+                            }
+                          });
+                        }
+
+                        const BULAN_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+                        const currentMonthLabel = `${BULAN_SHORT[currentTodayMonth - 1]} '${String(currentTodayYear).slice(2)}`;
+                        if (chartData.labels.includes(currentMonthLabel)) {
+                          markLineData.push({
+                            xAxis: currentMonthLabel,
+                            lineStyle: {
+                              color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
+                              width: 1.5,
+                              type: 'dashed'
+                            },
+                            label: {
+                              show: true,
+                              position: 'end',
+                              formatter: 'Hari Ini',
+                              color: isDark ? '#cbd5e1' : '#475569',
+                              fontSize: 8,
+                              fontWeight: 'bold',
+                              backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
+                              padding: [2, 4],
+                              borderRadius: 2
+                            }
+                          });
+                        }
+
+                        if (poLabel && showChartWithPO) {
+                          markLineData.push({
+                            xAxis: poLabel,
+                            lineStyle: {
+                              color: '#10b981',
+                              width: 1.5,
+                              type: 'dashed',
+                            },
+                            label: {
+                              show: true,
+                              position: 'insideEndTop',
+                              formatter: `GR Tiba (${poLabel})`,
+                              color: '#10b981',
+                              fontWeight: 'bold',
+                              fontSize: 9,
+                              backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
+                              padding: [2, 4],
+                              borderRadius: 2
+                            }
+                          });
+                        }
+                      } else {
+                        if (poLabel && showChartWithPO) {
+                          const yPopupPO = yMax * 0.76;
+                          markLineData.push({
+                            xAxis: poLabel,
+                            lineStyle: {
+                              color: '#10b981',
+                              width: 2,
+                              type: 'solid',
+                              shadowColor: 'rgba(16,185,129,0.45)',
+                              shadowBlur: 8,
+                            },
+                            label: { show: false }
+                          });
+                          markPointData.push(
+                            {
+                              name: 'PO Masuk Label',
+                              coord: [poLabel, yPopupPO],
+                              symbol: 'roundRect',
+                              symbolSize: [90, 36],
+                              symbolOffset: [0, 0],
+                              itemStyle: {
+                                color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                borderColor: '#10b981',
+                                borderWidth: 1.5,
+                                shadowColor: 'rgba(16,185,129,0.3)',
+                                shadowBlur: 10,
+                              },
+                              label: {
+                                show: true,
+                                position: 'inside',
+                                formatter: [
+                                  `{title|RENCANA GR}`,
+                                  `{date|${poLabel}}`,
+                                ].join('\n'),
+                                rich: {
+                                  title: { color: '#10b981', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                  date: { color: isDark ? '#a7f3d0' : '#047857', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                },
+                                align: 'center',
+                              }
+                            },
+                            {
+                              name: 'PO Masuk Dot',
+                              coord: [poLabel, 0],
+                              symbol: 'circle',
+                              symbolSize: 14,
+                              itemStyle: {
+                                color: '#10b981',
+                                borderColor: '#fff',
+                                borderWidth: 2.5,
+                                shadowColor: 'rgba(16,185,129,0.7)',
+                                shadowBlur: 10,
+                              },
+                              label: { show: false }
+                            }
+                          );
+                        }
+
+                        const currentMonthLabel = "Jul '26";
+                        if (chartData.labels.includes(currentMonthLabel)) {
+                          markLineData.push({
+                            xAxis: currentMonthLabel,
+                            lineStyle: {
+                              color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
+                              width: 1.5,
+                              type: 'dashed'
+                            },
+                            label: {
+                              show: true,
+                              position: 'end',
+                              formatter: 'Hari Ini',
+                              color: isDark ? '#cbd5e1' : '#475569',
+                              fontSize: 8,
+                              fontWeight: 'bold',
+                              backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
+                              padding: [2, 4],
+                              borderRadius: 2
+                            }
+                          });
+                        }
+
+                        if (exhaustLabel) {
+                          const yPopupEx = yMax * 0.62;
+                          markLineData.push({
+                            xAxis: exhaustLabel,
+                            lineStyle: {
+                              color: '#ef4444',
+                              width: 2,
+                              type: 'solid',
+                              shadowColor: 'rgba(239,68,68,0.45)',
+                              shadowBlur: 8,
+                            },
+                            label: { show: false }
+                          });
+                          markPointData.push(
+                            {
+                              name: 'Stok Habis Label',
+                              coord: [exhaustLabel, yPopupEx],
+                              symbol: 'roundRect',
+                              symbolSize: [90, 36],
+                              symbolOffset: [0, 0],
+                              itemStyle: {
+                                color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                borderColor: '#ef4444',
+                                borderWidth: 1.5,
+                                shadowColor: 'rgba(239,68,68,0.3)',
+                                shadowBlur: 10,
+                              },
+                              label: {
+                                show: true,
+                                position: 'inside',
+                                formatter: [
+                                  `{title|STOK HABIS}`,
+                                  `{date|${exhaustLabel}}`,
+                                ].join('\n'),
+                                rich: {
+                                  title: { color: '#ef4444', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                  date: { color: isDark ? '#fca5a5' : '#dc2626', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                },
+                                align: 'center',
+                              }
+                            },
+                            {
+                              name: 'Stok Habis Dot',
+                              coord: [exhaustLabel, 0],
+                              symbol: 'circle',
+                              symbolSize: 14,
+                              itemStyle: {
+                                color: '#ef4444',
+                                borderColor: '#fff',
+                                borderWidth: 2.5,
+                                shadowColor: 'rgba(239,68,68,0.7)',
+                                shadowBlur: 10,
+                              },
+                              label: { show: false }
+                            }
+                          );
+                        }
                       }
 
                       if (markLineData.length === 0) return {};
@@ -1659,7 +1936,7 @@ export default function CriticalStockPage() {
             <KpiCard label="Status Kritis" value={countKritis} borderColor="#ef4444" ledStatus={countKritis > 0 ? "red" : "green"} sparkData={[3, 2, 2, 3, 3, 3]} />
             <KpiCard label="Status Waspada" value={countWaspada} borderColor="var(--color-led-amber)" ledStatus={countWaspada > 0 ? "amber" : "green"} sparkData={[5, 4, 3, 3, 4, 3]} />
             <KpiCard label="Status Aman" value={countAman} borderColor="var(--color-led-green)" ledStatus="green" sparkData={[10, 11, 12, 13, 14, 15]} />
-            <KpiCard label="Dead Stock" value={countDeadStock} borderColor="#9ca3af" sparkData={[2, 2, 1, 1, 1, 1]} />
+            <KpiCard label="Perlu Reorder" value={countReorder} borderColor="#3b82f6" ledStatus={countReorder > 0 ? "blue" : "green"} sparkData={[1, 2, 1, 3, 2, 2]} />
           </div>
 
           {/* ECharts — Pie Chart Status Distribusi */}
@@ -1722,7 +1999,11 @@ export default function CriticalStockPage() {
                       },
                       data: [
                         {
-                          value: filteredData.filter(d => (d as any).status_po === 'KRITIS' || (d as any).status_po === 'BELUM PO').length,
+                          value: filteredData.filter(d => {
+                            const ss = d.safety_stock ?? 0;
+                            const sPo = (d as any).status_po;
+                            return d.current_stock <= ss || sPo === 'KRITIS';
+                          }).length,
                           name: 'Kritis',
                           itemStyle: {
                             color: {
@@ -1739,7 +2020,12 @@ export default function CriticalStockPage() {
                           },
                         },
                         {
-                          value: filteredData.filter(d => (d as any).status_po === 'WASPADA').length,
+                          value: filteredData.filter(d => {
+                            const ss = d.safety_stock ?? 0;
+                            const rop = d.rop ?? 0;
+                            const sPo = (d as any).status_po;
+                            return d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
+                          }).length,
                           name: 'Waspada',
                           itemStyle: {
                             color: {
@@ -1756,7 +2042,36 @@ export default function CriticalStockPage() {
                           },
                         },
                         {
-                          value: filteredData.filter(d => (d as any).status_po === 'AMAN').length,
+                          value: filteredData.filter(d => {
+                            const rop = d.rop ?? 0;
+                            const sPo = (d as any).status_po;
+                            return d.current_stock <= rop && sPo === 'BELUM PO';
+                          }).length,
+                          name: 'Reorder',
+                          itemStyle: {
+                            color: {
+                              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                              colorStops: [
+                                { offset: 0, color: '#60a5fa' },
+                                { offset: 1, color: '#2563eb' }
+                              ]
+                            },
+                            shadowBlur: 10,
+                            shadowOffsetX: 2,
+                            shadowOffsetY: 6,
+                            shadowColor: 'rgba(37, 99, 235, 0.4)'
+                          },
+                        },
+                        {
+                          value: filteredData.filter(d => {
+                            const ss = d.safety_stock ?? 0;
+                            const rop = d.rop ?? 0;
+                            const sPo = (d as any).status_po;
+                            const isKritis = d.current_stock <= ss || sPo === 'KRITIS';
+                            const isWaspada = d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
+                            const isReorder = d.current_stock <= rop && sPo === 'BELUM PO';
+                            return !isKritis && !isWaspada && !isReorder;
+                          }).length,
                           name: 'Aman',
                           itemStyle: {
                             color: {
@@ -1842,16 +2157,22 @@ export default function CriticalStockPage() {
               {/* Row 1: Groups */}
               <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
                 <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-left whitespace-nowrap align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>Nomor Material</th>
-                <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-left whitespace-normal align-middle border-b border-r max-w-[220px]" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>Deskripsi Material</th>
+                <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-left whitespace-nowrap align-middle border-b border-r min-w-[200px]" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>Deskripsi Material</th>
                 
-                <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-right align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>
+                <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-center align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>
                   Stok Saat Ini<br/><span className="text-[8px] font-normal lowercase opacity-75">(pc/set/l)</span>
                 </th>
-                <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-right align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>
+                <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-center align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>
                   Stok Ideal<br/><span className="text-[8px] font-normal lowercase opacity-75">(pc/set/l)</span>
                 </th>
+                <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-center align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>
+                  Safety Stock<br/><span className="text-[8px] font-normal lowercase opacity-75">(pc/set/l)</span>
+                </th>
+                <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-center align-middle border-b border-r whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>
+                  ROP<br/><span className="text-[8px] font-normal lowercase opacity-75">(pc/set/l)</span>
+                </th>
                 {['% Ketersediaan','Habis (Plan)'].map(h => (
-                  <th key={h} rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-right whitespace-nowrap align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>{h}</th>
+                  <th key={h} rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-center whitespace-nowrap align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>{h}</th>
                 ))}
                 {/* Tanpa PO Group */}
                 <th colSpan={5} className="px-2 py-1.5 text-[10px] font-black tracking-widest uppercase text-center whitespace-nowrap border-b border-r" style={{ color: 'var(--color-led-amber)', backgroundColor: 'rgba(217,119,6,0.08)', borderColor: 'var(--color-steel-border)' }}>
@@ -1901,22 +2222,24 @@ export default function CriticalStockPage() {
                     }}
                   >
                     <td className="px-2 py-2 font-bold text-[11px]" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                    <td className="px-2 py-2 text-[11px] max-w-[220px] whitespace-normal font-medium leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }} title={row.nama_material}>{row.nama_material}</td>
-                    <td className="px-2 py-2 text-[11px] text-right font-medium" style={{ color: 'var(--color-on-surface)' }}>{row.current_stock.toLocaleString('id-ID')}</td>
-                    <td className="px-2 py-2 text-[11px] text-right" style={{ color: 'var(--color-on-surface-variant)' }}>{row.stok_ideal.toLocaleString('id-ID')}</td>
-                    <td className="px-2 py-2 text-[11px] text-right">
+                    <td className="px-2 py-2 text-[11px] whitespace-nowrap font-medium min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }} title={row.nama_material}>{row.nama_material}</td>
+                    <td className="px-2 py-2 text-[11px] text-center font-medium" style={{ color: 'var(--color-on-surface)' }}>{row.current_stock.toLocaleString('id-ID')}</td>
+                    <td className="px-2 py-2 text-[11px] text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{row.stok_ideal.toLocaleString('id-ID')}</td>
+                    <td className="px-2 py-2 text-[11px] text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{(row.safety_stock ?? 0).toLocaleString('id-ID')}</td>
+                    <td className="px-2 py-2 text-[11px] text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{(row.rop ?? 0).toLocaleString('id-ID')}</td>
+                    <td className="px-2 py-2 text-[11px] text-center">
                       {/* % Ketersediaan bar */}
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-center gap-1">
                         <div className="w-10 h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-surface-container-highest)' }}>
                           <div className="h-full rounded-full" style={{ width: `${Math.min(100, row.pct_ketersediaan)}%`, backgroundColor: pctColor }} />
                         </div>
                         <span className="font-bold text-[11px] w-8 text-right" style={{ color: 'var(--color-on-surface)' }}>{row.pct_ketersediaan}%</span>
                       </div>
                     </td>
-                    <td className="px-2 py-2 text-[11px] text-right font-medium" style={{ color: 'var(--color-on-surface)' }}>{(row as any).plan_habis_label}</td>
+                    <td className="px-2 py-2 text-[11px] text-center font-medium whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{(row as any).plan_habis_label}</td>
                     
                     {/* Skenario Tanpa PO (Orange Tint) */}
-                    <td className="px-2 py-2 text-[11px] text-center font-medium" style={{ color: 'var(--color-on-surface)', backgroundColor: 'rgba(217,119,6,0.02)' }}>{(row as any).koreksi_habis_no_po_label}</td>
+                    <td className="px-2 py-2 text-[11px] text-center font-medium whitespace-nowrap" style={{ color: 'var(--color-on-surface)', backgroundColor: 'rgba(217,119,6,0.02)' }}>{(row as any).koreksi_habis_no_po_label}</td>
                     <td className="px-2 py-2 text-[11px] text-center font-bold" style={{ backgroundColor: 'rgba(217,119,6,0.02)', color: 'var(--color-on-surface)' }}>
                       {(row as any).gap_no_po > 0 ? '+' : ''}{(row as any).gap_no_po}
                     </td>
@@ -1933,13 +2256,13 @@ export default function CriticalStockPage() {
                     </td>
 
                     {/* Skenario Dengan PO (Green Tint) */}
-                    <td className="px-2 py-2 text-[11px] text-center font-semibold" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: (row as any).po_kirim_label === '-' ? 'var(--color-on-surface-variant)' : 'var(--color-on-surface)' }}>
+                    <td className="px-2 py-2 text-[11px] text-center font-semibold whitespace-nowrap" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: (row as any).po_kirim_label === '-' ? 'var(--color-on-surface-variant)' : 'var(--color-on-surface)' }}>
                       {(row as any).po_kirim_label}
                     </td>
                     <td className="px-2 py-2 text-[11px] text-center font-medium" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: 'var(--color-on-surface-variant)' }}>
                       {(row as any).jumlah_dipesan_label}
                     </td>
-                    <td className="px-2 py-2 text-[11px] text-center font-medium" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: (row as any).koreksi_habis_with_po_label === '-' ? 'var(--color-on-surface-variant)' : 'var(--color-on-surface)' }}>{(row as any).koreksi_habis_with_po_label}</td>
+                    <td className="px-2 py-2 text-[11px] text-center font-medium whitespace-nowrap" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: (row as any).koreksi_habis_with_po_label === '-' ? 'var(--color-on-surface-variant)' : 'var(--color-on-surface)' }}>{(row as any).koreksi_habis_with_po_label}</td>
                     <td className="px-2 py-2 text-[11px] text-center font-bold" style={{ backgroundColor: 'rgba(16,185,129,0.02)', color: 'var(--color-on-surface)' }}>
                       {(row as any).gap_with_po > 0 ? '+' : ''}{(row as any).gap_with_po}
                     </td>
@@ -1969,6 +2292,46 @@ export default function CriticalStockPage() {
           </table>
         </div>
         <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
+      </div>
+
+      {/* Catatan & Keterangan Rumus Analisis Tabel */}
+      <div className="mt-4 p-4 rounded-xl border flex flex-col gap-3 text-xs" style={{ backgroundColor: 'var(--color-surface-container-elevated)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>
+        <div className="flex items-center gap-2 font-bold" style={{ color: 'var(--color-on-surface)' }}>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: 'var(--color-led-amber)' }}>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span>Keterangan Perhitungan Tabel:</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>
+          <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+            <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>1. % Ketersediaan</span>
+            <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
+              (Stok Saat Ini / Stok Ideal) × 100%
+            </code>
+            Persentase kecukupan persediaan barang fisik di depo saat ini dibanding batas aman ideal.
+          </div>
+          <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+            <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>2. Habis (Plan)</span>
+            <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
+              Stok Saat Ini / Target Pemakaian Bulanan
+            </code>
+            Estimasi waktu stok habis jika pemakaian barang tepat sesuai target rencana perawatan baku.
+          </div>
+          <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+            <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>3. Habis (Tanpa PO / Riwayat)</span>
+            <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
+              Stok Saat Ini / Rata-Rata Pemakaian Riil
+            </code>
+            Estimasi waktu stok habis berdasarkan laju konsumsi barang yang pernah terjadi di lapangan tanpa tambahan barang baru.
+          </div>
+          <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+            <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>4. Gap Defisit (Bulan)</span>
+            <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
+              Estimasi Bulan Habis - Rencana Kirim Barang
+            </code>
+            Selisih bulan antara waktu persediaan barang habis dengan perkiraan datangnya pasokan pengadaan baru.
+          </div>
+        </div>
       </div>
     </PageWrapper>
   );
