@@ -10,13 +10,14 @@ import {
   getRealSAPTrains, getRealSAPOrders, getMasterMaterials, createMasterMaterial,
   getMaintenanceBomConfig, addMaintenanceBomConfig, updateMaintenanceBomConfig, deleteMaintenanceBomConfig,
   saveMaterialBomConfigs, deleteMaterialBomConfigs,
-  getAllEquipment
+  getAllEquipment, getMaterialTransactionSummaryMap
 } from '../services/supabaseService';
+import type { MaterialTransactionSummary } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
 import type {
   AdminParameter, MonthlyPlan, ProcurementItem, ProcurementStatus, RisikoLevel,
   MaintenanceSchedule, WorkOrder, JenisKereta, SeriKereta, PropulsiType, TipePerawatan, PelaksanaanStatus, PemenuhStatus,
-  MaintenanceBomConfig
+  MaintenanceBomConfig, CriticalStockItem
 } from '../types';
 
 interface ConfirmModal { message?: string; customContent?: React.ReactNode; onConfirm: () => void; }
@@ -197,17 +198,21 @@ export default function AdminPanelPage() {
   const [newMasterName, setNewMasterName] = useState('');
   const [newMasterSatuan, setNewMasterSatuan] = useState('PCS');
 
+  const [txSummaryMap, setTxSummaryMap] = useState<Record<string, MaterialTransactionSummary>>({});
+
   useEffect(() => {
     async function loadData() {
       try {
-        const [paramData, matData, eqData] = await Promise.all([
+        const [paramData, matData, eqData, summaryMap] = await Promise.all([
           getAdminParameters(),
           getMasterMaterials(),
-          getAllEquipment()
+          getAllEquipment(),
+          getMaterialTransactionSummaryMap()
         ]);
         setParams(paramData);
         setMasterMaterials(matData);
         setAllEquipment(eqData);
+        setTxSummaryMap(summaryMap || {});
         if (materialParam) {
           setActiveTab('parameter');
           const row = paramData.find(p => p.nomor_material === materialParam);
@@ -1433,27 +1438,62 @@ export default function AdminPanelPage() {
               <table className="w-full text-left border-collapse min-w-[950px] data-table">
                 <thead>
                   <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                    {['Kode Material','Nama Material','Stok Ideal','Safety Stock','Lead Time (hari)','Metode','Aksi'].map(h => (
+                    {['Kode Material','Nama Material','Stok Ideal','Safety Stock','Lead Time (hari)','Metode','Penyerapan Terakhir','Restock Terakhir','Aksi'].map(h => (
                       <th key={h} className="px-4 py-3 text-[11px] font-black tracking-widest uppercase whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {params.map((row, i) => (
-                    <tr key={row.nomor_material} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
-                      <td className="px-4 py-3 font-bold text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
-                      <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.ideal_qty} PCS</td>
-                      <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>
-                        {row.use_formula ? `Otomatis (${row.safety_stock_days || 30} hari)` : (row.safety_stock_manual ? `${row.safety_stock_manual} PCS` : 'Otomatis')}
-                      </td>
-                      <td className="px-4 py-3 text-xs whitespace-nowrap">{row.lead_time_hari} hari</td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
-                          style={{ backgroundColor: row.use_formula ? 'rgba(59,130,246,0.12)' : 'var(--color-surface-container-high)', color: row.use_formula ? '#60a5fa' : 'var(--color-on-surface-variant)' }}>
-                          {row.use_formula ? 'Rumus Dinamis' : 'Input Manual'}
-                        </span>
-                      </td>
+                  {params.map((row, i) => {
+                    const cleanMatKey = String(row.nomor_material).trim();
+                    const s = txSummaryMap[cleanMatKey];
+                    return (
+                      <tr key={row.nomor_material} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
+                        <td className="px-4 py-3 font-bold text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
+                        <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.ideal_qty} PCS</td>
+                        <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>
+                          {row.use_formula ? `Otomatis (${row.safety_stock_days || 30} hari)` : (row.safety_stock_manual ? `${row.safety_stock_manual} PCS` : 'Otomatis')}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">{row.lead_time_hari} hari</td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                            style={{ backgroundColor: row.use_formula ? 'rgba(59,130,246,0.12)' : 'var(--color-surface-container-high)', color: row.use_formula ? '#60a5fa' : 'var(--color-on-surface-variant)' }}>
+                            {row.use_formula ? 'Rumus Dinamis' : 'Input Manual'}
+                          </span>
+                        </td>
+
+                        {/* Penyerapan Terakhir (recent_history) */}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {!s || !s.last_penyerapan_tanggal ? (
+                            <span className="text-[11px] text-gray-500 italic font-medium">—</span>
+                          ) : (
+                            <div className="flex flex-col text-xs">
+                              <span className="font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>
+                                {s.last_penyerapan_qty.toLocaleString('id-ID')} PCS <span className="font-normal text-[10px] opacity-75">({formatTanggal(s.last_penyerapan_tanggal)})</span>
+                              </span>
+                              <span className="text-[10px] text-blue-400 font-semibold mt-0.5 whitespace-nowrap">
+                                Rata-rata: {s.avg_monthly_penyerapan} PCS/bln
+                              </span>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Restock Terakhir (restock) */}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {!s || !s.last_restock_tanggal ? (
+                            <span className="text-[11px] text-gray-500 italic font-medium">—</span>
+                          ) : (
+                            <div className="flex flex-col text-xs">
+                              <span className="font-bold text-green-400 whitespace-nowrap">
+                                + {s.last_restock_qty.toLocaleString('id-ID')} PCS
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-normal mt-0.5 whitespace-nowrap">
+                                {formatTanggal(s.last_restock_tanggal)}
+                              </span>
+                            </div>
+                          )}
+                        </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <button onClick={() => handleEdit(row.nomor_material)}
                           className="flex items-center gap-1 px-3 py-1.5 rounded border text-[10px] font-bold transition-all hover:opacity-85"
@@ -1463,8 +1503,9 @@ export default function AdminPanelPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                  );
+                })}
+              </tbody>
               </table>
             </div>
             <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
@@ -1522,6 +1563,48 @@ export default function AdminPanelPage() {
                   </div>
                 </div>
                 <div className="border-t pt-4" style={{ borderColor: 'var(--color-steel-border)' }}>
+                  {/* Visual Summary: Data Terakhir Riwayat Penyerapan & Restock dari Supabase */}
+                  {(() => {
+                    const cleanMatKey = String(editValues.nomor_material).trim();
+                    const s = txSummaryMap[cleanMatKey];
+                    return (
+                      <div className="p-4 rounded-xl border space-y-3 mb-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                        <span className="text-[11px] font-extrabold uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--color-secondary)' }}>
+                          📊 Data Terakhir Transaksi Realisasi Database (recent_history &amp; restock)
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                          <div className="p-3 rounded-lg border bg-blue-500/5" style={{ borderColor: 'rgba(59,130,246,0.2)' }}>
+                            <span className="text-[10px] text-gray-400 block font-bold uppercase">Penyerapan Terakhir (recent_history):</span>
+                            <span className="font-black text-sm text-blue-400">
+                              {s?.last_penyerapan_tanggal ? `${s.last_penyerapan_qty.toLocaleString('id-ID')} PCS` : 'Belum Ada Data'}
+                            </span>
+                            <span className="text-[10px] text-gray-300 block mt-0.5 font-medium">
+                              Tanggal: {s?.last_penyerapan_tanggal ? formatTanggal(s.last_penyerapan_tanggal) : '—'}
+                            </span>
+                          </div>
+
+                          <div className="p-3 rounded-lg border bg-green-500/5" style={{ borderColor: 'rgba(34,197,94,0.2)' }}>
+                            <span className="text-[10px] text-gray-400 block font-bold uppercase">Restock Terakhir (restock):</span>
+                            <span className="font-black text-sm text-green-400">
+                              {s?.last_restock_tanggal ? `+ ${s.last_restock_qty.toLocaleString('id-ID')} PCS` : 'Belum Ada Data'}
+                            </span>
+                            <span className="text-[10px] text-gray-300 block mt-0.5 font-medium">
+                              Tanggal: {s?.last_restock_tanggal ? formatTanggal(s.last_restock_tanggal) : '—'}
+                            </span>
+                          </div>
+
+                          <div className="p-3 rounded-lg border bg-purple-500/5" style={{ borderColor: 'rgba(168,85,247,0.2)' }}>
+                            <span className="text-[10px] text-gray-400 block font-bold uppercase">Rata-Rata Penyerapan Bulanan:</span>
+                            <span className="font-black text-sm text-purple-400">
+                              {s?.avg_monthly_penyerapan ? `${s.avg_monthly_penyerapan} PCS / Bulan` : '0 PCS'}
+                            </span>
+                            <span className="text-[10px] text-gray-300 block mt-0.5 font-medium">Acuan Run-Rate 12 Bulan</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-3">
                     <h4 className="font-bold text-sm" style={{ color: 'var(--color-on-surface)' }}>Target Penyerapan Bulanan (Sampai 2030)</h4>
                     <div className="flex items-center gap-2">

@@ -765,6 +765,89 @@ export async function getRestockData(): Promise<RestockItem[]> {
   return data as RestockItem[];
 }
 
+export interface MaterialTransactionSummary {
+  nomor_material: string;
+  last_penyerapan_tanggal: string | null;
+  last_penyerapan_qty: number;
+  last_restock_tanggal: string | null;
+  last_restock_qty: number;
+  total_penyerapan_12bln: number;
+  avg_monthly_penyerapan: number;
+}
+
+export async function getMaterialTransactionSummaryMap(): Promise<Record<string, MaterialTransactionSummary>> {
+  const result: Record<string, MaterialTransactionSummary> = {};
+
+  try {
+    // Gunakan getCriticalStockData dan getRestockData agar pagination 1000 rows & IndexedDB cache berjalan sempurna
+    const [criticalData, restockData] = await Promise.all([
+      getCriticalStockData(),
+      getRestockData()
+    ]);
+
+    // 1. Process Critical Stock History (recent_history)
+    criticalData.forEach(item => {
+      const cleanMat = String(item.nomor_material).trim();
+      if (!cleanMat) return;
+
+      if (!result[cleanMat]) {
+        result[cleanMat] = {
+          nomor_material: cleanMat,
+          last_penyerapan_tanggal: null,
+          last_penyerapan_qty: 0,
+          last_restock_tanggal: null,
+          last_restock_qty: 0,
+          total_penyerapan_12bln: 0,
+          avg_monthly_penyerapan: 0,
+        };
+      }
+
+      if (item.all_history && item.all_history.length > 0) {
+        const sorted = [...item.all_history]
+          .filter(h => h.tanggal)
+          .sort((a, b) => new Date(b.tanggal!).getTime() - new Date(a.tanggal!).getTime());
+
+        if (sorted.length > 0) {
+          result[cleanMat].last_penyerapan_tanggal = sorted[0].tanggal;
+          result[cleanMat].last_penyerapan_qty = sorted[0].qty || 0;
+
+          const cutoff12 = new Date();
+          cutoff12.setMonth(cutoff12.getMonth() - 12);
+          const tx12 = sorted.filter(h => h.tanggal && new Date(h.tanggal) >= cutoff12);
+          const total12M = tx12.reduce((sum, h) => sum + (h.qty || 0), 0);
+          result[cleanMat].total_penyerapan_12bln = total12M;
+          result[cleanMat].avg_monthly_penyerapan = Math.round((total12M / 12) * 10) / 10;
+        }
+      }
+    });
+
+    // 2. Process Restock Data (restock)
+    restockData.forEach(r => {
+      const cleanMat = String(r.nomor_material).trim();
+      if (!cleanMat) return;
+
+      if (!result[cleanMat]) {
+        result[cleanMat] = {
+          nomor_material: cleanMat,
+          last_penyerapan_tanggal: null,
+          last_penyerapan_qty: 0,
+          last_restock_tanggal: r.tanggal || null,
+          last_restock_qty: r.qty || 0,
+          total_penyerapan_12bln: 0,
+          avg_monthly_penyerapan: 0,
+        };
+      } else if (!result[cleanMat].last_restock_tanggal && r.tanggal) {
+        result[cleanMat].last_restock_tanggal = r.tanggal;
+        result[cleanMat].last_restock_qty = r.qty || 0;
+      }
+    });
+  } catch (err) {
+    console.error('Error fetching material transaction summary:', err);
+  }
+
+  return result;
+}
+
 // ── 6. MAINTENANCE SCHEDULE & WORK ORDERS ──────────────────
 export async function getMaintenanceSchedule(): Promise<MaintenanceSchedule[]> {
   const { data, error } = await supabase
