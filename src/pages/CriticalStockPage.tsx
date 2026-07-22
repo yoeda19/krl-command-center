@@ -728,14 +728,17 @@ export default function CriticalStockPage() {
 
       let poIdx = rangeMonths.findIndex(m => m.year === poYear && m.month === poMonth);
 
-      // Cari bulan pertama (mulai dari bulan berjalan / julyIdx) di mana saldo terkoreksi menyentuh atau berada di bawah Batas Order (ROP)
+      // Cari bulan di mana garis kuning (correctedBalance) PERTAMA KALI menyentuh Safety Stock
+      // Lalu mundurkan lead_time bulan ke belakang → posisi Batas Order (ROP)
       let ropExhaustIdx = -1;
-      const ropVal = referenceItem.rop ?? 0;
-      if (julyIdx !== -1 && ropVal > 0) {
-        for (let i = julyIdx; i < rangeMonths.length; i++) {
+      const ssVal = referenceItem.safety_stock ?? 0;
+      const leadTimeMonths = Math.round(referenceItem.lead_time ?? 2);
+      if (julyIdx !== -1) {
+        for (let i = julyIdx + 1; i < rangeMonths.length; i++) {
           const val = correctedBalance[i];
-          if (val !== null && val <= ropVal) {
-            ropExhaustIdx = i;
+          if (val !== null && val <= ssVal) {
+            // ROP = leadTimeMonths sebelum SS tersentuh
+            ropExhaustIdx = Math.max(julyIdx + 1, i - leadTimeMonths);
             break;
           }
         }
@@ -1647,9 +1650,8 @@ export default function CriticalStockPage() {
                       const markPointData: any[] = [];
 
                       if (chartViewMode === 'SALDO') {
-                        // safety_stock dan rop sudah dihitung ulang di aggregatedData berdasarkan runRateLookback
+                        // safety_stock sudah dihitung ulang di aggregatedData berdasarkan runRateLookback
                         const ss = referenceItem.safety_stock ?? 0;
-                        const ropVal = referenceItem.rop ?? 0;
 
                         markLineData.push(
                           {
@@ -1662,7 +1664,7 @@ export default function CriticalStockPage() {
                             label: {
                               show: true,
                               position: 'insideEndTop',
-                              formatter: `Safety Stock: ${ss.toLocaleString('id-ID')} Unit`,
+                              formatter: `Safety Stock: ${ss} Unit`,
                               color: '#ef4444',
                               fontWeight: 'bold',
                               fontSize: 9,
@@ -1672,30 +1674,6 @@ export default function CriticalStockPage() {
                             }
                           }
                         );
-
-                        if (ropVal > 0 && ropVal !== ss) {
-                          markLineData.push(
-                            {
-                              yAxis: ropVal,
-                              lineStyle: {
-                                color: '#3b82f6',
-                                width: 1.5,
-                                type: 'dashed'
-                              },
-                              label: {
-                                show: true,
-                                position: 'insideEndTop',
-                                formatter: `Batas Order (ROP): ${ropVal.toLocaleString('id-ID')} Unit`,
-                                color: '#3b82f6',
-                                fontWeight: 'bold',
-                                fontSize: 9,
-                                backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
-                                padding: [2, 4],
-                                borderRadius: 2
-                              }
-                            }
-                          );
-                        }
 
                         const ropExhaustLabel = (chartData as any).ropExhaustIdx >= 0 ? chartData.labels[(chartData as any).ropExhaustIdx] : null;
                         if (ropExhaustLabel) {
