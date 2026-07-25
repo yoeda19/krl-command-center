@@ -58,6 +58,18 @@ async function idbSet(key: string, value: any): Promise<boolean> {
   }
 }
 
+export async function clearIndexedDBCache(): Promise<void> {
+  const cacheKey = 'skcd_recent_history_cache_v12';
+  try {
+    const db = await getIDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(cacheKey);
+  } catch {}
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(cacheKey);
+  }
+}
+
 // ── 1. FLEET METRICS ──────────────────────────────────────
 export async function getFleetMetrics(): Promise<FleetMetrics> {
   try {
@@ -222,9 +234,9 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
       }
     }
 
-    const registeredMaterialNos = (materials || []).map(m => String(m.nomor_material).trim());
+    const registeredMaterialNosSet = new Set((materials || []).map(m => String(m.nomor_material).trim()));
 
-    // Ambil data baru dari Supabase dengan loop paginasi (karena limit max_rows server Supabase adalah 1000)
+    // Ambil data baru dari Supabase dengan loop paginasi (tanpa limit .in agar tidak error HTTP 414 URL Too Long)
     let dbNewData: any[] = [];
     let page = 0;
     const pageSize = 1000;
@@ -237,7 +249,6 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
         .from('recent_history')
         .select('id, nomor_material, qty, tanggal, gudang, order_no')
         .gte('tanggal', queryStartStr)
-        .in('nomor_material', registeredMaterialNos)
         .range(from, to);
 
       if (dbErr) {
@@ -349,10 +360,10 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
     // Lead time: prioritas dari ideal_stock_configurations (diatur di Admin Panel),
     // fallback ke procurement_progress jika tidak ada
     const configLeadTime = config?.plan_lead_time
-      ? Math.round((config.plan_lead_time / 30) * 10) / 10
+      ? Math.round((config.plan_lead_time / 30.44) * 10) / 10
       : null;
     const paramLeadTime = param?.plan_lead_time
-      ? Math.round((param.plan_lead_time / 30) * 10) / 10
+      ? Math.round((param.plan_lead_time / 30.44) * 10) / 10
       : null;
     const lead_time = configLeadTime ?? paramLeadTime ?? 1.0;
 
@@ -415,15 +426,27 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
         }
       }
 
-      // Perkiraan habis per gudang
-      const t_exhaustion = cr_actual > 0 ? Math.round((wh.current_stock / cr_actual) * 10) / 10 : 99;
+      // Perkiraan habis per gudang (Gunakan plan_bulanan sebagai fallback jika material baru/belum ada transaksi)
+      const effectiveRate = cr_actual > 0 ? cr_actual : plan_bulanan;
+      let t_exhaustion = 99;
+      if (effectiveRate > 0) {
+        t_exhaustion = Math.round((wh.current_stock / effectiveRate) * 10) / 10;
+      } else if (wh.current_stock === 0) {
+        t_exhaustion = 0;
+      }
+
       const pct_ketersediaan = ideal_qty > 0 ? Math.round((wh.current_stock / ideal_qty) * 100) : 0;
 
-      // Status berdasarkan Gap Analisis
+      // Status berdasarkan Gap Analisis & Fisik Stok
       const gap_analisis = Math.round((t_exhaustion - lead_time) * 10) / 10;
       let status: 'AMAN' | 'WASPADA' | 'KRITIS' = 'AMAN';
-      if (gap_analisis <= 2.0) status = 'KRITIS';
-      else if (gap_analisis <= 3.0) status = 'WASPADA';
+      if (wh.current_stock === 0) {
+        status = 'KRITIS'; // Stok fisik 0 wajib KRITIS
+      } else if (gap_analisis <= 2.0) {
+        status = 'KRITIS';
+      } else if (gap_analisis <= 3.0) {
+        status = 'WASPADA';
+      }
 
       const safety_stock = Math.round(cr_actual * 1.0);
       const rop = Math.round((cr_actual * lead_time) + safety_stock);
@@ -625,6 +648,7 @@ export async function addProcurement(item: Omit<ProcurementItem, 'id' | 'actual_
   const { error } = await supabase
     .from('procurement_progress')
     .insert([item]);
+  if (!error) await clearIndexedDBCache();
   return { error: error?.message ?? null };
 }
 
@@ -633,6 +657,7 @@ export async function updateProcurement(id: number, updates: Partial<Procurement
     .from('procurement_progress')
     .update(updates)
     .eq('id', id);
+  if (!error) await clearIndexedDBCache();
   return { error: error?.message ?? null };
 }
 
@@ -641,6 +666,7 @@ export async function deleteProcurement(id: number): Promise<{ error: string | n
     .from('procurement_progress')
     .delete()
     .eq('id', id);
+  if (!error) await clearIndexedDBCache();
   return { error: error?.message ?? null };
 }
 
@@ -656,12 +682,9 @@ export async function getSlowMovingData(): Promise<SlowMovingItem[]> {
 
   if (!materials) return [];
 
-  const matIds = materials.map(m => m.nomor_material);
-
   const { data: history } = await supabase
     .from('recent_history')
     .select('nomor_material, tanggal, harga_satuan')
-    .in('nomor_material', matIds)
     .order('tanggal', { ascending: false });
 
   const today = new Date(); // Dynamic system current date
@@ -1299,4 +1322,71 @@ export async function saveMonthlyPlans(plans: MonthlyPlan[]): Promise<void> {
     console.error('Error saving monthly plans:', error);
     throw error;
   }
+}
+
+// ── 10. GLOBAL THRESHOLDS ──────────────────────────────────
+export async function getGlobalThresholdsFromDB(): Promise<any | null> {
+  try {
+    const { data, error } = await supabase
+      .from('global_thresholds')
+      .select('*')
+      .eq('id', 1)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return {
+      limitKritis: Number(data.limit_kritis),
+      limitWaspada: Number(data.limit_waspada),
+      limitSlowMoving: Number(data.limit_slow_moving),
+      limitAtRisk: Number(data.limit_at_risk),
+      limitDeadStock: Number(data.limit_dead_stock),
+      holdingCostPct: Number(data.holding_cost_pct),
+      anomaliTolerancePct: Number(data.anomali_tolerance_pct),
+    };
+  } catch (err) {
+    console.error('Error fetching global thresholds from DB:', err);
+    return null;
+  }
+}
+
+export async function saveGlobalThresholdsToDB(thresholds: any): Promise<{ error: string | null }> {
+  try {
+    const { error } = await supabase
+      .from('global_thresholds')
+      .upsert({
+        id: 1,
+        limit_kritis: thresholds.limitKritis,
+        limit_waspada: thresholds.limitWaspada,
+        limit_slow_moving: thresholds.limitSlowMoving,
+        limit_at_risk: thresholds.limitAtRisk,
+        limit_dead_stock: thresholds.limitDeadStock,
+        holding_cost_pct: thresholds.holdingCostPct,
+        anomali_tolerance_pct: thresholds.anomaliTolerancePct,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+
+    return { error: error ? error.message : null };
+  } catch (err: any) {
+    return { error: err.message || 'Error saving global thresholds' };
+  }
+}
+
+export function subscribeToRealtimeChanges(
+  tableName: string,
+  onChangeCallback: (payload: any) => void
+): () => void {
+  const channel = supabase
+    .channel(`public_realtime_${tableName}_${Date.now()}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: tableName },
+      (payload) => {
+        onChangeCallback(payload);
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }

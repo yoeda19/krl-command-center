@@ -35,13 +35,13 @@ export default function KpiCard({
         />
       )}
       {/* Label */}
-      <span className="text-[10px] font-black tracking-widest uppercase mb-3" style={{ color: 'var(--color-on-surface-variant)' }}>
+      <span className="text-xs font-semibold tracking-wide mb-3" style={{ color: 'var(--color-on-surface-variant)' }}>
         {label}
       </span>
       {/* Value */}
       <div className="flex items-end gap-2 mt-auto">
         <span
-          className="text-5xl font-black leading-tight"
+          className="text-3xl font-black leading-tight"
           style={{ color: 'var(--color-on-surface)', letterSpacing: '-0.02em' }}
         >
           {value}

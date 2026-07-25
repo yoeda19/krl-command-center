@@ -5,7 +5,9 @@ import PageWrapper from '../components/layout/PageWrapper';
 import KpiCard from '../components/ui/KpiCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import ExportButton from '../components/ui/ExportButton';
-import { getCriticalStockData, getFleetMetrics, getRealSAPTrains, getMaintenanceSchedule, getProcurementData } from '../services/supabaseService';
+import ThresholdModal from '../components/ui/ThresholdModal';
+import { getThresholdConfig } from '../utils/thresholdSettings';
+import { getCriticalStockData, getFleetMetrics, getRealSAPTrains, getMaintenanceSchedule, getProcurementData, subscribeToRealtimeChanges } from '../services/supabaseService';
 import type { CriticalStockItem, FleetMetrics, MaintenanceSchedule, ProcurementItem } from '../types';
 import { useAppStore } from '../store/useAppStore';
 
@@ -356,6 +358,8 @@ export default function CriticalStockPage() {
   const [showInsight, setShowInsight] = useState(true);
   const [runRateLookback, setRunRateLookback] = useState<number>(6);
   const [chartViewMode, setChartViewMode] = useState<'KONSUMSI' | 'SALDO'>('KONSUMSI');
+  const [isThresholdModalOpen, setIsThresholdModalOpen] = useState(false);
+  const [thresholdConfig, setThresholdConfig] = useState(() => getThresholdConfig());
 
   const [totalTrains, setTotalTrains] = useState(0);
   const [inMaintenanceCount, setInMaintenanceCount] = useState(0);
@@ -378,6 +382,13 @@ export default function CriticalStockPage() {
     );
     obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => obs.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeToRealtimeChanges('global_thresholds', () => {
+      setThresholdConfig(getThresholdConfig());
+    });
+    return () => unsub();
   }, []);
 
   // Palet warna chart adaptif tema
@@ -1089,16 +1100,14 @@ export default function CriticalStockPage() {
           }
         }
       `}</style>
-      <div className="h-4" />
-
       {/* Main Dashboard Layout: 2-column grid for large screens */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-4">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-1">
         
         {/* LEFT COLUMN: Absorption Chart & Critical Stock Table (Spans 2 columns) */}
         <div className="xl:col-span-2 space-y-6">
           {/* ECharts — Area Chart Proyeksi Penyerapan */}
           <div
-            className={`tactile-card rounded-lg overflow-hidden ${isChartFullScreen ? 'fixed inset-0 z-50 p-6 flex flex-col justify-between mobile-landscape-fullscreen' : ''}`}
+            className={`tactile-card rounded-lg overflow-hidden ${isChartFullScreen ? 'fixed inset-0 z-50 p-3 flex flex-col justify-between mobile-landscape-fullscreen' : ''}`}
             style={isChartFullScreen ? {
               backgroundColor: 'var(--color-background)',
               borderColor: 'var(--color-steel-border)',
@@ -1110,27 +1119,30 @@ export default function CriticalStockPage() {
               borderColor: 'var(--color-steel-border)'
             }}
           >
-            <div className="p-5 border-b flex flex-col gap-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-              <div className="flex flex-wrap justify-between items-center gap-4">
-                <div>
-                  <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Penyerapan Stok Kritis</h3>
-                  <p className="fullscreen-hide text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
-                    Komparasi Rencana vs Aktual — <b>{referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})</b>
+            <div className="p-3 px-4 gap-2 border-b flex flex-col relative" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+              {/* Row 1: Title, Subtitle, and Control Buttons */}
+              <div className="flex flex-wrap justify-between items-center gap-2 pr-10">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--color-on-surface)' }}>Penyerapan Stok Kritis</h3>
+                  <span className="hidden md:inline text-xs opacity-40">|</span>
+                  <p className="text-xs truncate max-w-xs xl:max-w-md" style={{ color: 'var(--color-on-surface-variant)' }}>
+                    {referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})
                   </p>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
+
+                <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
                   {/* Toggle Buttons: Kalkulasi Standar vs Riwayat */}
                   <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
                     <button
                       onClick={() => setCalcMode('STANDAR')}
-                      className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
                       style={calcMode === 'STANDAR' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
                     >
                       STANDAR
                     </button>
                     <button
                       onClick={() => setCalcMode('RIWAYAT')}
-                      className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
                       style={calcMode === 'RIWAYAT' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
                     >
                       RIWAYAT
@@ -1141,14 +1153,14 @@ export default function CriticalStockPage() {
                   <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
                     <button
                       onClick={() => setChartViewMode('KONSUMSI')}
-                      className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
                       style={chartViewMode === 'KONSUMSI' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
                     >
                       KONSUMSI
                     </button>
                     <button
                       onClick={() => setChartViewMode('SALDO')}
-                      className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
                       style={chartViewMode === 'SALDO' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
                     >
                       SALDO STOK
@@ -1159,127 +1171,141 @@ export default function CriticalStockPage() {
                   <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
                     <button
                       onClick={() => setShowChartWithPO(false)}
-                      className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
                       style={!showChartWithPO ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
                     >
                       TANPA PO
                     </button>
                     <button
                       onClick={() => setShowChartWithPO(true)}
-                      className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
                       style={showChartWithPO ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
                     >
                       DENGAN PO
                     </button>
                   </div>
 
+                  {/* Material Filter */}
                   <select
                     value={selectedMaterial || '6005530'}
                     onChange={e => setSelectedMaterial(e.target.value)}
-                    className="rounded px-3 py-1.5 border text-xs font-bold w-full max-w-[150px] sm:max-w-xs"
+                    className="rounded px-2.5 py-1 border text-[11px] font-bold min-w-[260px] max-w-[380px]"
                     style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                   >
                     {aggregatedData.map(m => (
                       <option key={m.nomor_material} value={m.nomor_material}>
-                        {m.nomor_material} — {m.nama_material.slice(0, 35)}
+                        {m.nomor_material} — {m.nama_material}
                       </option>
                     ))}
                   </select>
 
+                  {/* Tombol Ambang Batas */}
                   <button
-                    onClick={() => setIsChartFullScreen(!isChartFullScreen)}
-                    className="p-1.5 rounded border transition-all flex items-center justify-center hover:opacity-80"
+                    onClick={() => setIsThresholdModalOpen(true)}
+                    className="rounded px-2.5 py-1 border text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-sm hover:opacity-80"
                     style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                    title={isChartFullScreen ? "Kecilkan Tampilan" : "Perbesar Tampilan (Full Screen)"}
+                    title="Pengaturan Ambang Batas Tampilan"
                   >
-                    {isChartFullScreen ? (
-                      /* Minimize icon */
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m0 0V3m0 6l-6-6m6 18v-6m0 0H9m6 0l-6 6" />
-                      </svg>
-                    ) : (
-                      /* Maximize icon */
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6m0 0v6m0-6L14 10M9 21H3m0 0v-6m0 6l7-7" />
-                      </svg>
-                    )}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                    Ambang Batas
                   </button>
                 </div>
               </div>
 
-              {/* Selector Periode Awal & Akhir */}
-              <div className="fullscreen-hide flex flex-wrap items-center gap-3 text-xs border-t pt-3" style={{ borderColor: 'var(--color-steel-border)' }}>
-                <span className="font-bold text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
-                <select
-                  value={startMonth}
-                  onChange={e => setStartMonth(Number(e.target.value))}
-                  className="rounded px-2 py-1 border font-medium text-xs"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                >
-                  {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
-                </select>
-                <select
-                  value={startYear}
-                  onChange={e => setStartYear(Number(e.target.value))}
-                  className="rounded px-2 py-1 border font-medium text-xs"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                >
-                  {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-
-                <span className="font-bold text-xs ml-2" style={{ color: 'var(--color-on-surface-variant)' }}>Selesai:</span>
-                <select
-                  value={endMonth}
-                  onChange={e => setEndMonth(Number(e.target.value))}
-                  className="rounded px-2 py-1 border font-medium text-xs"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                >
-                  {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
-                </select>
-                <select
-                  value={endYear}
-                  onChange={e => setEndYear(Number(e.target.value))}
-                  className="rounded px-2 py-1 border font-medium text-xs"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                >
-                  {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-
-                <span className="font-bold text-xs ml-2" style={{ color: 'var(--color-on-surface-variant)' }}>Analisis:</span>
-                <select
-                  value={runRateLookback}
-                  onChange={e => setRunRateLookback(Number(e.target.value))}
-                  className="rounded px-2 py-1 border font-medium text-xs"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                >
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
-                    <option key={n} value={n}>{n} Bulan Terakhir</option>
-                  ))}
-                </select>
-
-                {/* Error Range */}
-                {isRangeInvalid && (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded ml-auto flex items-center gap-1" style={{ backgroundColor: 'rgba(220,38,38,0.12)', color: 'var(--color-led-red)' }}>
-                    <span className="led-indicator led-red" style={{ width: 6, height: 6 }} />
-                    Rentang harus antara 1 s/d 36 bulan (3 tahun) & tanggal mulai sebelum selesai.
-                  </span>
+              {/* Tombol Full Screen */}
+              <button
+                onClick={() => setIsChartFullScreen(!isChartFullScreen)}
+                className="absolute top-2.5 right-2.5 p-1.5 rounded border transition-all flex items-center justify-center hover:opacity-80 shadow-sm"
+                style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                title={isChartFullScreen ? "Kecilkan Tampilan" : "Perbesar Tampilan (Full Screen)"}
+              >
+                {isChartFullScreen ? (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m0 0V3m0 6l-6-6m6 18v-6m0 0H9m6 0l-6 6" />
+                  </svg>
+                ) : (
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6m0 0v6m0-6L14 10M9 21H3m0 0v-6m0 6l7-7" />
+                  </svg>
                 )}
+              </button>
+
+              {/* Row 2: Compact Date Selector & Status Badge */}
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] pt-1 border-t" style={{ borderColor: 'var(--color-steel-border)' }}>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <div className="flex items-center gap-1">
+                    <span className="font-bold text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
+                    <select
+                      value={startMonth}
+                      onChange={e => setStartMonth(Number(e.target.value))}
+                      className="rounded px-1.5 py-0.5 border text-[11px]"
+                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                    >
+                      {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
+                    </select>
+                    <select
+                      value={startYear}
+                      onChange={e => setStartYear(Number(e.target.value))}
+                      className="rounded px-1.5 py-0.5 border text-[11px]"
+                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                    >
+                      {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <span className="font-bold text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Selesai:</span>
+                    <select
+                      value={endMonth}
+                      onChange={e => setEndMonth(Number(e.target.value))}
+                      className="rounded px-1.5 py-0.5 border text-[11px]"
+                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                    >
+                      {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
+                    </select>
+                    <select
+                      value={endYear}
+                      onChange={e => setEndYear(Number(e.target.value))}
+                      className="rounded px-1.5 py-0.5 border text-[11px]"
+                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                    >
+                      {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <span className="font-bold text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Analisis:</span>
+                    <select
+                      value={runRateLookback}
+                      onChange={e => setRunRateLookback(Number(e.target.value))}
+                      className="rounded px-1.5 py-0.5 border text-[11px]"
+                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
+                        <option key={n} value={n}>{n} Bln Terakhir</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
 
                 {/* Gap & Status Alert */}
                 {!isRangeInvalid && (
-                  <div className="flex items-center gap-3 ml-auto text-xs font-bold">
+                  <div className="flex items-center gap-2.5 text-[11px] font-bold">
                     <span style={{ color: 'var(--color-on-surface-variant)' }}>
-                      Gap: <b className="text-sm" style={{ color: gapMonths < 0 ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>{Math.abs(gapMonths)} Bulan</b>
+                      Gap: <b style={{ color: gapMonths < 0 ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>{Math.abs(gapMonths)} Bulan</b>
                     </span>
                     <div
-                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-black uppercase tracking-wider transition-all"
+                      className="flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-black uppercase tracking-wider"
                       style={{
                         backgroundColor: dynamicStatus.bg,
                         borderColor: dynamicStatus.color,
                         color: dynamicStatus.color
                       }}
                     >
-                      <span className="led-indicator" style={{ backgroundColor: dynamicStatus.color, width: 8, height: 8 }} />
+                      <span className="led-indicator" style={{ backgroundColor: dynamicStatus.color, width: 6, height: 6 }} />
                       {dynamicStatus.label}
                     </div>
                   </div>
@@ -1398,12 +1424,12 @@ export default function CriticalStockPage() {
                   data: chartViewMode === 'SALDO'
                     ? ['Proyeksi Saldo (Rencana)', 'Saldo Aktual', 'Proyeksi Saldo (Terkoreksi)']
                     : ['Rencana Awal', 'Realisasi Aktual', 'Plan Terkoreksi', 'Plan Terkoreksi (Non-Saldo)'],
-                  bottom: 6,
-                  itemWidth: 32,
+                  bottom: 4,
+                  itemWidth: 20,
                   itemHeight: 6,
-                  itemGap: 32,
+                  itemGap: 12,
                   icon: 'roundRect',
-                  textStyle: { color: ct.legendText, fontSize: 13, fontWeight: '700', fontFamily: 'inherit' },
+                  textStyle: { color: ct.legendText, fontSize: 10.5, fontWeight: '700', fontFamily: 'inherit' },
                   inactiveColor: isDark ? '#334155' : '#d1d5db',
                 },
                 grid: { left: 14, right: 18, top: 18, bottom: window.innerWidth <= 768 ? 68 : 48, containLabel: true },
@@ -1675,29 +1701,137 @@ export default function CriticalStockPage() {
                           }
                         );
 
-                        const ropExhaustLabel = (chartData as any).ropExhaustIdx >= 0 ? chartData.labels[(chartData as any).ropExhaustIdx] : null;
+                        // 1. Garis Vertikal saat Proyeksi Saldo (Kuning) memotong garis Safety Stock (Merah)
+                        const todayLabelIdx = chartData.labels.findIndex(l => l.includes("Jul '26"));
+                        const startSearchIdx = todayLabelIdx >= 0 ? todayLabelIdx : 0;
+                        let rawBreachIdx = chartData.corrected.findIndex((val, idx) => {
+                          return idx >= startSearchIdx && val !== null && val <= ss;
+                        });
+                        let safetyBreachIdx = rawBreachIdx;
+                        if (rawBreachIdx > startSearchIdx) {
+                          // Jika perpotongan terjadi di antara bulan (Feb-Mar), tempatkan di bulan awal (Feb '27)
+                          safetyBreachIdx = rawBreachIdx - 1;
+                        }
+                        const safetyBreachLabel = safetyBreachIdx >= 0 ? chartData.labels[safetyBreachIdx] : null;
+
+                        // 2. ROP (Batas Order) mundur sesuai Lead Time material data dari bulan Safety Stock Breach
+                        const rawLeadTime = referenceItem?.lead_time || 60;
+                        const leadTimeMonths = rawLeadTime > 12 ? Math.max(1, Math.round(rawLeadTime / 30)) : Math.max(1, Math.round(rawLeadTime));
+                        const ropIdx = safetyBreachIdx >= (startSearchIdx + leadTimeMonths) 
+                          ? safetyBreachIdx - leadTimeMonths 
+                          : (safetyBreachIdx > startSearchIdx ? safetyBreachIdx - 1 : -1);
+                        const ropExhaustLabel = ropIdx >= 0 ? chartData.labels[ropIdx] : null;
+
                         if (ropExhaustLabel) {
+                          const yPopupRop = yMax * 0.50;
                           markLineData.push({
                             xAxis: ropExhaustLabel,
                             lineStyle: {
                               color: '#3b82f6',
                               width: 2,
-                              type: 'solid',
-                              shadowColor: 'rgba(59,130,246,0.45)',
-                              shadowBlur: 8,
+                              type: 'solid'
                             },
-                            label: {
-                              show: true,
-                              position: 'insideStartTop',
-                              formatter: 'Batas Order (ROP)',
-                              color: '#3b82f6',
-                              fontSize: 9,
-                              fontWeight: 'bold',
-                              backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
-                              padding: [2, 4],
-                              borderRadius: 2
-                            }
+                            label: { show: false }
                           });
+                          markPointData.push(
+                            {
+                              name: 'ROP Label',
+                              coord: [ropExhaustLabel, yPopupRop],
+                              symbol: 'roundRect',
+                              symbolSize: [110, 36],
+                              symbolOffset: [0, 0],
+                              itemStyle: {
+                                color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                borderColor: '#3b82f6',
+                                borderWidth: 1.5,
+                                shadowColor: 'rgba(59,130,246,0.3)',
+                                shadowBlur: 10,
+                              },
+                              label: {
+                                show: true,
+                                position: 'inside',
+                                formatter: [
+                                  `{title|BATAS ORDER (ROP)}`,
+                                  `{date|${ropExhaustLabel}}`,
+                                ].join('\n'),
+                                rich: {
+                                  title: { color: '#3b82f6', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                  date: { color: isDark ? '#93c5fd' : '#1d4ed8', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                },
+                                align: 'center',
+                              }
+                            },
+                            {
+                              name: 'ROP Dot',
+                              coord: [ropExhaustLabel, 0],
+                              symbol: 'circle',
+                              symbolSize: 14,
+                              itemStyle: {
+                                color: '#3b82f6',
+                                borderColor: '#fff',
+                                borderWidth: 2.5,
+                                shadowColor: 'rgba(59,130,246,0.7)',
+                                shadowBlur: 10,
+                              },
+                              label: { show: false }
+                            }
+                          );
+                        }
+
+                        if (safetyBreachLabel && safetyBreachLabel !== ropExhaustLabel) {
+                          const yPopupSS = yMax * 0.32;
+                          markLineData.push({
+                            xAxis: safetyBreachLabel,
+                            lineStyle: {
+                              color: '#f59e0b',
+                              width: 2,
+                              type: 'solid'
+                            },
+                            label: { show: false }
+                          });
+                          markPointData.push(
+                            {
+                              name: 'Safety Stock Breach Label',
+                              coord: [safetyBreachLabel, yPopupSS],
+                              symbol: 'roundRect',
+                              symbolSize: [115, 36],
+                              symbolOffset: [0, 0],
+                              itemStyle: {
+                                color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                borderColor: '#f59e0b',
+                                borderWidth: 1.5,
+                                shadowColor: 'rgba(245,158,11,0.3)',
+                                shadowBlur: 10,
+                              },
+                              label: {
+                                show: true,
+                                position: 'inside',
+                                formatter: [
+                                  `{title|< SAFETY STOCK}`,
+                                  `{date|${safetyBreachLabel}}`,
+                                ].join('\n'),
+                                rich: {
+                                  title: { color: '#f59e0b', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                  date: { color: isDark ? '#fde68a' : '#d97706', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                },
+                                align: 'center',
+                              }
+                            },
+                            {
+                              name: 'Safety Stock Breach Dot',
+                              coord: [safetyBreachLabel, 0],
+                              symbol: 'circle',
+                              symbolSize: 14,
+                              itemStyle: {
+                                color: '#f59e0b',
+                                borderColor: '#fff',
+                                borderWidth: 2.5,
+                                shadowColor: 'rgba(245,158,11,0.7)',
+                                shadowBlur: 10,
+                              },
+                              label: { show: false }
+                            }
+                          );
                         }
 
                         const BULAN_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
@@ -1708,42 +1842,77 @@ export default function CriticalStockPage() {
                             lineStyle: {
                               color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
                               width: 1.5,
-                              type: 'dashed'
+                              type: 'solid'
                             },
                             label: {
                               show: true,
                               position: 'end',
+                              rotate: 0,
                               formatter: 'Hari Ini',
                               color: isDark ? '#cbd5e1' : '#475569',
-                              fontSize: 8,
+                              fontSize: 10,
                               fontWeight: 'bold',
                               backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
-                              padding: [2, 4],
-                              borderRadius: 2
+                              padding: [3, 6],
+                              borderRadius: 4
                             }
                           });
                         }
 
                         if (poLabel && showChartWithPO) {
+                          const yPopupPO = yMax * 0.76;
                           markLineData.push({
                             xAxis: poLabel,
                             lineStyle: {
                               color: '#10b981',
-                              width: 1.5,
-                              type: 'dashed',
+                              width: 2,
+                              type: 'solid'
                             },
-                            label: {
-                              show: true,
-                              position: 'insideEndTop',
-                              formatter: `GR Tiba (${poLabel})`,
-                              color: '#10b981',
-                              fontWeight: 'bold',
-                              fontSize: 9,
-                              backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
-                              padding: [2, 4],
-                              borderRadius: 2
-                            }
+                            label: { show: false }
                           });
+                          markPointData.push(
+                            {
+                              name: 'PO Masuk Label',
+                              coord: [poLabel, yPopupPO],
+                              symbol: 'roundRect',
+                              symbolSize: [95, 36],
+                              symbolOffset: [0, 0],
+                              itemStyle: {
+                                color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                borderColor: '#10b981',
+                                borderWidth: 1.5,
+                                shadowColor: 'rgba(16,185,129,0.3)',
+                                shadowBlur: 10,
+                              },
+                              label: {
+                                show: true,
+                                position: 'inside',
+                                formatter: [
+                                  `{title|RENCANA GR}`,
+                                  `{date|${poLabel}}`,
+                                ].join('\n'),
+                                rich: {
+                                  title: { color: '#10b981', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                  date: { color: isDark ? '#a7f3d0' : '#047857', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                },
+                                align: 'center',
+                              }
+                            },
+                            {
+                              name: 'PO Masuk Dot',
+                              coord: [poLabel, 0],
+                              symbol: 'circle',
+                              symbolSize: 14,
+                              itemStyle: {
+                                color: '#10b981',
+                                borderColor: '#fff',
+                                borderWidth: 2.5,
+                                shadowColor: 'rgba(16,185,129,0.7)',
+                                shadowBlur: 10,
+                              },
+                              label: { show: false }
+                            }
+                          );
                         }
                       } else {
                         if (poLabel && showChartWithPO) {
@@ -1753,9 +1922,7 @@ export default function CriticalStockPage() {
                             lineStyle: {
                               color: '#10b981',
                               width: 2,
-                              type: 'solid',
-                              shadowColor: 'rgba(16,185,129,0.45)',
-                              shadowBlur: 8,
+                              type: 'solid'
                             },
                             label: { show: false }
                           });
@@ -1811,18 +1978,19 @@ export default function CriticalStockPage() {
                             lineStyle: {
                               color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
                               width: 1.5,
-                              type: 'dashed'
+                              type: 'solid'
                             },
                             label: {
                               show: true,
                               position: 'end',
+                              rotate: 0,
                               formatter: 'Hari Ini',
                               color: isDark ? '#cbd5e1' : '#475569',
-                              fontSize: 8,
+                              fontSize: 10,
                               fontWeight: 'bold',
                               backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
-                              padding: [2, 4],
-                              borderRadius: 2
+                              padding: [3, 6],
+                              borderRadius: 4
                             }
                           });
                         }
@@ -1834,9 +2002,7 @@ export default function CriticalStockPage() {
                             lineStyle: {
                               color: '#ef4444',
                               width: 2,
-                              type: 'solid',
-                              shadowColor: 'rgba(239,68,68,0.45)',
-                              shadowBlur: 8,
+                              type: 'solid'
                             },
                             label: { show: false }
                           });
@@ -1922,9 +2088,9 @@ export default function CriticalStockPage() {
                   },
                 ],
               }}
-              style={{ height: isChartFullScreen ? 'calc(100vh - 180px)' : 570, backgroundColor: 'var(--color-background-metallic)' }}
+              style={{ height: isChartFullScreen ? 'calc(100vh - 75px)' : 570, backgroundColor: 'var(--color-background-metallic)' }}
               className="chart-wrapper-el"
-              opts={{ renderer: 'canvas' }}
+              opts={{ renderer: 'svg' }}
             />
           </div>
         </div>
@@ -1966,16 +2132,19 @@ export default function CriticalStockPage() {
                     orient: 'horizontal',
                     bottom: 0,
                     left: 'center',
-                    textStyle: { color: ct.legendText, fontSize: 11, fontWeight: '600' },
-                    itemGap: 16,
+                    itemGap: 10,
+                    itemWidth: 12,
+                    itemHeight: 8,
+                    textStyle: { color: ct.legendText, fontSize: 9.5, fontWeight: '600' },
                   },
                   series: [
                     {
                       name: 'Status Distribusi',
                       type: 'pie',
-                      radius: ['45%', '72%'],
-                      center: ['50%', '42%'],
-                      avoidLabelOverlap: false,
+                      radius: ['38%', '60%'],
+                      center: ['50%', '38%'],
+                      avoidLabelOverlap: true,
+                      minAngle: 10,
                       itemStyle: {
                         borderRadius: 6,
                         borderColor: 'transparent',
@@ -1986,9 +2155,15 @@ export default function CriticalStockPage() {
                         position: 'outside',
                         formatter: '{b}\n{d}%',
                         color: ct.axisLabel,
-                        fontSize: 10,
+                        fontSize: 9.5,
                         fontWeight: '700',
                         lineHeight: 12,
+                        overflow: 'none',
+                      },
+                      labelLine: {
+                        show: true,
+                        length: 6,
+                        length2: 6,
                       },
                       emphasis: {
                         label: {
@@ -2092,7 +2267,7 @@ export default function CriticalStockPage() {
                   ],
                 }}
                 style={{ height: 260 }}
-                opts={{ renderer: 'canvas' }}
+                opts={{ renderer: 'svg' }}
               />
             </div>
           </div>
@@ -2333,6 +2508,13 @@ export default function CriticalStockPage() {
           </div>
         </div>
       </div>
+
+      <ThresholdModal
+        isOpen={isThresholdModalOpen}
+        onClose={() => setIsThresholdModalOpen(false)}
+        onSave={setThresholdConfig}
+        allowedFields={['limitKritis', 'limitWaspada']}
+      />
     </PageWrapper>
   );
 }

@@ -11,24 +11,20 @@ import type { ProcurementStatus, RisikoLevel, ProcurementItem } from '../types';
 function validateAndGetSafeUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   const trimmed = url.trim();
-  if (!trimmed) return null;
+  if (!trimmed || trimmed === '—' || trimmed === '-') return null;
   
-  // Block javascript:, data:, vbscript: schemes
+  // Block dangerous schemes
   if (/^(javascript|data|vbscript):/i.test(trimmed)) {
     return null;
   }
   
-  // Must be an absolute URL with http or https protocol
+  // If already absolute with http/https
   if (/^https?:\/\//i.test(trimmed)) {
     return trimmed;
   }
   
-  // If it's a domain without protocol, default to https
-  if (/^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,5}(:[0-9]{1,5})?(\/.*)?$/i.test(trimmed)) {
-    return `https://${trimmed}`;
-  }
-  
-  return null;
+  // Default any valid string link to https protocol to prevent React Router relative 404
+  return `https://${trimmed.replace(/^[\/\\]+/, '')}`;
 }
 
 const statusOptions: Array<'Semua' | ProcurementStatus> = ['Semua', 'Dalam Pengadaan', 'Proses Evaluasi', 'Proses PR & Approval', 'Proses PO', 'Goods Inspection', 'Goods Receipt (GR)'];
@@ -74,7 +70,7 @@ const exportCols = [
   { key: 'review_logistic_status',  header: 'REVIEW LOGISTIC/IF Under 500 JT RP' },
   { key: 'pr_number',               header: 'Purchase Requisitions Number' },
   { key: 'pr_release_date',         header: 'Purchase Requisitions Release Date' },
-  { key: 'approval_sap_status',     header: 'APPROVAL CEP, CE, C2, CAA' },
+  { key: 'approval_sap_status',     header: 'APPROVAL BOD' },
   { key: 'aanwijzing_date',         header: 'AANWIJZING' },
   { key: 'vendor_sap',              header: 'VENDOR' },
   { key: 'po_number',               header: 'Purchase Order Number' },
@@ -140,19 +136,19 @@ function PipelineCard({ item, onSelect }: { item: ProcurementItem; onSelect: (it
           <span className="font-black text-xs" style={{ color: 'var(--color-on-surface)' }}>{item.nomor_material}</span>
           <span className="mx-2 opacity-30">|</span>
           <span className="text-xs mr-2" style={{ color: 'var(--color-on-surface-variant)' }}>{item.uraian_material}</span>
-          <span className={`text-[9px] font-black tracking-widest px-2 py-0.5 rounded-full ${
+          <span className={`text-[9px] font-black tracking-widest px-2 py-0.5 rounded-md ${
             isLelang ? 'bg-red-500/10 text-red-400 border border-red-500/25' : 'bg-green-500/10 text-green-400 border border-green-500/25'
           }`}>
             {isLelang ? 'JALUR LELANG / TENDER' : 'JALUR PENUNJUKAN LANGSUNG'}
           </span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md"
             style={{ backgroundColor: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}>{item.status}</span>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md"
             style={{ backgroundColor: rCfg.bg, color: rCfg.text }}>Risiko: {item.risiko_keterlambatan}</span>
           {isLate && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1"
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1"
               style={{ backgroundColor: 'rgba(220,38,38,0.12)', color: 'var(--color-led-red)' }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
               Terlambat {actualLt! - item.plan_lead_time} hari
@@ -334,9 +330,6 @@ export default function ProgressPOPage() {
 
   return (
     <PageWrapper fullWidth>
-      {/* Header */}
-      <div className="h-4" />
-
       {/* Status Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5">
         {statusOptions.slice(1).map(s => {
@@ -673,7 +666,7 @@ export default function ProgressPOPage() {
                       
                       {/* 24. STATUS */}
                       <td className="px-3 py-3 text-center whitespace-nowrap">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md whitespace-nowrap"
                           style={{ backgroundColor: cfg.bg, color: cfg.text, border: `1px solid ${cfg.border}` }}>
                           {row.status}
                         </span>

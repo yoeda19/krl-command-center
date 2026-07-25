@@ -186,8 +186,6 @@ export default function TrainCompositionPage() {
 
   return (
     <PageWrapper fullWidth>
-      <div className="h-4" />
-
       {/* Filter Row with KPI Card */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
         {/* KPI Card */}

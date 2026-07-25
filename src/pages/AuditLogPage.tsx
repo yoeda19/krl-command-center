@@ -21,6 +21,7 @@ export default function AuditLogPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [showTimeline, setShowTimeline] = useState(true);
 
   useEffect(() => {
     async function loadData() {
@@ -72,9 +73,6 @@ export default function AuditLogPage() {
 
   return (
     <PageWrapper fullWidth>
-      {/* Header */}
-      <div className="h-4" />
-
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map(s => (
@@ -92,53 +90,76 @@ export default function AuditLogPage() {
       </div>
 
       {/* Timeline */}
-      <div className="tactile-card rounded-lg p-5">
-        <h3 className="text-base font-bold mb-4" style={{ color: 'var(--color-on-surface)' }}>Timeline Aktivitas Terbaru</h3>
-        <div className="space-y-0">
-          {logs.slice(0, 5).map((log, i) => (
-            <div key={log.id} className="flex gap-4 relative">
-              {i < 4 && <div className="absolute left-[15px] top-8 bottom-0 w-0.5" style={{ backgroundColor: 'var(--color-steel-border)' }} />}
-              <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 z-10 mt-1"
-                style={{ backgroundColor: 'var(--color-surface-container-high)', border: '1px solid var(--color-steel-border)' }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-on-surface-variant)' }}>
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                </svg>
-              </div>
-              <div className="pb-5 flex-1">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-bold" style={{ color: 'var(--color-on-surface)' }}>{log.parameter_name}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
-                      oleh <strong style={{ color: 'var(--color-on-surface)' }}>{log.admin_name}</strong>
-                      {log.nomor_material && <> — Material: <span style={{ color: 'var(--color-on-surface)' }}>{log.nomor_material}</span></>}
-                    </p>
-                    {log.original_value !== null && (
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <span className="text-[10px] px-2 py-0.5 rounded border" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
-                          {log.original_value || '(kosong)'}
-                        </span>
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-on-surface-variant)' }}>
-                          <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-                        </svg>
-                        <span className="text-[10px] px-2 py-0.5 rounded border" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>
-                          {log.new_value}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                      style={{ backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)', border: '1px solid var(--color-steel-border)' }}>
-                      {log.modul}
-                    </span>
-                    <span className="text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>{formatDateTime(log.changed_at)}</span>
+      <div className="tactile-card rounded-lg p-5 transition-all">
+        <div className="flex items-center justify-between cursor-pointer select-none" onClick={() => setShowTimeline(!showTimeline)}>
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Timeline Aktivitas Terbaru</h3>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
+              {logs.slice(0, 5).length} aktivitas
+            </span>
+          </div>
+          <button
+            type="button"
+            className="text-xs font-semibold px-2.5 py-1 rounded border transition-all flex items-center gap-1.5"
+            style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)', backgroundColor: 'var(--color-surface-container-low)' }}
+          >
+            <span>{showTimeline ? 'Sembunyikan' : 'Tampilkan'}</span>
+            <svg
+              width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              className={`transform transition-transform duration-200 ${showTimeline ? 'rotate-180' : ''}`}
+            >
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+        </div>
+
+        {showTimeline && (
+          <div className="space-y-0 mt-4 border-t pt-4" style={{ borderColor: 'var(--color-steel-border)' }}>
+            {logs.slice(0, 5).map((log, i) => (
+              <div key={log.id} className="flex gap-4 relative">
+                {i < 4 && <div className="absolute left-[15px] top-8 bottom-0 w-0.5" style={{ backgroundColor: 'var(--color-steel-border)' }} />}
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 z-10 mt-1"
+                  style={{ backgroundColor: 'var(--color-surface-container-high)', border: '1px solid var(--color-steel-border)' }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-on-surface-variant)' }}>
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                </div>
+                <div className="pb-5 flex-1">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-bold" style={{ color: 'var(--color-on-surface)' }}>{log.parameter_name}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+                        oleh <strong style={{ color: 'var(--color-on-surface)' }}>{log.admin_name}</strong>
+                        {log.nomor_material && <> — Material: <span style={{ color: 'var(--color-on-surface)' }}>{log.nomor_material}</span></>}
+                      </p>
+                      {log.original_value !== null && (
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className="text-[10px] px-2 py-0.5 rounded border" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
+                            {log.original_value || '(kosong)'}
+                          </span>
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-on-surface-variant)' }}>
+                            <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                          </svg>
+                          <span className="text-[10px] px-2 py-0.5 rounded border" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>
+                            {log.new_value}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                        style={{ backgroundColor: 'var(--color-surface-container-high)', color: 'var(--color-on-surface-variant)', border: '1px solid var(--color-steel-border)' }}>
+                        {log.modul}
+                      </span>
+                      <span className="text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>{formatDateTime(log.changed_at)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Search + Export */}

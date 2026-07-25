@@ -10,10 +10,13 @@ import {
   getRealSAPTrains, getRealSAPOrders, getMasterMaterials, createMasterMaterial,
   getMaintenanceBomConfig, addMaintenanceBomConfig, updateMaintenanceBomConfig, deleteMaintenanceBomConfig,
   saveMaterialBomConfigs, deleteMaterialBomConfigs,
-  getAllEquipment, getMaterialTransactionSummaryMap
+  getAllEquipment, getMaterialTransactionSummaryMap,
+  getGlobalThresholdsFromDB, saveGlobalThresholdsToDB, subscribeToRealtimeChanges
 } from '../services/supabaseService';
 import type { MaterialTransactionSummary } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
+import { getThresholdConfig, saveThresholdConfig, resetThresholdConfig } from '../utils/thresholdSettings';
+import type { ThresholdConfig } from '../utils/thresholdSettings';
 import type {
   AdminParameter, MonthlyPlan, ProcurementItem, ProcurementStatus, RisikoLevel,
   MaintenanceSchedule, WorkOrder, JenisKereta, SeriKereta, PropulsiType, TipePerawatan, PelaksanaanStatus, PemenuhStatus,
@@ -21,7 +24,7 @@ import type {
 } from '../types';
 
 interface ConfirmModal { message?: string; customContent?: React.ReactNode; onConfirm: () => void; }
-type ActiveTab = 'parameter' | 'pengadaan' | 'perawatan' | 'bom';
+type ActiveTab = 'parameter' | 'pengadaan' | 'perawatan' | 'bom' | 'thresholds';
 
 const PROCUREMENT_STATUSES: ProcurementStatus[] = [
   'Dalam Pengadaan',
@@ -153,6 +156,9 @@ export default function AdminPanelPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [confirmModal, setConfirmModal] = useState<ConfirmModal | null>(null);
 
+  // Ambang Batas Global tab state
+  const [globalThresholds, setGlobalThresholds] = useState<ThresholdConfig>(() => getThresholdConfig());
+
   // Procurement tab state
   const [procureList, setProcureList] = useState<ProcurementItem[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -203,16 +209,21 @@ export default function AdminPanelPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [paramData, matData, eqData, summaryMap] = await Promise.all([
+        const [paramData, matData, eqData, summaryMap, dbThresholds] = await Promise.all([
           getAdminParameters(),
           getMasterMaterials(),
           getAllEquipment(),
-          getMaterialTransactionSummaryMap()
+          getMaterialTransactionSummaryMap(),
+          getGlobalThresholdsFromDB().catch(() => null)
         ]);
         setParams(paramData);
         setMasterMaterials(matData);
         setAllEquipment(eqData);
         setTxSummaryMap(summaryMap || {});
+        if (dbThresholds) {
+          setGlobalThresholds(dbThresholds);
+          saveThresholdConfig(dbThresholds);
+        }
         if (materialParam) {
           setActiveTab('parameter');
           const row = paramData.find(p => p.nomor_material === materialParam);
@@ -225,6 +236,25 @@ export default function AdminPanelPage() {
       }
     }
     loadData();
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeToRealtimeChanges('global_thresholds', (payload) => {
+      if (payload.new) {
+        const updated = {
+          limitKritis: Number(payload.new.limit_kritis),
+          limitWaspada: Number(payload.new.limit_waspada),
+          limitSlowMoving: Number(payload.new.limit_slow_moving),
+          limitAtRisk: Number(payload.new.limit_at_risk),
+          limitDeadStock: Number(payload.new.limit_dead_stock),
+          holdingCostPct: Number(payload.new.holding_cost_pct),
+          anomaliTolerancePct: Number(payload.new.anomali_tolerance_pct),
+        };
+        setGlobalThresholds(updated);
+        saveThresholdConfig(updated);
+      }
+    });
+    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -340,7 +370,7 @@ export default function AdminPanelPage() {
     }
 
     // Check overlaps of series per tipe_perawatan
-    const ALL_TYPES = ['P1', 'P3', 'P6', 'P12', 'P24', 'P48'];
+    const ALL_TYPES = ['P1', 'P3', 'P6', 'P12', 'P24', 'P48', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'];
     for (const type of ALL_TYPES) {
       const seriesSeen = new Set<string>();
       let hasUniversalRule = false;
@@ -678,7 +708,7 @@ export default function AdminPanelPage() {
             { label: 'Evaluasi CTPP', date: poToValidate.rilis_evaluasi_ctpp, stage: 'tahap2' },
             { label: 'RAB Logistik', date: poToValidate.rilis_rab_logistik, stage: 'tahap3' },
             { label: 'Realisasi PR', date: poToValidate.pr_release_date, stage: 'tahap4' },
-            { label: 'Approval SAP', date: poToValidate.approval_sap_status, stage: 'tahap4' },
+            { label: 'Approval BOD', date: poToValidate.approval_sap_status, stage: 'tahap4' },
             { label: 'Aanwijzing', date: poToValidate.aanwijzing_date, stage: 'tahap5' },
             { label: 'Realisasi PO', date: poToValidate.po_release_date, stage: 'tahap5' },
             { label: 'Goods Inspection', date: poToValidate.goods_inspection_status, stage: 'tahap6' },
@@ -688,7 +718,7 @@ export default function AdminPanelPage() {
             { label: 'Realisasi NOD', date: poToValidate.publish_nod, stage: 'tahap1' },
             { label: 'RAB Logistik', date: poToValidate.rilis_rab_logistik, stage: 'tahap3' },
             { label: 'Realisasi PR', date: poToValidate.pr_release_date, stage: 'tahap4' },
-            { label: 'Approval SAP', date: poToValidate.approval_sap_status, stage: 'tahap4' },
+            { label: 'Approval BOD', date: poToValidate.approval_sap_status, stage: 'tahap4' },
             { label: 'Realisasi PO', date: poToValidate.po_release_date, stage: 'tahap5' },
             { label: 'Realisasi GR', date: poToValidate.gr_release_date, stage: 'tahap6' }
           ];
@@ -1309,7 +1339,7 @@ export default function AdminPanelPage() {
                 </select>
               </Field>
               <Field label="Lead Time Plan (hari)">
-                <input type="number" value={poData.plan_lead_time || 90} onChange={e => updatePOField('plan_lead_time', +e.target.value)} className={inputCls} style={inputStyle} />
+                <input type="number" min="1" value={poData.plan_lead_time || 90} onChange={e => updatePOField('plan_lead_time', Math.max(1, Number(e.target.value) || 1))} className={inputCls} style={inputStyle} />
               </Field>
               <Field label="Keterangan">
                 <input value={poData.keterangan || ''} onChange={e => updatePOField('keterangan', e.target.value)} className={inputCls} style={inputStyle} placeholder="Catatan tambahan..." />
@@ -1395,6 +1425,17 @@ export default function AdminPanelPage() {
             icon: (
               <svg className="w-4 h-4 sm:mr-1.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"/>
+              </svg>
+            )
+          },
+          {
+            id: 'thresholds',
+            full: 'Ambang Batas Global',
+            short: 'Ambang Batas',
+            icon: (
+              <svg className="w-4 h-4 sm:mr-1.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="3"/>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
             )
           }
@@ -1839,7 +1880,7 @@ export default function AdminPanelPage() {
                       else setNewSchedule(prev => ({ ...prev, tipe_perawatan: e.target.value as TipePerawatan }));
                     }}
                     className={inputCls} style={inputStyle}>
-                    {['P1', 'P3', 'P6', 'P12', 'P24', 'P48'].map(t => <option key={t}>{t}</option>)}
+                    {['P1', 'P3', 'P6', 'P12', 'P24', 'P48', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'].map(t => <option key={t}>{t}</option>)}
                   </select>
                 </Field>
                 <Field label="Tanggal Rencana">
@@ -2331,7 +2372,7 @@ export default function AdminPanelPage() {
         const uniqueMaterialCodes = Array.from(new Set(bomList.map(b => b.nomor_material)));
         const availableMaterials = masterMaterials.filter(m => !uniqueMaterialCodes.includes(m.nomor_material));
 
-        const ALL_MAINTENANCE_TYPES = ['P1', 'P3', 'P6', 'P12', 'P24', 'P48'];
+        const ALL_MAINTENANCE_TYPES = ['P1', 'P3', 'P6', 'P12', 'P24', 'P48', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'];
         const SERIES_OPTIONS = ['JR205', 'CLI125', 'CLI225', 'Metro', 'KFW', 'EA203'];
         const PROPULSION_OPTIONS = ['VVVF', 'Rheostatic'];
 
@@ -2632,6 +2673,156 @@ export default function AdminPanelPage() {
               <li>• Kebutuhan material standar ini akan dipasang secara otomatis saat jadwal rencana perawatan dibuat di halaman Work Order.</li>
               <li>• Status kecukupan material dihitung secara langsung membandingkan stok gudang saat ini terhadap Qty standar yang dikonfigurasikan di sini.</li>
             </ul>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'thresholds' && (
+        <div className="tactile-card rounded-lg p-6 space-y-6 border" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface)' }}>
+          <div className="flex justify-between items-center border-b pb-4" style={{ borderColor: 'var(--color-steel-border)' }}>
+            <div>
+              <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Pengaturan Ambang Batas Standar Global</h3>
+              <p className="text-xs mt-1" style={{ color: 'var(--color-on-surface-variant)' }}>
+                Nilai acuan default organisasi yang berlaku bagi seluruh pengguna secara nasional di Database Sistem.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  const def = resetThresholdConfig();
+                  setGlobalThresholds(def);
+                  await saveGlobalThresholdsToDB(def);
+                  const email = localStorage.getItem('krl_admin_email') || 'admin@prisma.co.id';
+                  const name = localStorage.getItem('krl_admin_name') || 'Super Admin';
+                  await addAuditLog({
+                    nomor_material: null,
+                    parameter_name: 'Ambang Batas Global',
+                    original_value: null,
+                    new_value: 'Reset ke default organisasi',
+                    admin_email: email,
+                    admin_name: name,
+                    modul: 'Ambang Batas'
+                  });
+                  showSuccess('Berhasil mereset ambang batas ke standar baku organisasi dan dicatat dalam log audit.');
+                }}
+                className="px-4 py-2 text-xs font-bold rounded-lg border transition-all hover:opacity-80"
+                style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}
+              >
+                Reset Default
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  saveThresholdConfig(globalThresholds);
+                  const res = await saveGlobalThresholdsToDB(globalThresholds);
+                  const email = localStorage.getItem('krl_admin_email') || 'admin@prisma.co.id';
+                  const name = localStorage.getItem('krl_admin_name') || 'Super Admin';
+                  const logDesc = `Memperbarui Ambang Batas Global: Kritis=${globalThresholds.limitKritis} bln, Waspada=${globalThresholds.limitWaspada} bln, SlowMoving=${globalThresholds.limitSlowMoving} hr, AtRisk=${globalThresholds.limitAtRisk} hr, DeadStock=${globalThresholds.limitDeadStock} hr, HoldingCost=${globalThresholds.holdingCostPct}%`;
+                  await addAuditLog({
+                    nomor_material: null,
+                    parameter_name: 'Ambang Batas Global',
+                    original_value: null,
+                    new_value: logDesc,
+                    admin_email: email,
+                    admin_name: name,
+                    modul: 'Ambang Batas'
+                  });
+
+                  if (res.error) {
+                    showSuccess('Berhasil menyimpan ambang batas di memori lokal & dicatat dalam log audit.');
+                  } else {
+                    showSuccess('Berhasil menyimpan ambang batas standar global organisasi ke database sistem & dicatat dalam log audit.');
+                  }
+                }}
+                className="skeuomorphic-btn px-6 py-2 rounded-lg text-xs font-bold"
+              >
+                Simpan Standar Global
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="p-4 rounded-xl border flex flex-col gap-2" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+              <label className="text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>Batas Kritis (Bulan)</label>
+              <p className="text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Batas gap defisit bulan untuk status KRITIS.</p>
+              <input
+                type="number"
+                step="0.1"
+                min="0.1"
+                value={globalThresholds.limitKritis}
+                onChange={e => setGlobalThresholds({ ...globalThresholds, limitKritis: parseFloat(e.target.value) || 0 })}
+                className="px-3 py-2 text-sm rounded-lg border bg-transparent font-bold focus:outline-none"
+                style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+              />
+            </div>
+
+            <div className="p-4 rounded-xl border flex flex-col gap-2" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+              <label className="text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>Batas Waspada (Bulan)</label>
+              <p className="text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Batas gap defisit bulan untuk status WASPADA. (Batas Aman: {'>'} {globalThresholds.limitWaspada} bulan).</p>
+              <input
+                type="number"
+                step="0.1"
+                min="0.1"
+                value={globalThresholds.limitWaspada}
+                onChange={e => setGlobalThresholds({ ...globalThresholds, limitWaspada: parseFloat(e.target.value) || 0 })}
+                className="px-3 py-2 text-sm rounded-lg border bg-transparent font-bold focus:outline-none"
+                style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+              />
+            </div>
+
+            <div className="p-4 rounded-xl border flex flex-col gap-2" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+              <label className="text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>Batas Slow-Moving (Hari)</label>
+              <p className="text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Batas usia pengendapan pergerakan lambat.</p>
+              <input
+                type="number"
+                min="1"
+                value={globalThresholds.limitSlowMoving}
+                onChange={e => setGlobalThresholds({ ...globalThresholds, limitSlowMoving: parseInt(e.target.value, 10) || 0 })}
+                className="px-3 py-2 text-sm rounded-lg border bg-transparent font-bold focus:outline-none"
+                style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+              />
+            </div>
+
+            <div className="p-4 rounded-xl border flex flex-col gap-2" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+              <label className="text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>Batas At Risk (Hari)</label>
+              <p className="text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Batas usia pengendapan risiko tinggi.</p>
+              <input
+                type="number"
+                min="1"
+                value={globalThresholds.limitAtRisk}
+                onChange={e => setGlobalThresholds({ ...globalThresholds, limitAtRisk: parseInt(e.target.value, 10) || 0 })}
+                className="px-3 py-2 text-sm rounded-lg border bg-transparent font-bold focus:outline-none"
+                style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+              />
+            </div>
+
+            <div className="p-4 rounded-xl border flex flex-col gap-2" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+              <label className="text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>Batas Dead Stock (Hari)</label>
+              <p className="text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Batas usia pengendapan stok mati.</p>
+              <input
+                type="number"
+                min="1"
+                value={globalThresholds.limitDeadStock}
+                onChange={e => setGlobalThresholds({ ...globalThresholds, limitDeadStock: parseInt(e.target.value, 10) || 0 })}
+                className="px-3 py-2 text-sm rounded-lg border bg-transparent font-bold focus:outline-none"
+                style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+              />
+            </div>
+
+            <div className="p-4 rounded-xl border flex flex-col gap-2" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+              <label className="text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>Rate Biaya Simpan (% p.a.)</label>
+              <p className="text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Persentase estimasi holding cost per tahun.</p>
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                value={globalThresholds.holdingCostPct}
+                onChange={e => setGlobalThresholds({ ...globalThresholds, holdingCostPct: parseFloat(e.target.value) || 0 })}
+                className="px-3 py-2 text-sm rounded-lg border bg-transparent font-bold focus:outline-none"
+                style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+              />
+            </div>
           </div>
         </div>
       )}

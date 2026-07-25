@@ -5,14 +5,16 @@ export default function StatusBadge({ status }: { status: any }) {
   } else if (status === 'WASPADA') {
     cls = 'badge-waspada';
   } else if (status === 'SLOW MOVING') {
-    cls = 'bg-blue-950/40 text-blue-400 border border-blue-800/60';
+    cls = 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/60';
   } else if (status === 'DEAD STOCK') {
-    cls = 'bg-slate-900/40 text-slate-400 border border-slate-700/60';
+    cls = 'bg-slate-100 dark:bg-slate-900/40 text-slate-700 dark:text-slate-400 border border-slate-300 dark:border-slate-700/60';
   }
 
+  const labelText = status === 'BELUM PO' ? 'Belum PO' : status;
+
   return (
-    <div className={`inline-flex items-center justify-center px-2.5 py-0.5 rounded-full ${cls}`}>
-      <span className="text-[10px] font-black tracking-widest uppercase">{status === 'BELUM PO' ? 'NO PO' : status}</span>
+    <div className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md ${cls}`}>
+      <span className="text-[11px] font-semibold tracking-wide">{labelText}</span>
     </div>
   );
 }

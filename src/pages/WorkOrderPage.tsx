@@ -5,6 +5,7 @@ import PageWrapper from '../components/layout/PageWrapper';
 import ExportButton from '../components/ui/ExportButton';
 import { getMaintenanceSchedule, getWorkOrders, getFleetMetrics, getMaintenanceBomConfig, getRealSAPTrains, getAllEquipment, getProcurementData } from '../services/supabaseService';
 import { formatTanggal } from '../utils/calculations';
+import { calculateScheduleCompliance } from '../utils/scheduleMatching';
 import type { PropulsiType, SeriKereta, TipePerawatan, PelaksanaanStatus, PemenuhStatus, FleetMetrics, MaintenanceSchedule, WorkOrder, MaintenanceBomConfig, ProcurementItem } from '../types';
 
 const statusCfg: Record<PelaksanaanStatus, { bg: string; text: string; border: string }> = {
@@ -39,14 +40,21 @@ const exportColsWO = [
 
 // Fungsi mapping tipe perawatan ke warna visual
 const tipeColor = (tipe: string): string => {
-  if (tipe.startsWith('P48')) return 'var(--color-led-red)';
-  if (tipe.startsWith('P24')) return 'var(--color-led-amber)';
-  if (tipe.startsWith('P12')) return '#60a5fa';
-  if (tipe.startsWith('P6'))  return '#a855f7'; // Purple
-  if (tipe.startsWith('P3'))  return '#06b6d4'; // Cyan
-  if (tipe.startsWith('P1'))  return 'var(--color-led-green)'; // Green
+  if (tipe.startsWith('P48'))            return 'var(--color-led-red)';
+  if (tipe.startsWith('P24'))            return 'var(--color-led-amber)';
+  if (tipe.startsWith('P12'))            return '#60a5fa';
+  if (tipe.startsWith('P6'))             return '#a855f7';
+  if (tipe.startsWith('P3'))             return '#06b6d4';
+  if (tipe.startsWith('P1'))             return 'var(--color-led-green)';
+  if (tipe === 'PB Ganti Keping')        return '#f97316'; // Orange
+  if (tipe === 'PB Bubut Roda')          return '#e879f9'; // Fuchsia
+  if (tipe === 'GCU')                    return '#2dd4bf'; // Teal
+  if (tipe === 'PB PLH')                 return '#facc15'; // Yellow
   return '#9ca3af';
 };
+
+// Jenis perawatan berat -> TSGO
+const TSGO_TYPES: string[] = ['P48', 'P24', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'];
 
 export default function WorkOrderPage() {
   const [scheduleList, setScheduleList] = useState<MaintenanceSchedule[]>([]);
@@ -67,11 +75,13 @@ export default function WorkOrderPage() {
   const [procurementList, setProcurementList]     = useState<ProcurementItem[]>([]);
   const [validasiMsg, setValidasiMsg]             = useState<{ text: string; ok: boolean } | null>(null);
   const [expandedTrainRows, setExpandedTrainRows] = useState<Record<string, boolean>>({});
+  const [fleetModal, setFleetModal] = useState<'siap_dinas' | 'tso' | 'tsgo' | null>(null);
 
   const [filterMonth, setFilterMonth] = useState<number>(6); // Juli (0-indexed)
   const [filterYear, setFilterYear]   = useState<number>(2026);
 
   const [totalTrainsCount, setTotalTrainsCount] = useState(0);
+  const [trainList, setTrainList] = useState<{ id: string; name: string; model_no: string }[]>([]);
 
   useEffect(() => {
     async function loadData() {
@@ -90,6 +100,7 @@ export default function WorkOrderPage() {
         setMetrics(fMetrics);
         setBomConfigs(bData);
         setTotalTrainsCount(trainData.length);
+        setTrainList(trainData);
         setAllEquipment(eqData);
         setProcurementList(pData);
       } catch (err) {
@@ -315,6 +326,27 @@ export default function WorkOrderPage() {
   const outstandingCount = filteredWO.filter(w => w.status_pemenuhan === 'Outstanding').length;
   const fulfilledCount   = filteredWO.filter(w => w.status_pemenuhan === 'Fulfilled').length;
 
+  const inMaintCount = scheduleList.filter(s => s.status_pelaksanaan === 'Sedang Dirawat').length;
+  const tsgoList = scheduleList.filter(s =>
+    s.status_pelaksanaan === 'Sedang Dirawat' &&
+    (s.dipo?.toLowerCase().includes('manggarai') ||
+     (s.dipo?.toLowerCase().includes('depok') && TSGO_TYPES.includes(s.tipe_perawatan)))
+  );
+  const tsoList = scheduleList.filter(s =>
+    s.status_pelaksanaan === 'Sedang Dirawat' &&
+    !(s.dipo?.toLowerCase().includes('manggarai') ||
+      (s.dipo?.toLowerCase().includes('depok') && TSGO_TYPES.includes(s.tipe_perawatan)))
+  );
+  const tsgoCount = tsgoList.length;
+  const tsoCount = tsoList.length;
+  const totalFleetCount = totalTrainsCount;
+  const siapDinasCount = Math.max(0, totalFleetCount - inMaintCount);
+  const efisiensiCalc = scheduleList.length > 0
+    ? Math.round(((scheduleList.length - inMaintCount) / scheduleList.length) * 100)
+    : (metrics?.efisiensi_perawatan || 100);
+
+  const complianceSummary = calculateScheduleCompliance(scheduleList, woList, filterMonth, filterYear);
+
   if (loading) {
     return (
       <PageWrapper fullWidth>
@@ -332,21 +364,24 @@ export default function WorkOrderPage() {
 
   return (
     <PageWrapper fullWidth>
-      {/* Header */}
-      <div className="h-4" />
-
       {/* Fleet KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {[
-          { label: 'Total Armada',   value: totalTrainsCount || 101,              color: 'var(--color-secondary)',   sub: 'Total rangkaian KRL terdaftar' },
-          { label: 'Siap Dinas',     value: (totalTrainsCount || 101) - scheduleList.filter(s => s.status_pelaksanaan === 'Sedang Dirawat').length, color: 'var(--color-led-green)',   sub: 'Rangkaian On the Move' },
-          { label: 'In Maintenance', value: scheduleList.filter(s => s.status_pelaksanaan === 'Sedang Dirawat').length, color: 'var(--color-led-amber)',   sub: 'Rangkaian TSO/sedang diservis' },
-          { label: 'Efisiensi',      value: `${metrics?.efisiensi_perawatan ?? 98}%`, color: 'var(--color-secondary)', sub: 'Tepat waktu perawatan' },
+          { label: 'Total Armada', value: totalFleetCount,     color: 'var(--color-secondary)',   sub: 'Total rangkaian terdaftar',    modal: null as null },
+          { label: 'Siap Dinas',   value: siapDinasCount,      color: 'var(--color-led-green)',   sub: 'Rangkaian On the Move',        modal: 'siap_dinas' as const },
+          { label: 'TSO',          value: tsoCount,            color: 'var(--color-led-amber)',   sub: 'Tidak Siap Operasi',           modal: 'tso' as const },
+          { label: 'TSGO',         value: tsgoCount,           color: 'var(--color-led-red)',     sub: 'Tidak Siap Guna Operasi',      modal: 'tsgo' as const },
+          { label: 'Efisiensi',    value: `${efisiensiCalc}%`, color: 'var(--color-secondary)',   sub: 'Tepat waktu perawatan',        modal: null as null },
         ].map(kpi => (
-          <div key={kpi.label} className="tactile-card rounded-lg p-5" style={{ borderLeft: `4px solid ${kpi.color}` }}>
+          <div key={kpi.label}
+            className={`tactile-card rounded-lg p-5 ${kpi.modal ? 'cursor-pointer hover:ring-2 transition-all' : ''}`}
+            style={{ borderLeft: `4px solid ${kpi.color}`, ...(kpi.modal ? { ['--tw-ring-color' as string]: kpi.color } : {}) }}
+            onClick={() => kpi.modal && setFleetModal(kpi.modal)}
+          >
             <p className="text-[10px] font-black tracking-widest uppercase mb-1" style={{ color: 'var(--color-on-surface-variant)' }}>{kpi.label}</p>
             <p className="text-4xl font-black" style={{ color: 'var(--color-on-surface)' }}>{kpi.value}</p>
             <p className="text-[10px] mt-1" style={{ color: 'var(--color-on-surface-variant)' }}>{kpi.sub}</p>
+            {kpi.modal && <p className="text-[9px] mt-2 font-bold opacity-50" style={{ color: kpi.color }}>Klik untuk detail →</p>}
           </div>
         ))}
       </div>
@@ -448,6 +483,113 @@ export default function WorkOrderPage() {
       </div>
     </div>
 
+      {/* Section Analisis Kepatuhan Perawatan (Plan vs Realisasi SAP) */}
+      <div className="tactile-card rounded-lg overflow-hidden">
+        <div className="p-4 border-b flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+          <div className="flex items-center gap-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-secondary)' }}>
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+            </svg>
+            <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Analisis Kepatuhan & Realisasi Perawatan</h3>
+          </div>
+          <span className="text-xs px-3 py-1 rounded-full font-bold border" style={{ backgroundColor: complianceSummary.hasPlan ? 'rgba(22,163,74,0.1)' : 'rgba(217,119,6,0.1)', color: complianceSummary.hasPlan ? 'var(--color-led-green)' : 'var(--color-led-amber)', borderColor: complianceSummary.hasPlan ? 'rgba(22,163,74,0.3)' : 'rgba(217,119,6,0.3)' }}>
+            {complianceSummary.hasPlan ? `Kepatuhan: ${complianceSummary.rateKepatuhan}%` : 'Data Realisasi Murni (Belum ada Plan)'}
+          </span>
+        </div>
+
+        <div className="p-4 space-y-4">
+          {!complianceSummary.hasPlan ? (
+            <div className="p-4 rounded-lg border flex items-center gap-3 text-xs" style={{ backgroundColor: 'rgba(217,119,6,0.05)', borderColor: 'rgba(217,119,6,0.2)', color: 'var(--color-on-surface)' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--color-led-amber)' }} className="shrink-0">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+              <span>Belum ada Rencana Perawatan yang diinput untuk periode <strong>{currentMonthLabel}</strong>.</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="p-3 rounded border" style={{ backgroundColor: 'var(--color-surface-container-low)', borderColor: 'var(--color-steel-border)' }}>
+                <p className="text-[10px] font-black uppercase text-gray-500">Total Plan Bulan Ini</p>
+                <p className="text-xl font-black" style={{ color: 'var(--color-on-surface)' }}>{complianceSummary.totalPlan} Rangkaian</p>
+              </div>
+              <div className="p-3 rounded border" style={{ backgroundColor: 'rgba(22,163,74,0.05)', borderColor: 'rgba(22,163,74,0.2)' }}>
+                <p className="text-[10px] font-black uppercase" style={{ color: 'var(--color-led-green)' }}>Tepat Waktu / Terlaksana</p>
+                <p className="text-xl font-black" style={{ color: 'var(--color-led-green)' }}>{complianceSummary.tepatWaktuCount} Rangkaian</p>
+              </div>
+              <div className="p-3 rounded border" style={{ backgroundColor: 'rgba(220,38,38,0.05)', borderColor: 'rgba(220,38,38,0.2)' }}>
+                <p className="text-[10px] font-black uppercase" style={{ color: 'var(--color-led-red)' }}>Terlambat / Under-Plan</p>
+                <p className="text-xl font-black" style={{ color: 'var(--color-led-red)' }}>{complianceSummary.terlambatCount} Rangkaian</p>
+              </div>
+              <div className="p-3 rounded border" style={{ backgroundColor: 'rgba(168,85,247,0.05)', borderColor: 'rgba(168,85,247,0.2)' }}>
+                <p className="text-[10px] font-black uppercase text-purple-400">Insidentil / Over-Plan</p>
+                <p className="text-xl font-black text-purple-400">{complianceSummary.insidentilCount} Order</p>
+              </div>
+            </div>
+          )}
+
+          {/* Tabel Detail Matching */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse data-table">
+              <thead>
+                <tr style={{ backgroundColor: 'var(--color-surface-container-high)' }}>
+                  {['Nomor Rangkaian', 'Seri', 'Tipe Perawatan', 'Dipo / Lokasi', 'Status Plan', 'Realisasi SAP (Order)', 'Status Kepatuhan'].map(h => (
+                    <th key={h} className="px-4 py-2 text-[10px] font-black uppercase tracking-wider" style={{ color: 'var(--color-on-surface)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {complianceSummary.details.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-6 text-center text-xs italic" style={{ color: 'var(--color-on-surface-variant)' }}>
+                      Tidak ada catatan rencana atau realisasi perawatan pada periode ini.
+                    </td>
+                  </tr>
+                ) : (
+                  complianceSummary.details.map(d => (
+                    <tr key={d.id} style={{ borderColor: 'var(--color-steel-border)' }}>
+                      <td className="px-4 py-2.5 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{d.nomor_rangkaian}</td>
+                      <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{d.seri_kereta || '—'}</td>
+                      <td className="px-4 py-2.5 text-xs">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold border" style={{ color: tipeColor(d.tipe_perawatan), borderColor: tipeColor(d.tipe_perawatan), backgroundColor: `${tipeColor(d.tipe_perawatan)}15` }}>
+                          {d.tipe_perawatan}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{d.dipo || '—'}</td>
+                      <td className="px-4 py-2.5 text-xs font-bold" style={{ color: d.status_plan === 'TERJADWAL' ? '#60a5fa' : 'var(--color-on-surface-variant)' }}>
+                        {d.status_plan === 'TERJADWAL' ? 'Terjadwal' : 'Tanpa Plan'}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs font-mono">
+                        {d.order_no ? (
+                          <span className="font-bold" style={{ color: 'var(--color-secondary)' }}>{d.order_no}</span>
+                        ) : (
+                          <span className="opacity-40">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs">
+                        {d.kepatuhan_status === 'TEPAT_WAKTU' && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border" style={{ backgroundColor: 'rgba(22,163,74,0.1)', color: 'var(--color-led-green)', borderColor: 'rgba(22,163,74,0.3)' }}>
+                            Tepat Waktu
+                          </span>
+                        )}
+                        {d.kepatuhan_status === 'TERLAMBAT' && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border" style={{ backgroundColor: 'rgba(220,38,38,0.1)', color: 'var(--color-led-red)', borderColor: 'rgba(220,38,38,0.3)' }}>
+                            Belum / Terlambat
+                          </span>
+                        )}
+                        {d.kepatuhan_status === 'INSIDENTIL' && (
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border" style={{ backgroundColor: 'rgba(168,85,247,0.1)', color: '#a855f7', borderColor: 'rgba(168,85,247,0.3)' }}>
+                            Insidentil (Over-Plan)
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
        {/* Validasi Alert */}
       {validasiMsg && (
         <div className="rounded-lg p-4 flex items-start gap-3 border"
@@ -472,9 +614,9 @@ export default function WorkOrderPage() {
       <div className="tactile-card rounded-lg p-4 flex flex-wrap gap-3 items-center">
         <span className="text-[11px] font-black uppercase tracking-wider" style={{ color: 'var(--color-on-surface-variant)' }}>Filter Jadwal:</span>
         {([
-          { value: filterPropulsi,    set: setFilterPropulsi,    opts: ['Semua', 'VVVF', 'Rheostatik'] },
-          { value: filterSeriKereta,   set: setFilterSeriKereta,   opts: ['Semua', 'JR205', 'CLI125', 'CLI225', 'Metro', 'KFW', 'EA203'] },
-          { value: filterTipe,        set: setFilterTipe,        opts: ['Semua', 'P1', 'P3', 'P6', 'P12', 'P24', 'P48'] },
+          { value: filterPropulsi,   set: setFilterPropulsi,   opts: ['Semua', 'VVVF', 'Rheostatik'] },
+          { value: filterSeriKereta,  set: setFilterSeriKereta,  opts: ['Semua', 'JR205', 'CLI125', 'CLI225', 'Metro', 'KFW', 'EA203'] },
+          { value: filterTipe,       set: setFilterTipe,       opts: ['Semua', 'P1', 'P3', 'P6', 'P12', 'P24', 'P48', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'] },
         ] as { value: string; set: (v: string) => void; opts: string[] }[]).map((sel, i) => (
           <select key={i} value={sel.value} onChange={e => sel.set(e.target.value)}
             className="rounded px-3 py-2 border text-sm"
@@ -552,13 +694,13 @@ export default function WorkOrderPage() {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs mr-1" style={{ color: 'var(--color-on-surface-variant)' }}>Pilih Perawatan:</span>
-            {(['P1', 'P3', 'P6', 'P12', 'P24', 'P48'] as TipePerawatan[]).map(t => (
+            {(['P1', 'P3', 'P6', 'P12', 'P24', 'P48', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'] as TipePerawatan[]).map(t => (
               <button key={t} onClick={() => setFilterBOMTipe(t)}
                 className="px-3 py-1 rounded text-xs font-bold transition-all border"
                 style={{
-                  backgroundColor: filterBOMTipe === t ? 'var(--color-secondary)' : 'var(--color-surface-container-high)',
+                  backgroundColor: filterBOMTipe === t ? tipeColor(t) : 'var(--color-surface-container-high)',
                   color: filterBOMTipe === t ? '#fff' : 'var(--color-on-surface-variant)',
-                  borderColor: filterBOMTipe === t ? 'var(--color-secondary)' : 'var(--color-steel-border)',
+                  borderColor: filterBOMTipe === t ? tipeColor(t) : 'var(--color-steel-border)',
                 }}>{t}</button>
             ))}
           </div>
@@ -612,14 +754,22 @@ export default function WorkOrderPage() {
                       </td>
                       <td className="px-4 py-2.5 text-xs font-bold" style={{ color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)' }}>{currentStock} unit</td>
                       <td className="px-4 py-2.5">
-                        <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full"
-                          style={{
-                            backgroundColor: isSufficient ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)',
-                            color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)',
-                            border: isSufficient ? '1px solid rgba(22,163,74,0.3)' : '1px solid rgba(220,38,38,0.3)'
-                          }}>
-                          {isSufficient ? 'Stok Cukup' : 'Stok Kurang (Pesan Baru)'}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                            style={{
+                              backgroundColor: isSufficient ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)',
+                              color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)',
+                              border: isSufficient ? '1px solid rgba(22,163,74,0.3)' : '1px solid rgba(220,38,38,0.3)'
+                            }}>
+                            {isSufficient ? 'Stok Cukup' : 'Stok Kurang'}
+                          </span>
+                          {!isSufficient && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
+                              style={{ backgroundColor: 'rgba(217,119,6,0.1)', color: 'var(--color-led-amber)', border: '1px solid rgba(217,119,6,0.3)' }}>
+                              Pesan Baru
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -705,9 +855,9 @@ export default function WorkOrderPage() {
                   color: '#374151',
                 },
                 data: [
-                  { name: 'Siap Dinas',     value: (totalTrainsCount || 101) - scheduleList.filter(s => s.status_pelaksanaan === 'Sedang Dirawat').length,        itemStyle: { color: '#16a34a' } },
-                  { name: 'In Maintenance', value: scheduleList.filter(s => s.status_pelaksanaan === 'Sedang Dirawat').length,    itemStyle: { color: '#d97706' } },
-                  { name: 'Tidak Operasi',  value: metrics?.tidak_beroperasi ?? 8,  itemStyle: { color: '#dc2626' } },
+                  { name: 'Siap Dinas', value: siapDinasCount, itemStyle: { color: '#16a34a' } },
+                  ...(tsoCount > 0  ? [{ name: 'TSO',  value: tsoCount,  itemStyle: { color: '#d97706' } }] : []),
+                  ...(tsgoCount > 0 ? [{ name: 'TSGO', value: tsgoCount, itemStyle: { color: '#dc2626' } }] : []),
                 ],
               }],
             }}
@@ -1038,7 +1188,7 @@ export default function WorkOrderPage() {
                         {netProj} unit
                       </td>
                       <td className="px-4 py-3">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap inline-block"
                           style={{
                             backgroundColor: isSufficient ? 'rgba(22,163,74,0.1)' : 'rgba(220,38,38,0.1)',
                             color: isSufficient ? 'var(--color-led-green)' : 'var(--color-led-red)',
@@ -1070,6 +1220,90 @@ export default function WorkOrderPage() {
         </div>
         <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
       </div>
+      {fleetModal && (() => {
+        const isSiapDinas = fleetModal === 'siap_dinas';
+        const isTso  = fleetModal === 'tso';
+        const modalTitle   = isSiapDinas ? 'Siap Dinas' : isTso ? 'TSO — Tidak Siap Operasi' : 'TSGO — Tidak Siap Guna Operasi';
+        const modalColor   = isSiapDinas ? 'var(--color-led-green)' : isTso ? 'var(--color-led-amber)' : 'var(--color-led-red)';
+        const sedangDirawatIds = new Set(scheduleList.filter(s => s.status_pelaksanaan === 'Sedang Dirawat').map(s => s.nomor_rangkaian));
+        const rows: { id: string; display: string; model: string; tipe?: string; dipo?: string; status?: string }[] =
+          fleetModal === 'siap_dinas'
+            ? trainList.filter(t => !sedangDirawatIds.has(t.name))
+                .map(t => ({ id: t.id, display: t.name, model: t.model_no }))
+            : (fleetModal === 'tso' ? tsoList : tsgoList)
+                .map(s => ({ id: String(s.id), display: s.nomor_rangkaian, model: s.seri_kereta, tipe: s.tipe_perawatan, dipo: s.dipo, status: s.status_pelaksanaan }));
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.55)' }}
+            onClick={() => setFleetModal(null)}>
+            <div className="rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden"
+              style={{ backgroundColor: 'var(--color-surface-container)', border: '1px solid var(--color-steel-border)' }}
+              onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="p-5 flex items-center justify-between border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+                <div className="flex items-center gap-3">
+                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: modalColor }} />
+                  <div>
+                    <h3 className="font-black text-base" style={{ color: 'var(--color-on-surface)' }}>{modalTitle}</h3>
+                    <p className="text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{rows.length} rangkaian</p>
+                  </div>
+                </div>
+                <button onClick={() => setFleetModal(null)} style={{ color: 'var(--color-on-surface-variant)' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+              {/* Body */}
+              <div className="overflow-y-auto">
+                {rows.length === 0 ? (
+                  <div className="p-8 text-center text-sm" style={{ color: 'var(--color-on-surface-variant)' }}>Tidak ada data rangkaian.</div>
+                ) : (
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr style={{ backgroundColor: 'var(--color-surface-container-high)' }}>
+                        {(isSiapDinas
+                          ? ['Nomor Rangkaian', 'Model', 'Status']
+                          : ['Nomor Rangkaian', 'Seri', 'Tipe', 'Dipo', 'Status']
+                        ).map(h => (
+                          <th key={h} className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider" style={{ color: 'var(--color-on-surface-variant)' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r, i) => (
+                        <tr key={r.id} style={{ borderTop: '1px solid var(--color-steel-border)', backgroundColor: i % 2 === 0 ? 'transparent' : 'var(--color-surface-container-low)' }}>
+                          <td className="px-4 py-3 text-xs font-bold" style={{ color: 'var(--color-on-surface)' }}>{r.display}</td>
+                          <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{r.model}</td>
+                          {!isSiapDinas && (
+                            <>
+                              <td className="px-4 py-3">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded border"
+                                  style={{ color: tipeColor(r.tipe || ''), borderColor: tipeColor(r.tipe || ''), backgroundColor: `${tipeColor(r.tipe || '')}15` }}>
+                                  {r.tipe || '—'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>{r.dipo || '—'}</td>
+                            </>
+                          )}
+                          <td className="px-4 py-3">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                              style={{
+                                backgroundColor: isSiapDinas ? 'rgba(22,163,74,0.1)' : r.status === 'Sedang Dirawat' ? 'rgba(217,119,6,0.1)' : 'rgba(96,165,250,0.1)',
+                                color: isSiapDinas ? 'var(--color-led-green)' : r.status === 'Sedang Dirawat' ? 'var(--color-led-amber)' : '#60a5fa',
+                              }}>
+                              {isSiapDinas ? 'Siap Dinas' : r.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </PageWrapper>
   );
 }

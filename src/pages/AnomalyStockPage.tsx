@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import PageWrapper from '../components/layout/PageWrapper';
 import ExportButton from '../components/ui/ExportButton';
 import ReactECharts from 'echarts-for-react';
-import { getCriticalStockData, getMaintenanceBomConfig } from '../services/supabaseService';
+import { getCriticalStockData, getMaintenanceBomConfig, getMaintenanceSchedule, getWorkOrders } from '../services/supabaseService';
 import { supabase } from '../lib/supabaseClient';
-import type { CriticalStockItem, MaintenanceBomConfig } from '../types';
+import { calculateScheduleCompliance } from '../utils/scheduleMatching';
+import type { CriticalStockItem, MaintenanceBomConfig, MaintenanceSchedule, WorkOrder } from '../types';
 
 interface AnomalyItem {
   nomor_material: string;
@@ -85,6 +86,8 @@ export default function AnomalyStockPage() {
   const [loadingTxModal, setLoadingTxModal] = useState(false);
   const [modalFilter, setModalFilter] = useState<'SEMUA' | 'ANOMALI' | 'AMAN'>('SEMUA');
   const [bomList, setBomList] = useState<MaintenanceBomConfig[]>([]);
+  const [scheduleList, setScheduleList] = useState<MaintenanceSchedule[]>([]);
+  const [woList, setWoList] = useState<WorkOrder[]>([]);
 
   // Deteksi tema light/dark secara reaktif
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
@@ -111,12 +114,16 @@ export default function AnomalyStockPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [cData, bData] = await Promise.all([
+        const [cData, bData, sData, wData] = await Promise.all([
           getCriticalStockData(),
-          getMaintenanceBomConfig()
+          getMaintenanceBomConfig(),
+          getMaintenanceSchedule(),
+          getWorkOrders()
         ]);
         setCriticalData(cData);
         setBomList(bData);
+        setScheduleList(sData);
+        setWoList(wData);
         if (cData.length > 0 && !selectedMaterial) {
           setSelectedMaterial(cData[0].nomor_material);
         }
@@ -308,6 +315,16 @@ export default function AnomalyStockPage() {
 
   const totalAnomalies = useMemo(() => {
     return summaryData.filter(d => d.status === 'ANOMALI').length;
+  }, [summaryData]);
+
+  const topAnomalyMaterials = useMemo(() => {
+    const list = [...summaryData]
+      .filter(d => d.status === 'ANOMALI')
+      .sort((a, b) => Math.abs(b.deviasi_pct) - Math.abs(a.deviasi_pct));
+    if (list.length > 0) return list.slice(0, 5);
+    return [...summaryData]
+      .sort((a, b) => Math.abs(b.deviasi_pct) - Math.abs(a.deviasi_pct))
+      .slice(0, 5);
   }, [summaryData]);
 
   // Hitung jumlah anomali per gudang/depo aktif untuk perbandingan
@@ -590,7 +607,7 @@ export default function AnomalyStockPage() {
 
       // Detect maintenance type from description
       let detectedType = null;
-      const typeMatch = description.match(/\b(P1|P3|P6|P12|P24|P48)\b/i);
+      const typeMatch = description.match(/\b(P1|P3|P6|P12|P24|P48|PB Ganti Keping|PB Bubut Roda|GCU|PB PLH)\b/i);
       if (typeMatch) detectedType = typeMatch[1].toUpperCase();
 
       let activeBom = null;
@@ -760,14 +777,81 @@ export default function AnomalyStockPage() {
           }
         }
       `}</style>
-      <div className="h-4" />
+      {/* Dynamic Root Cause Insight Banner (Akumulasi Seluruh Rentang Bulan) */}
+      {(() => {
+        let aggregatedTotalPlan = 0;
+        let aggregatedTepatWaktu = 0;
+        let aggregatedTerlambat = 0;
+        let aggregatedInsidentil = 0;
+        let monthsWithPlan = 0;
+
+        rangeMonths.forEach(m => {
+          const comp = calculateScheduleCompliance(scheduleList, woList, m.month - 1, m.year);
+          if (comp.hasPlan) {
+            monthsWithPlan++;
+            aggregatedTotalPlan += comp.totalPlan;
+            aggregatedTepatWaktu += comp.tepatWaktuCount;
+            aggregatedTerlambat += comp.terlambatCount;
+            aggregatedInsidentil += comp.insidentilCount;
+          }
+        });
+
+        const hasAnyPlan = monthsWithPlan > 0;
+        const rateKepatuhan = aggregatedTotalPlan > 0 ? Math.round((aggregatedTepatWaktu / aggregatedTotalPlan) * 100) : 0;
+
+        const startBulanName = MONTHS_OPTIONS.find(m => m.value === startMonth)?.name || '';
+        const endBulanName = MONTHS_OPTIONS.find(m => m.value === endMonth)?.name || '';
+        const isSingleMonth = startMonth === endMonth && startYear === endYear;
+        const periodeLabel = isSingleMonth
+          ? `${startBulanName} ${startYear}`
+          : `${startBulanName} ${startYear} s/d ${endBulanName} ${endYear}`;
+
+        return (
+          <div className="mb-4 tactile-card rounded-lg p-4 border" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container-low)' }}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg shrink-0 mt-0.5" style={{ backgroundColor: hasAnyPlan ? 'rgba(96,165,250,0.12)' : 'rgba(217,119,6,0.12)' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: hasAnyPlan ? '#60a5fa' : 'var(--color-led-amber)' }}>
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm flex items-center gap-2" style={{ color: 'var(--color-on-surface)' }}>
+                    Insight Kepatuhan Perawatan & Dampak Material — Periode {periodeLabel}
+                  </h4>
+                  <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
+                    {!hasAnyPlan ? (
+                      <>Belum ada Rencana Perawatan yang diinput untuk periode <strong>{periodeLabel}</strong>.</>
+                    ) : (
+                      <>
+                        Pada periode ini terdapat <strong>{aggregatedTotalPlan} Plan Rencana</strong> dengan <strong>{aggregatedTepatWaktu} Tepat Waktu</strong>
+                        {aggregatedTerlambat > 0 && <>, <span style={{ color: 'var(--color-led-red)', fontWeight: 'bold' }}>{aggregatedTerlambat} Terlambat (Under-Plan)</span></>}
+                        {aggregatedInsidentil > 0 && <>, dan <span style={{ color: '#a855f7', fontWeight: 'bold' }}>{aggregatedInsidentil} Order Insidentil (Over-Plan)</span></>}.
+                        {aggregatedInsidentil > 0 ? ' Perawatan insidentil berpotensi menyebabkan lonjakan penyerapan material ekstra.' : aggregatedTerlambat > 0 ? ' Perawatan terlambat berpotensi menyebabkan akumulasi stok (under-absorption).' : ' Seluruh perawatan berjalan tepat waktu sesuai rencana.'}
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+              {hasAnyPlan && (
+                <div className="shrink-0 text-right">
+                  <span className="text-[10px] font-black uppercase block tracking-wider" style={{ color: 'var(--color-on-surface-variant)' }}>Kepatuhan Rata-Rata</span>
+                  <span className="text-2xl font-black" style={{ color: rateKepatuhan >= 80 ? 'var(--color-led-green)' : rateKepatuhan >= 50 ? 'var(--color-led-amber)' : 'var(--color-led-red)' }}>
+                    {rateKepatuhan}%
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Grid Layout for Charts on Large Screens */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-1">
         
         {/* CHART 1: Grafik Penyerapan Stok Anomali */}
         <div
-          className={`lg:col-span-2 tactile-card rounded-lg overflow-hidden flex flex-col ${isChartFullScreen ? 'fixed inset-0 z-50 p-6 flex flex-col justify-between mobile-landscape-fullscreen' : ''}`}
+          className={`lg:col-span-2 tactile-card rounded-lg overflow-hidden flex flex-col ${isChartFullScreen ? 'fixed inset-0 z-50 p-3 flex flex-col justify-between mobile-landscape-fullscreen' : ''}`}
           style={isChartFullScreen ? {
             backgroundColor: 'var(--color-background)',
             borderColor: 'var(--color-steel-border)',
@@ -779,37 +863,38 @@ export default function AnomalyStockPage() {
             borderColor: 'var(--color-steel-border)'
           }}
         >
-          <div className="p-5 border-b flex flex-col gap-4" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-            <div className="flex flex-wrap justify-between items-center gap-4">
-              <div>
-                <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Penyerapan Stok Anomali</h3>
-                <p className="fullscreen-hide text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
-                  Komparasi Rencana vs Aktual — <b>{referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})</b>
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                {/* 1. Filter Material */}
-                <select
-                  value={selectedMaterial || ''}
-                  onChange={e => {
-                    setSelectedMaterial(e.target.value);
-                    setSelectedWarehouse('SEMUA');
-                  }}
-                  className="rounded px-3 py-1.5 border text-xs font-bold w-full max-w-[150px] sm:max-w-xs"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+          <div className={`${isChartFullScreen ? 'p-2.5 px-3 gap-2' : 'p-5 gap-4'} border-b flex flex-col relative`} style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+            <div className="flex flex-wrap justify-between items-center gap-2 pr-10">
+              {!isChartFullScreen && (
+                <div>
+                  <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Penyerapan Stok Anomali</h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+                    Komparasi Rencana vs Aktual — <b>{referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})</b>
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                {/* 1. Button Tampilkan/Sembunyikan Deviasi */}
+                <button
+                  onClick={() => setShowDeviation(prev => !prev)}
+                  className={`px-2.5 sm:px-3 py-1.5 rounded text-[11px] sm:text-xs font-extrabold transition-all ${
+                    showDeviation ? 'skeuomorphic-btn' : 'border'
+                  }`}
+                  style={
+                    !showDeviation
+                      ? { borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)', backgroundColor: 'var(--color-surface-container-high)' }
+                      : {}
+                  }
                 >
-                  {uniqueMaterials.map(m => (
-                    <option key={m.nomor_material} value={m.nomor_material}>
-                      {m.nomor_material} — {m.nama_material.slice(0, 25)}
-                    </option>
-                  ))}
-                </select>
+                  {showDeviation ? 'SEMBUNYIKAN DEVIASI' : 'TAMPILKAN DEVIASI'}
+                </button>
 
                 {/* 2. Filter Gudang */}
                 <select
                   value={selectedWarehouse}
                   onChange={e => setSelectedWarehouse(e.target.value)}
-                  className="rounded px-3 py-1.5 border text-xs font-bold w-full max-w-[110px] sm:max-w-xs"
+                  className="rounded px-3 py-1.5 border text-xs font-bold w-full sm:w-auto sm:max-w-xs"
                   style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                 >
                   <option value="SEMUA">Semua Gudang</option>
@@ -827,92 +912,100 @@ export default function AnomalyStockPage() {
                 <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
                   <button
                     onClick={() => setChartMode('line')}
-                    className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                    className="px-2.5 sm:px-3 py-1 rounded text-[10px] sm:text-[11px] font-extrabold transition-all"
                     style={chartMode === 'line' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
                   >
                     LINE
                   </button>
                   <button
                     onClick={() => setChartMode('bar')}
-                    className="px-3 py-1 rounded text-[11px] font-extrabold transition-all"
+                    className="px-2.5 sm:px-3 py-1 rounded text-[10px] sm:text-[11px] font-extrabold transition-all"
                     style={chartMode === 'bar' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
                   >
                     BAR
                   </button>
                 </div>
 
-                {/* 4. Button Tampilkan/Sembunyikan Deviasi */}
-                <button
-                  onClick={() => setShowDeviation(prev => !prev)}
-                  className={`px-3 py-1.5 rounded text-xs font-extrabold transition-all ${
-                    showDeviation ? 'skeuomorphic-btn' : 'border'
-                  }`}
-                  style={
-                    !showDeviation
-                      ? { borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)', backgroundColor: 'var(--color-surface-container-high)' }
-                      : {}
-                  }
-                >
-                  {showDeviation ? 'SEMBUNYIKAN DEVIASI' : 'TAMPILKAN DEVIASI'}
-                </button>
-
-                <button
-                  onClick={() => setIsChartFullScreen(!isChartFullScreen)}
-                  className="p-1.5 rounded border transition-all flex items-center justify-center hover:opacity-80"
+                {/* 4. Filter Material */}
+                <select
+                  value={selectedMaterial || ''}
+                  onChange={e => {
+                    setSelectedMaterial(e.target.value);
+                    setSelectedWarehouse('SEMUA');
+                  }}
+                  className="rounded px-2.5 py-1 border text-xs font-bold w-full sm:w-auto min-w-[240px] max-w-[360px]"
                   style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                  title={isChartFullScreen ? "Kecilkan Tampilan" : "Perbesar Tampilan (Full Screen)"}
                 >
-                  {isChartFullScreen ? (
-                    /* Minimize icon */
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m0 0V3m0 6l-6-6m6 18v-6m0 0H9m6 0l-6 6" />
-                    </svg>
-                  ) : (
-                    /* Maximize icon */
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6m0 0v6m0-6L14 10M9 21H3m0 0v-6m0 6l7-7" />
-                    </svg>
-                  )}
-                </button>
+                  {uniqueMaterials.map(m => (
+                    <option key={m.nomor_material} value={m.nomor_material}>
+                      {m.nomor_material} — {m.nama_material}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
 
-            <div className="fullscreen-hide flex flex-wrap items-center gap-3 text-xs border-t pt-3" style={{ borderColor: 'var(--color-steel-border)' }}>
-              <span className="font-bold text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
-              <select
-                value={startMonth}
-                onChange={e => setStartMonth(Number(e.target.value))}
-                className="rounded px-2 py-1 border font-medium text-xs"
-                style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-              >
-                {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
-              </select>
-              <select
-                value={startYear}
-                onChange={e => setStartYear(Number(e.target.value))}
-                className="rounded px-2 py-1 border font-medium text-xs"
-                style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-              >
-                {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
+            {/* Tombol Full Screen yang selalu terkunci di pojok kanan atas */}
+            <button
+              onClick={() => setIsChartFullScreen(!isChartFullScreen)}
+              className={`absolute ${isChartFullScreen ? 'top-2 right-2 p-1.5' : 'top-4 right-4 p-2'} rounded border transition-all flex items-center justify-center hover:opacity-80 shadow-sm`}
+              style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+              title={isChartFullScreen ? "Kecilkan Tampilan" : "Perbesar Tampilan (Full Screen)"}
+            >
+              {isChartFullScreen ? (
+                /* Minimize icon */
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 9h6m0 0V3m0 6l-6-6m6 18v-6m0 0H9m6 0l-6 6" />
+                </svg>
+              ) : (
+                /* Maximize icon */
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 3h6m0 0v6m0-6L14 10M9 21H3m0 0v-6m0 6l7-7" />
+                </svg>
+              )}
+            </button>
 
-              <span className="font-bold text-xs ml-2" style={{ color: 'var(--color-on-surface-variant)' }}>Selesai:</span>
-              <select
-                value={endMonth}
-                onChange={e => setEndMonth(Number(e.target.value))}
-                className="rounded px-2 py-1 border font-medium text-xs"
-                style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-              >
-                {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
-              </select>
-              <select
-                value={endYear}
-                onChange={e => setEndYear(Number(e.target.value))}
-                className="rounded px-2 py-1 border font-medium text-xs"
-                style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-              >
-                {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-              </select>
+            {/* Selector Periode Awal & Akhir */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs border-t pt-2.5" style={{ borderColor: 'var(--color-steel-border)' }}>
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
+                <select
+                  value={startMonth}
+                  onChange={e => setStartMonth(Number(e.target.value))}
+                  className="rounded px-2 py-1 border font-medium text-xs"
+                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                >
+                  {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
+                </select>
+                <select
+                  value={startYear}
+                  onChange={e => setStartYear(Number(e.target.value))}
+                  className="rounded px-2 py-1 border font-medium text-xs"
+                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                >
+                  {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>Selesai:</span>
+                <select
+                  value={endMonth}
+                  onChange={e => setEndMonth(Number(e.target.value))}
+                  className="rounded px-2 py-1 border font-medium text-xs"
+                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                >
+                  {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
+                </select>
+                <select
+                  value={endYear}
+                  onChange={e => setEndYear(Number(e.target.value))}
+                  className="rounded px-2 py-1 border font-medium text-xs"
+                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                >
+                  {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
 
               {isRangeInvalid && (
                 <span className="text-xs font-semibold px-2 py-0.5 rounded ml-auto flex items-center gap-1" style={{ backgroundColor: 'rgba(220,38,38,0.12)', color: 'var(--color-led-red)' }}>
@@ -923,7 +1016,7 @@ export default function AnomalyStockPage() {
             </div>
           </div>
 
-          <div className="chart-wrapper-el" style={{ height: isChartFullScreen ? 'calc(100vh - 180px)' : 480 }}>
+          <div className="chart-wrapper-el" style={{ height: isChartFullScreen ? 'calc(100vh - 75px)' : 480 }}>
             <ReactECharts
               className="chart-wrapper-el"
               option={{
@@ -945,6 +1038,26 @@ export default function AnomalyStockPage() {
                   textStyle: { color: ct.tooltipText, fontSize: 12, fontFamily: 'inherit' },
                   formatter: (params: any[]) => {
                     const label = params[0]?.axisValue || '';
+                    const dataIndex = params[0]?.dataIndex;
+                    const monthObj = rangeMonths[dataIndex];
+
+                    let insightHtml = '';
+                    if (monthObj) {
+                      const comp = calculateScheduleCompliance(scheduleList, woList, monthObj.month - 1, monthObj.year);
+                      if (comp.hasPlan) {
+                        insightHtml = `
+                          <div style="margin-top:8px;padding-top:6px;border-top:1px dashed ${ct.tooltipBorder};font-size:11px">
+                            <div style="font-weight:bold;color:${ct.tooltipText};margin-bottom:2px">💡 Insight Perawatan: Kepatuhan ${comp.rateKepatuhan}%</div>
+                            <div style="color:${ct.tooltipSub};font-size:10px;line-height:1.4">${comp.totalPlan} Plan | ${comp.tepatWaktuCount} Tepat Waktu | ${comp.terlambatCount} Terlambat | ${comp.insidentilCount} Insidentil</div>
+                          </div>`;
+                      } else {
+                        insightHtml = `
+                          <div style="margin-top:8px;padding-top:6px;border-top:1px dashed ${ct.tooltipBorder};font-size:10px;color:${ct.tooltipSub}">
+                            ℹ️ Belum ada Rencana Perawatan diinput bulan ini.
+                          </div>`;
+                      }
+                    }
+
                     const rows = params
                       .filter((p: any) => p.value !== null && p.value !== undefined)
                       .map((p: any) => {
@@ -952,25 +1065,27 @@ export default function AnomalyStockPage() {
                         const dot = `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${p.color};margin-right:8px"></span>`;
                         return `<div style="display:flex;align-items:center;justify-content:space-between;gap:18px;padding:3px 0">${dot}<span style="color:${ct.tooltipSub};font-size:11px">${p.seriesName}</span><b style="color:${ct.tooltipText};font-size:12px">${val}</b></div>`;
                       }).join('');
-                    return `<div style="font-size:10px;font-weight:800;color:${ct.tooltipSub};margin-bottom:8px;border-bottom:1px solid ${ct.tooltipBorder};padding-bottom:6px">${label}</div>${rows}`;
+                    return `<div style="font-size:10px;font-weight:800;color:${ct.tooltipSub};margin-bottom:8px;border-bottom:1px solid ${ct.tooltipBorder};padding-bottom:6px">${label}</div>${rows}${insightHtml}`;
                   },
                 },
                 legend: {
                   data: ['Rencana Awal', 'Realisasi Aktual'],
-                  bottom: 6,
+                  bottom: 4,
                   itemWidth: 38,
                   itemHeight: 5,
                   textStyle: { color: ct.legendText, fontSize: 11, fontWeight: '700' },
                 },
-                grid: { left: 14, right: 18, top: 18, bottom: window.innerWidth <= 768 ? 68 : 48, containLabel: true },
+                grid: { left: 14, right: 18, top: 18, bottom: window.innerWidth <= 768 ? 68 : 58, containLabel: true },
                 xAxis: {
                   type: 'category',
                   data: chartData.labels,
                   boundaryGap: chartMode === 'bar',
                   axisLabel: {
                     color: ct.axisLabel,
-                    fontSize: 10,
-                    interval: Math.max(0, Math.floor(chartData.labels.length / 10) - 1),
+                    fontSize: 11,
+                    fontWeight: '600',
+                    interval: 0,
+                    margin: 10,
                     rotate: window.innerWidth <= 768 ? 30 : 0
                   },
                   axisLine: { lineStyle: { color: ct.axisLine } },
@@ -1100,107 +1215,184 @@ export default function AnomalyStockPage() {
           </div>
         </div>
 
-        {/* CHART 2: Radial Bar Chart (Nested Ring Chart) Perbandingan Anomali Gudang */}
-        <div className="lg:col-span-1 tactile-card rounded-lg overflow-hidden flex flex-col" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
-          <div className="p-5 border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-            <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Perbandingan Anomali</h3>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
-              Jumlah material terdeteksi anomali pada masing-masing Depo/Gudang
-            </p>
-          </div>
-          <div className="p-4 flex-1 flex items-center justify-center" style={{ backgroundColor: 'var(--color-background-metallic)' }}>
-            <ReactECharts
-              option={{
-                backgroundColor: 'transparent',
-                tooltip: {
-                  trigger: 'item',
-                  backgroundColor: ct.tooltipBg,
-                  borderColor: ct.tooltipBorder,
-                  borderWidth: 1,
-                  textStyle: { color: ct.tooltipText, fontSize: 12 },
-                  formatter: (params: any) =>
-                    `<b style="color:${ct.tooltipText}">${params.name}</b><br/>` +
-                    `<span style="color:${ct.tooltipSub}">Jumlah Anomali</span>: <b style="color:${ct.tooltipText}">${params.value} Material</b>`,
-                },
-                angleAxis: {
-                  max: Math.max(...warehouseAnomalyCounts.map(x => x.value), 3) * 1.25, // Berikan sedikit sisa lingkaran agar tidak mentok
-                  startAngle: 90,
-                  clockwise: true,
-                  axisLine: { show: false },
-                  axisTick: { show: false },
-                  axisLabel: { show: false },
-                  splitLine: { show: false },
-                },
-                radiusAxis: {
-                  type: 'category',
-                  data: warehouseAnomalyCounts.map(w => w.name.replace(' (C006)', '').replace(' (C007)', '').replace(' (C008)', '').replace(' (C009)', '').replace(' (C020)', '')),
-                  inverse: true,
-                  axisLine: { show: false },
-                  axisTick: { show: false },
-                  axisLabel: {
-                    show: true,
-                    color: ct.axisLabel,
-                    fontSize: 10,
-                    fontWeight: '700',
-                    fontFamily: 'inherit',
-                    interval: 0,
+        {/* RIGHT COLUMN: 2 Stacked Cards (Matching Height of Left Chart) */}
+        <div className="lg:col-span-1 flex flex-col gap-4">
+          {/* CARD 1: Radial Bar Chart Perbandingan Anomali Gudang */}
+          <div className="tactile-card rounded-lg overflow-hidden flex flex-col flex-1" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+            <div className="p-3.5 border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+              <h3 className="text-sm font-bold" style={{ color: 'var(--color-on-surface)' }}>Perbandingan Anomali Gudang</h3>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+                Jumlah material terdeteksi anomali per Depo/Gudang
+              </p>
+            </div>
+            <div className="p-2 flex-1 flex items-center justify-center" style={{ backgroundColor: 'var(--color-background-metallic)' }}>
+              <ReactECharts
+                option={{
+                  backgroundColor: 'transparent',
+                  tooltip: {
+                    trigger: 'item',
+                    backgroundColor: ct.tooltipBg,
+                    borderColor: ct.tooltipBorder,
+                    borderWidth: 1,
+                    textStyle: { color: ct.tooltipText, fontSize: 11 },
+                    formatter: (params: any) =>
+                      `<b style="color:${ct.tooltipText}">${params.name}</b><br/>` +
+                      `<span style="color:${ct.tooltipSub}">Jumlah Anomali</span>: <b style="color:${ct.tooltipText}">${params.value} Material</b>`,
                   },
-                },
-                polar: {
-                  center: ['50%', '50%'],
-                  radius: ['30%', '82%'],
-                },
-                series: [
-                  {
-                    type: 'bar',
-                    data: warehouseAnomalyCounts.map((w, idx) => {
-                      // Warna premium untuk masing-masing ring
-                      const colors = [
-                        { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#38bdf8' }, { offset: 1, color: '#0284c7' }] }, // Biru
-                        { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#4ade80' }, { offset: 1, color: '#22c55e' }] }, // Hijau
-                        { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#fbbf24' }, { offset: 1, color: '#d97706' }] }, // Kuning
-                        { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#f87171' }, { offset: 1, color: '#dc2626' }] }, // Merah
-                        { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#c084fc' }, { offset: 1, color: '#9333ea' }] }  // Ungu
-                      ];
-                      return {
-                        value: w.value,
-                        name: w.name,
-                        itemStyle: {
-                          color: colors[idx % colors.length],
-                          shadowBlur: 6,
-                          shadowOffsetY: 2,
-                          shadowColor: 'rgba(0,0,0,0.15)',
-                        },
-                      };
-                    }),
-                    coordinateSystem: 'polar',
-                    barWidth: 10, // Tebal cincin lingkaran
-                    roundCap: true,
-                    showBackground: true,
-                    backgroundStyle: {
-                      color: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                  angleAxis: {
+                    max: Math.max(...warehouseAnomalyCounts.map(x => x.value), 3) * 1.25,
+                    startAngle: 90,
+                    clockwise: true,
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    axisLabel: { show: false },
+                    splitLine: { show: false },
+                  },
+                  radiusAxis: {
+                    type: 'category',
+                    data: warehouseAnomalyCounts.map(w => w.name.replace(' (C006)', '').replace(' (C007)', '').replace(' (C008)', '').replace(' (C009)', '').replace(' (C020)', '')),
+                    inverse: true,
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    axisLabel: {
+                      show: true,
+                      color: ct.axisLabel,
+                      fontSize: 10,
+                      fontWeight: '700',
+                      fontFamily: 'inherit',
+                      interval: 0,
                     },
                   },
-                ],
-              }}
-              style={{ height: 480, width: '100%' }}
-              opts={{ renderer: 'canvas' }}
-              notMerge={true}
-            />
+                  polar: {
+                    center: ['50%', '50%'],
+                    radius: ['25%', '82%'],
+                  },
+                  series: [
+                    {
+                      type: 'bar',
+                      data: warehouseAnomalyCounts.map((w, idx) => {
+                        const colors = [
+                          { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#38bdf8' }, { offset: 1, color: '#0284c7' }] },
+                          { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#4ade80' }, { offset: 1, color: '#22c55e' }] },
+                          { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#fbbf24' }, { offset: 1, color: '#d97706' }] },
+                          { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#f87171' }, { offset: 1, color: '#dc2626' }] },
+                          { type: 'linear', x: 0, y: 0, x2: 1, y2: 0, colorStops: [{ offset: 0, color: '#c084fc' }, { offset: 1, color: '#9333ea' }] }
+                        ];
+                        return {
+                          value: w.value,
+                          name: w.name,
+                          itemStyle: {
+                            color: colors[idx % colors.length],
+                            shadowBlur: 4,
+                            shadowOffsetY: 1,
+                            shadowColor: 'rgba(0,0,0,0.15)',
+                          },
+                        };
+                      }),
+                      coordinateSystem: 'polar',
+                      barWidth: 8,
+                      roundCap: true,
+                      showBackground: true,
+                      backgroundStyle: {
+                        color: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                      },
+                    },
+                  ],
+                }}
+                style={{ height: 220, width: '100%' }}
+                opts={{ renderer: 'svg' }}
+                notMerge={true}
+              />
+            </div>
+          </div>
+
+          {/* CARD 2: Top 5 Deviasi Material (Horizontal Bar Chart) */}
+          <div className="tactile-card rounded-lg overflow-hidden flex flex-col flex-1" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+            <div className="p-3.5 border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+              <h3 className="text-sm font-bold" style={{ color: 'var(--color-on-surface)' }}>Top 5 Deviasi Material</h3>
+              <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+                Material dengan persentase deviasi tertinggi
+              </p>
+            </div>
+            <div className="p-2 flex-1 flex items-center justify-center" style={{ backgroundColor: 'var(--color-background-metallic)' }}>
+              <ReactECharts
+                option={{
+                  backgroundColor: 'transparent',
+                  tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    backgroundColor: ct.tooltipBg,
+                    borderColor: ct.tooltipBorder,
+                    textStyle: { color: ct.tooltipText, fontSize: 11 },
+                    formatter: (params: any[]) => {
+                      const p = params[0];
+                      return `<b style="color:${ct.tooltipText}">${p.name}</b><br/><span style="color:${ct.tooltipSub}">Deviasi</span>: <b style="color:${p.color}">${p.value > 0 ? '+' : ''}${p.value}%</b>`;
+                    }
+                  },
+                  grid: { left: 10, right: 38, top: 10, bottom: 6, containLabel: true },
+                  xAxis: {
+                    type: 'value',
+                    axisLabel: { color: ct.axisLabel, fontSize: 9, formatter: '{value}%' },
+                    splitLine: { lineStyle: { color: ct.gridLine, type: 'dashed' } }
+                  },
+                  yAxis: {
+                    type: 'category',
+                    data: topAnomalyMaterials.map(m => m.nomor_material).reverse(),
+                    axisLabel: { color: ct.axisLabel, fontSize: 10, fontWeight: '700' },
+                    axisLine: { lineStyle: { color: ct.axisLine } }
+                  },
+                  series: [
+                    {
+                      type: 'bar',
+                      data: topAnomalyMaterials.map(m => ({
+                        value: m.deviasi_pct,
+                        name: `${m.nomor_material} - ${m.nama_material}`,
+                        itemStyle: {
+                          color: m.deviasi_pct > 0 ? '#ef4444' : '#f59e0b',
+                          borderRadius: [0, 4, 4, 0]
+                        }
+                      })).reverse(),
+                      barWidth: 10,
+                      label: {
+                        show: true,
+                        position: 'right',
+                        color: ct.axisLabel,
+                        fontSize: 9,
+                        fontWeight: 'bold',
+                        formatter: (params: any) => `${params.value > 0 ? '+' : ''}${params.value}%`
+                      }
+                    }
+                  ]
+                }}
+                style={{ height: 220, width: '100%' }}
+                opts={{ renderer: 'svg' }}
+                notMerge={true}
+              />
+            </div>
           </div>
         </div>
 
       </div>
 
-      {/* Grid Layout for Tables on Large Screens */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-6">
+      {/* Stacked Layout for Smart TV & Desktop (Full Width Tables without Horizontal Scroll) */}
+      <div className="flex flex-col gap-6 mt-6">
         
-        {/* Column 1: Status & Toleransi Filter + Detailed Breakdown Table */}
-        <div className="flex flex-col gap-4">
-          {/* Status & Tolerance Filter Panel */}
-          <div className="tactile-card rounded-lg p-4 flex flex-wrap gap-4 items-center">
+        {/* Section 1: Global Filter & Master Table (Analisis Deviasi) */}
+        <div className="flex flex-col gap-4 w-full">
+          {/* Unified Filter & Toleransi Control Panel */}
+          <div className="tactile-card rounded-lg p-4 flex flex-wrap gap-4 items-center justify-between">
+            {/* Search Input */}
+            <div className="flex items-center gap-2 rounded px-3 py-2 border flex-1 min-w-[240px]"
+              style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-on-surface-variant)', flexShrink: 0 }}>
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input type="text" placeholder="Cari kode atau nama material..." value={searchText} onChange={e => setSearchText(e.target.value)}
+                className="bg-transparent border-none text-sm flex-1 focus:outline-none" style={{ color: 'var(--color-on-surface)' }} />
+            </div>
+
             {/* Status Filter buttons */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               {(['SEMUA', 'ANOMALI', 'NORMAL'] as const).map(s => {
                 const active = filterStatus === s;
                 return (
@@ -1254,7 +1446,68 @@ export default function AnomalyStockPage() {
             </div>
           </div>
 
-          {/* Detailed Monthly Breakdown Table */}
+          {/* Tabel Anomali (Daftar Analisis Deviasi) */}
+          <div className="tactile-card rounded-lg overflow-hidden flex flex-col flex-1">
+            <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Analisis Deviasi</h3>
+              </div>
+              <ExportButton data={mainExportData as any} filename="anomaly_stock_analysis" columns={exportCols} />
+            </div>
+            <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
+              <table className="w-full text-left border-collapse data-table">
+                <thead className="sticky top-0 z-10 shadow-sm">
+                  <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
+                    {['Kode Material','Deskripsi Material','Target (Rerata)','Aktual Rata-rata','Gap (Qty)','Deviasi','Status'].map(h => (
+                      <th key={h} className="px-3 py-2 text-[10px] font-black tracking-widest uppercase whitespace-nowrap first:text-left text-right last:text-center"
+                        style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredData.map((row, i) => {
+                    const isAnomaly = row.status === 'ANOMALI';
+                    return (
+                      <tr
+                        key={row.nomor_material}
+                        onClick={() => setSelectedMaterial(row.nomor_material)}
+                        className="cursor-pointer transition-colors"
+                        style={{
+                          backgroundColor: row.nomor_material === selectedMaterial
+                            ? 'var(--color-surface-container-highest)'
+                            : (i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)')
+                        }}
+                      >
+                        <td className="px-3 py-2.5 font-bold text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
+                        <td className="px-3 py-2.5 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
+                        <td className="px-3 py-2.5 text-xs text-right whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{row.plan_bulanan} {row.satuan}</td>
+                        <td className="px-3 py-2.5 text-xs text-right font-medium whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.actual_monthly_avg} {row.satuan}</td>
+                        <td className="px-3 py-2.5 text-xs text-right font-bold whitespace-nowrap" style={{ color: row.deviasi_qty > 0 ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>
+                          {row.deviasi_qty > 0 ? '+' : ''}{row.deviasi_qty}
+                        </td>
+                        <td className="px-3 py-2.5 text-xs text-right font-bold whitespace-nowrap" style={{ color: (row.deviasi_pct > tolerancePlus || row.deviasi_pct < -toleranceMinus) ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>
+                          {row.deviasi_pct > 0 ? '+' : ''}{row.deviasi_pct}%
+                        </td>
+                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
+                            isAnomaly ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'
+                          }`}>
+                            {row.status === 'ANOMALI' ? 'ANOMALI' : 'DALAM TOLERANSI'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
+          </div>
+        </div>
+
+        {/* Section 2: Detailed Monthly Breakdown Table (Rincian Deviasi) */}
+        <div className="flex flex-col gap-4 w-full">
+
           {referenceItem ? (
             <div className="tactile-card rounded-lg overflow-hidden flex flex-col flex-1">
               <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
@@ -1267,7 +1520,7 @@ export default function AnomalyStockPage() {
                 <ExportButton data={detailedExportData as any} filename={`monthly_breakdown_${referenceItem.nomor_material}`} columns={detailedExportCols} />
               </div>
               <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
-                <table className="w-full text-left border-collapse min-w-[650px] data-table">
+                <table className="w-full text-left border-collapse data-table">
                   <thead className="sticky top-0 z-10 shadow-sm">
                     <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
                       {['Bulan', 'Target Rencana', 'Realisasi Aktual', 'Deviasi Qty', 'Deviasi Persentase', 'Status', 'Aksi'].map(h => (
@@ -1303,9 +1556,13 @@ export default function AnomalyStockPage() {
                           <td className="px-3 py-2.5 text-center whitespace-nowrap">
                             {row.actual_qty !== null ? (
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
-                                isAnomaly ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'
+                                isAnomaly 
+                                  ? (row.deviasi_qty && row.deviasi_qty > 0 ? 'bg-red-500/15 text-red-400 border border-red-500/30' : 'bg-amber-500/15 text-amber-400 border border-amber-500/30') 
+                                  : 'bg-green-500/10 text-green-500'
                               }`}>
-                                {row.status === 'ANOMALI' ? 'ANOMALI' : 'DALAM TOLERANSI'}
+                                {row.status === 'ANOMALI' 
+                                  ? (row.deviasi_qty && row.deviasi_qty > 0 ? 'OVER-KONSUMSI (LONJAKAN)' : 'UNDER-KONSUMSI (TERTUNDA)') 
+                                  : 'DALAM TOLERANSI'}
                               </span>
                             ) : nil}
                           </td>
@@ -1332,83 +1589,11 @@ export default function AnomalyStockPage() {
             </div>
           ) : (
             <div className="tactile-card rounded-lg p-6 text-center text-xs flex-1 flex items-center justify-center" style={{ color: 'var(--color-on-surface-variant)' }}>
-              Silakan klik salah satu material pada tabel di sebelah kanan untuk memproyeksikan rincian deviasi bulanan.
+              Silakan klik salah satu material pada tabel di atas untuk melihat rincian deviasi bulanan.
             </div>
           )}
         </div>
 
-        {/* Column 2: Search Input Panel + Overview Summary Table */}
-        <div className="flex flex-col gap-4">
-          {/* Search Filter Panel */}
-          <div className="tactile-card rounded-lg p-4 flex items-center gap-4">
-            <div className="flex items-center gap-2 rounded px-3 py-2 border flex-1"
-              style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-on-surface-variant)', flexShrink: 0 }}>
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <input type="text" placeholder="Cari kode atau nama material..." value={searchText} onChange={e => setSearchText(e.target.value)}
-                className="bg-transparent border-none text-sm flex-1 focus:outline-none" style={{ color: 'var(--color-on-surface)' }} />
-            </div>
-          </div>
-
-          {/* Tabel Anomali (Daftar Analisis Deviasi) */}
-          <div className="tactile-card rounded-lg overflow-hidden flex flex-col flex-1">
-            <div className="p-4 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Analisis Deviasi</h3>
-              </div>
-              <ExportButton data={mainExportData as any} filename="anomaly_stock_analysis" columns={exportCols} />
-            </div>
-            <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
-              <table className="w-full text-left border-collapse min-w-[900px] data-table">
-                <thead className="sticky top-0 z-10 shadow-sm">
-                  <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                    {['Kode Material','Deskripsi Material','Target (Rerata)','Aktual Rata-rata','Gap (Qty)','Deviasi','Status'].map(h => (
-                      <th key={h} className="px-3 py-2 text-[10px] font-black tracking-widest uppercase whitespace-nowrap first:text-left text-right last:text-center"
-                        style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredData.map((row, i) => {
-                    const isAnomaly = row.status === 'ANOMALI';
-                    return (
-                      <tr
-                        key={row.nomor_material}
-                        onClick={() => setSelectedMaterial(row.nomor_material)}
-                        className="cursor-pointer transition-colors"
-                        style={{
-                          backgroundColor: row.nomor_material === selectedMaterial
-                            ? 'var(--color-surface-container-highest)'
-                            : (i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)')
-                        }}
-                      >
-                        <td className="px-3 py-2.5 font-bold text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                        <td className="px-3 py-2.5 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
-                        <td className="px-3 py-2.5 text-xs text-right whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{row.plan_bulanan} {row.satuan}</td>
-                        <td className="px-3 py-2.5 text-xs text-right font-medium whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.actual_monthly_avg} {row.satuan}</td>
-                        <td className="px-3 py-2.5 text-xs text-right font-bold whitespace-nowrap" style={{ color: row.deviasi_qty > 0 ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>
-                          {row.deviasi_qty > 0 ? '+' : ''}{row.deviasi_qty}
-                        </td>
-                        <td className="px-3 py-2.5 text-xs text-right font-bold whitespace-nowrap" style={{ color: (row.deviasi_pct > tolerancePlus || row.deviasi_pct < -toleranceMinus) ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>
-                          {row.deviasi_pct > 0 ? '+' : ''}{row.deviasi_pct}%
-                        </td>
-                        <td className="px-3 py-2.5 text-center whitespace-nowrap">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${
-                            isAnomaly ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'
-                          }`}>
-                            {row.status === 'ANOMALI' ? 'ANOMALI' : 'DALAM TOLERANSI'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
-          </div>
-        </div>
       </div>
       {/* Modal Riwayat Transaksi */}
       {selectedTxMonth && (

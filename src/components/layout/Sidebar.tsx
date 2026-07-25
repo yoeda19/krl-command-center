@@ -111,7 +111,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
       >
       {/* ── Brand ── */}
       <div
-        className="h-16 flex items-center border-b shrink-0 gap-3"
+        className="h-10 flex items-center border-b shrink-0 gap-3"
         style={{ borderColor: 'var(--color-steel-border)', padding: collapsed ? '0 16px' : '0 20px' }}
       >
         <div

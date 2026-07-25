@@ -3,7 +3,9 @@ import { useSearchParams } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import PageWrapper from '../components/layout/PageWrapper';
 import ExportButton from '../components/ui/ExportButton';
-import { getSlowMovingData, getRestockData, getCriticalStockData } from '../services/supabaseService';
+import ThresholdModal from '../components/ui/ThresholdModal';
+import { getThresholdConfig } from '../utils/thresholdSettings';
+import { getSlowMovingData, getRestockData, getCriticalStockData, subscribeToRealtimeChanges } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
 import type { AgingKategori, SlowMovingItem, RestockItem, CriticalStockItem } from '../types';
 import { useAppStore } from '../store/useAppStore';
@@ -63,6 +65,8 @@ export default function StockAgingPage() {
   const [isHeatmapFullScreen, setIsHeatmapFullScreen] = useState(false);
   const [heatmapCellHeight, setHeatmapCellHeight] = useState<number>(36);
   const [isDark, setIsDark] = useState(() => typeof document !== 'undefined' && document.documentElement.classList.contains('dark'));
+  const [isThresholdModalOpen, setIsThresholdModalOpen] = useState(false);
+  const [thresholdConfig, setThresholdConfig] = useState(() => getThresholdConfig());
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -111,16 +115,37 @@ export default function StockAgingPage() {
     loadData();
   }, [isDataLoaded]);
 
-  const filtered = slowList.filter(row => {
+  useEffect(() => {
+    const unsub = subscribeToRealtimeChanges('global_thresholds', () => {
+      setThresholdConfig(getThresholdConfig());
+    });
+    return () => unsub();
+  }, []);
+
+  const dynamicSlowList = slowList.map(item => {
+    let kategori: AgingKategori = 'Fresh';
+    if (item.current_stock === 0) {
+      kategori = 'Stock Out';
+    } else if (item.usia_pengendapan_hari > thresholdConfig.limitDeadStock) {
+      kategori = 'Dead Stock';
+    } else if (item.usia_pengendapan_hari > thresholdConfig.limitAtRisk) {
+      kategori = 'At Risk';
+    } else if (item.usia_pengendapan_hari > thresholdConfig.limitSlowMoving) {
+      kategori = 'Slow-Moving';
+    }
+    return { ...item, kategori };
+  });
+
+  const filtered = dynamicSlowList.filter(row => {
     const matchCat = filterKategori === 'Semua' || row.kategori === filterKategori;
     const matchSearch = row.nama_material.toLowerCase().includes(searchText.toLowerCase()) ||
                         row.nomor_material.toLowerCase().includes(searchText.toLowerCase());
     return matchCat && matchSearch;
   });
-  const totalNilai = slowList.reduce((sum, r) => sum + r.nilai_aset, 0);
-  const totalHoldingCost = slowList.reduce((sum, r) => {
+  const totalNilai = dynamicSlowList.reduce((sum, r) => sum + r.nilai_aset, 0);
+  const totalHoldingCost = dynamicSlowList.reduce((sum, r) => {
     if (r.kategori === 'Fresh' || r.kategori === 'Stock Out') return sum;
-    return sum + (r.nilai_aset * 0.10 * (r.usia_pengendapan_hari / 365));
+    return sum + (r.nilai_aset * (thresholdConfig.holdingCostPct / 100) * (r.usia_pengendapan_hari / 365));
   }, 0);
 
   const validMatIds = new Set(slowList.map(m => m.nomor_material));
@@ -220,8 +245,8 @@ export default function StockAgingPage() {
 
   const funnelData = agingParameters.map(p => ({
     ...p,
-    count: slowList.filter(d => d.kategori === p.category_name).length,
-    nilai: slowList.filter(d => d.kategori === p.category_name).reduce((s, d) => s + d.nilai_aset, 0),
+    count: dynamicSlowList.filter(d => d.kategori === p.category_name).length,
+    nilai: dynamicSlowList.filter(d => d.kategori === p.category_name).reduce((s, d) => s + d.nilai_aset, 0),
   }));
 
   if (loading) {
@@ -241,9 +266,6 @@ export default function StockAgingPage() {
 
   return (
     <PageWrapper fullWidth>
-      {/* Header */}
-      <div className="h-4" />
-
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {funnelData.map(cat => {
@@ -261,7 +283,7 @@ export default function StockAgingPage() {
           <p className="text-[10px] font-black tracking-widest uppercase mb-2" style={{ color: '#ef4444' }}>Est. Holding Cost</p>
           <p className="text-2xl font-black" style={{ color: '#ef4444' }}>{formatRupiah(totalHoldingCost)}</p>
           <p className="text-xs mt-1" style={{ color: 'var(--color-on-surface-variant)' }}>beban modal pengendapan</p>
-          <p className="text-[10px] font-bold mt-2 text-red-500">Rate 10% p.a.</p>
+          <p className="text-[10px] font-bold mt-2 text-red-500">Rate {thresholdConfig.holdingCostPct}% p.a.</p>
         </div>
       </div>
 
@@ -602,7 +624,19 @@ export default function StockAgingPage() {
             </button>
           );
         })}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setIsThresholdModalOpen(true)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1.5 transition-all hover:opacity-85 shadow-sm"
+            style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+            title="Pengaturan Ambang Batas Tampilan"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            Ambang Batas
+          </button>
           <ExportButton
             data={filtered.map(row => {
               const hc = (row.kategori === 'Fresh' || row.kategori === 'Stock Out') ? 0 : Math.round(row.nilai_aset * 0.10 * (row.usia_pengendapan_hari / 365));
@@ -862,6 +896,13 @@ export default function StockAgingPage() {
         </div>
         <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
       </div>
+
+      <ThresholdModal
+        isOpen={isThresholdModalOpen}
+        onClose={() => setIsThresholdModalOpen(false)}
+        onSave={setThresholdConfig}
+        allowedFields={['limitSlowMoving', 'limitAtRisk', 'limitDeadStock', 'holdingCostPct']}
+      />
     </PageWrapper>
   );
 }

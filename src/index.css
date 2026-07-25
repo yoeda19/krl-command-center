@@ -5,6 +5,34 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Smart TV & Command Center Display Anti-Blur & Ultra-Crisp Rendering */
+html {
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  font-variant-numeric: tabular-nums;
+  overflow-x: hidden;
+}
+
+/* Ensure crisp vector rendering for all SVGs and icons */
+svg, img {
+  shape-rendering: geometricPrecision;
+  text-rendering: geometricPrecision;
+}
+
 /* ================================================================
    CSS DESIGN TOKENS — KRL Parts Command Center
    Theme: Clean White Professional (Enterprise SaaS)
@@ -12,42 +40,42 @@
 
 /* ── Light Theme (Default) ── */
 :root, .light {
-  --color-background: #eceef4;
-  --color-background-metallic: #f4f6fa;
-  --color-surface: #f9fbfd;
-  --color-surface-dim: #e4e8f1;
+  --color-background: #f1f3f9;
+  --color-background-metallic: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-dim: #e2e8f0;
   --color-surface-bright: #ffffff;
-  --color-surface-container-lowest: #f3f5fa;
-  --color-surface-container-low: #edf0f6;
-  --color-surface-container: #e3e7f2;
-  --color-surface-container-high: #d8dee9;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f8fafc;
+  --color-surface-container: #f1f5f9;
+  --color-surface-container-high: #e2e8f0;
   --color-surface-container-highest: #cbd5e1;
-  --color-surface-raised: #f9fbfd;
-  --color-on-surface: #0f1623;
-  --color-on-surface-variant: #4b5675;
-  --color-outline: #8a93ab;
+  --color-surface-raised: #ffffff;
+  --color-on-surface: #0f172a;
+  --color-on-surface-variant: #334155;
+  --color-outline: #64748b;
   --color-outline-variant: #cbd5e1;
   --color-steel-border: #cbd5e1;
   --color-primary: #1d4ed8;
   --color-on-primary: #ffffff;
-  --color-primary-container: #d8dee9;
-  --color-on-primary-container: #0f172a;
+  --color-primary-container: #dbeafe;
+  --color-on-primary-container: #1e40af;
   --color-secondary: #2563eb;
   --color-on-secondary: #ffffff;
-  --color-secondary-container: #e2e8f0;
-  --color-on-secondary-container: #1e293b;
+  --color-secondary-container: #e0e7ff;
+  --color-on-secondary-container: #3730a3;
   --color-tertiary: #0891b2;
   --color-on-tertiary: #ffffff;
   --color-error: #dc2626;
   --color-on-error: #ffffff;
   --color-error-container: #fee2e2;
-  --color-on-error-container: #7f1d1d;
-  --color-inverse-surface: #1e2433;
-  --color-inverse-on-surface: #f0f2f7;
-  --color-on-background: #0f1623;
+  --color-on-error-container: #991b1b;
+  --color-inverse-surface: #0f172a;
+  --color-inverse-on-surface: #f8fafc;
+  --color-on-background: #0f172a;
   --color-led-red: #ef4444;
   --color-led-amber: #f59e0b;
-  --color-led-green: #16a34a;
+  --color-led-green: #10b981;
 }
 
 /* ── Dark Theme ── */
@@ -64,7 +92,7 @@
   --color-surface-container-highest: #21293a;
   --color-surface-raised: #161b22;
   --color-on-surface: #e6edf3;
-  --color-on-surface-variant: #8b949e;
+  --color-on-surface-variant: #9198a1;
   --color-outline: #484f58;
   --color-outline-variant: #2d333b;
   --color-steel-border: #21262d;
@@ -114,26 +142,27 @@ body {
   flex-shrink: 0;
 }
 .led-red {
-  background-color: var(--color-led-red);
-  box-shadow: 0 0 8px var(--color-led-red), 0 0 16px rgba(255,68,68,0.25);
+  background-color: #ef4444;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
 }
 .led-amber {
-  background-color: var(--color-led-amber);
-  box-shadow: 0 0 8px var(--color-led-amber), 0 0 16px rgba(255,191,0,0.25);
+  background-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.18);
 }
 .led-green {
-  background-color: var(--color-led-green);
-  box-shadow: 0 0 8px var(--color-led-green), 0 0 16px rgba(0,255,127,0.25);
+  background-color: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
 }
 
 .tactile-card {
   background-color: var(--color-surface-raised);
   border: 1px solid var(--color-steel-border);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+  border-radius: 0.75rem;
   transition: all 0.2s ease;
 }
 .tactile-card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.07);
 }
 
 .skeuomorphic-btn {
@@ -141,15 +170,15 @@ body {
   color: var(--color-background);
   transition: all 0.15s ease;
   font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  font-size: 0.8125rem;
+  border-radius: 0.5rem;
 }
 .skeuomorphic-btn:active {
   transform: translateY(0px);
   opacity: 0.95;
 }
 .skeuomorphic-btn:hover {
-  opacity: 0.9;
+  opacity: 0.92;
 }
 
 ::-webkit-scrollbar { width: 7px; height: 7px; }
@@ -178,9 +207,9 @@ body {
 }
 .data-table tbody tr:hover { background-color: var(--color-surface-container-high) !important; }
 
-.badge-kritis { background-color: rgba(220,38,38,0.12); border: 1px solid rgba(220,38,38,0.35); color: var(--color-led-red); }
-.badge-waspada { background-color: rgba(217,119,6,0.12); border: 1px solid rgba(217,119,6,0.35); color: var(--color-led-amber); }
-.badge-aman { background-color: rgba(22,163,74,0.12); border: 1px solid rgba(22,163,74,0.35); color: var(--color-led-green); }
+.badge-kritis { background-color: rgba(220,38,38,0.08); border: 1px solid rgba(220,38,38,0.25); color: #dc2626; font-weight: 600; }
+.badge-waspada { background-color: rgba(217,119,6,0.08); border: 1px solid rgba(217,119,6,0.25); color: #d97706; font-weight: 600; }
+.badge-aman { background-color: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); color: #059669; font-weight: 600; }
 
 .nav-active {
   border-left: 3px solid var(--color-on-surface);
