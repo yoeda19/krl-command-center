@@ -1111,72 +1111,47 @@ export default function CriticalStockPage() {
               <div className="flex flex-wrap justify-between items-center gap-2 pr-10">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-bold" style={{ color: 'var(--color-on-surface)' }}>Penyerapan Stok Kritis</h3>
-                  <span className="hidden md:inline text-xs opacity-40">|</span>
-                  <p className="text-xs truncate max-w-xs xl:max-w-md" style={{ color: 'var(--color-on-surface-variant)' }}>
-                    {referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})
-                  </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
-                  {/* Toggle Buttons: Kalkulasi Standar vs Riwayat */}
-                  <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
-                    <button
-                      onClick={() => setCalcMode('STANDAR')}
-                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
-                      style={calcMode === 'STANDAR' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
-                    >
-                      STANDAR
-                    </button>
-                    <button
-                      onClick={() => setCalcMode('RIWAYAT')}
-                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
-                      style={calcMode === 'RIWAYAT' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
-                    >
-                      RIWAYAT
-                    </button>
-                  </div>
+                <div className="flex flex-nowrap items-center gap-1.5 w-full pr-8 overflow-hidden">
+                  {/* 1. Dropdown Kalkulasi: Standar vs Riwayat */}
+                  <select
+                    value={calcMode}
+                    onChange={e => setCalcMode(e.target.value as any)}
+                    className="rounded px-2 py-1 border text-[11px] font-bold shrink-0"
+                    style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                  >
+                    <option value="STANDAR">STANDAR</option>
+                    <option value="RIWAYAT">RIWAYAT</option>
+                  </select>
 
-                  {/* Toggle Buttons: Konsumsi vs Saldo Stok */}
-                  <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
-                    <button
-                      onClick={() => setChartViewMode('KONSUMSI')}
-                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
-                      style={chartViewMode === 'KONSUMSI' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
-                    >
-                      KONSUMSI
-                    </button>
-                    <button
-                      onClick={() => setChartViewMode('SALDO')}
-                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
-                      style={chartViewMode === 'SALDO' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
-                    >
-                      SALDO STOK
-                    </button>
-                  </div>
+                  {/* 2. Dropdown Mode Tampilan: Konsumsi vs Saldo Stok */}
+                  <select
+                    value={chartViewMode}
+                    onChange={e => setChartViewMode(e.target.value as any)}
+                    className="rounded px-2 py-1 border text-[11px] font-bold shrink-0"
+                    style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                  >
+                    <option value="KONSUMSI">KONSUMSI</option>
+                    <option value="SALDO">SALDO STOK</option>
+                  </select>
 
-                  {/* Toggle Buttons: Tanpa PO vs Dengan PO */}
-                  <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
-                    <button
-                      onClick={() => setShowChartWithPO(false)}
-                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
-                      style={!showChartWithPO ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
-                    >
-                      TANPA PO
-                    </button>
-                    <button
-                      onClick={() => setShowChartWithPO(true)}
-                      className="px-2 py-0.5 rounded text-[10px] font-extrabold transition-all"
-                      style={showChartWithPO ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
-                    >
-                      DENGAN PO
-                    </button>
-                  </div>
+                  {/* 3. Dropdown Filter PO: Tanpa PO vs Dengan PO */}
+                  <select
+                    value={showChartWithPO ? 'DENGAN_PO' : 'TANPA_PO'}
+                    onChange={e => setShowChartWithPO(e.target.value === 'DENGAN_PO')}
+                    className="rounded px-2 py-1 border text-[11px] font-bold shrink-0"
+                    style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                  >
+                    <option value="TANPA_PO">TANPA PO</option>
+                    <option value="DENGAN_PO">DENGAN PO</option>
+                  </select>
 
-                  {/* Material Filter */}
+                  {/* 4. Dropdown Material (Fleksibel & Truncate Teks Panjang) */}
                   <select
                     value={selectedMaterial || '6005530'}
                     onChange={e => setSelectedMaterial(e.target.value)}
-                    className="rounded px-2.5 py-1 border text-[11px] font-bold min-w-[260px] max-w-[380px]"
+                    className="rounded px-2 py-1 border text-[11px] font-bold flex-1 min-w-0 truncate"
                     style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                   >
                     {aggregatedData.map(m => (
@@ -1185,6 +1160,62 @@ export default function CriticalStockPage() {
                       </option>
                     ))}
                   </select>
+
+                  {/* 5. Date Picker & Analisis (Ditempatkan di Baris 1 HANYA Saat Fullscreen) */}
+                  {isChartFullScreen && (
+                    <div className="flex items-center gap-1 text-[11px] shrink-0 ml-1">
+                      <span className="font-semibold text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
+                      <select
+                        value={startMonth}
+                        onChange={e => setStartMonth(Number(e.target.value))}
+                        className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
+                        style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                      >
+                        {MONTHS_OPTIONS.map(m => (
+                          <option key={m.value} value={m.value}>{m.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={startYear}
+                        onChange={e => setStartYear(Number(e.target.value))}
+                        className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
+                        style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                      >
+                        {[2024, 2025, 2026, 2027].map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+
+                      <span className="font-semibold text-[10px] ml-1" style={{ color: 'var(--color-on-surface-variant)' }}>Selesai:</span>
+                      <select
+                        value={endMonth}
+                        onChange={e => setEndMonth(Number(e.target.value))}
+                        className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
+                        style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                      >
+                        {MONTHS_OPTIONS.map(m => (
+                          <option key={m.value} value={m.value}>{m.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={endYear}
+                        onChange={e => setEndYear(Number(e.target.value))}
+                        className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
+                        style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                      >
+                        {[2024, 2025, 2026, 2027].map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+
+                      {/* Info Gap & Fast Moving */}
+                      {gapMonths !== null && (
+                        <span className="ml-1 font-bold text-[10px] px-1.5 py-0.5 rounded border" style={{ backgroundColor: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: '#ef4444' }}>
+                          Gap: {gapMonths} Bln
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1206,84 +1237,88 @@ export default function CriticalStockPage() {
                 )}
               </button>
 
-              {/* Row 2: Compact Date Selector & Status Badge */}
-              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] pt-1 border-t" style={{ borderColor: 'var(--color-steel-border)' }}>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <div className="flex items-center gap-1">
-                    <span className="font-bold text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
-                    <select
-                      value={startMonth}
-                      onChange={e => setStartMonth(Number(e.target.value))}
-                      className="rounded px-1.5 py-0.5 border text-[11px]"
-                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                    >
-                      {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
-                    </select>
-                    <select
-                      value={startYear}
-                      onChange={e => setStartYear(Number(e.target.value))}
-                      className="rounded px-1.5 py-0.5 border text-[11px]"
-                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                    >
-                      {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                  </div>
+              {/* Row 2: Date Picker Periode (Di Baris Ke-2 HANYA Saat Mode Normal) */}
+              {!isChartFullScreen && (
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] pt-1.5 mt-1 border-t" style={{ borderColor: 'var(--color-steel-border)' }}>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex items-center gap-1">
+                      <span className="font-semibold text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
+                      <select
+                        value={startMonth}
+                        onChange={e => setStartMonth(Number(e.target.value))}
+                        className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
+                        style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                      >
+                        {MONTHS_OPTIONS.map(m => (
+                          <option key={m.value} value={m.value}>{m.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={startYear}
+                        onChange={e => setStartYear(Number(e.target.value))}
+                        className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
+                        style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                      >
+                        {[2024, 2025, 2026, 2027].map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <div className="flex items-center gap-1">
-                    <span className="font-bold text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Selesai:</span>
-                    <select
-                      value={endMonth}
-                      onChange={e => setEndMonth(Number(e.target.value))}
-                      className="rounded px-1.5 py-0.5 border text-[11px]"
-                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                    >
-                      {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
-                    </select>
-                    <select
-                      value={endYear}
-                      onChange={e => setEndYear(Number(e.target.value))}
-                      className="rounded px-1.5 py-0.5 border text-[11px]"
-                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                    >
-                      {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-                    </select>
-                  </div>
+                    <div className="flex items-center gap-1">
+                      <span className="font-semibold text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>Selesai:</span>
+                      <select
+                        value={endMonth}
+                        onChange={e => setEndMonth(Number(e.target.value))}
+                        className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
+                        style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                      >
+                        {MONTHS_OPTIONS.map(m => (
+                          <option key={m.value} value={m.value}>{m.name}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={endYear}
+                        onChange={e => setEndYear(Number(e.target.value))}
+                        className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
+                        style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                      >
+                        {[2024, 2025, 2026, 2027].map(y => (
+                          <option key={y} value={y}>{y}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                  <div className="flex items-center gap-1">
-                    <span className="font-bold text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Analisis:</span>
-                    <select
-                      value={runRateLookback}
-                      onChange={e => setRunRateLookback(Number(e.target.value))}
-                      className="rounded px-1.5 py-0.5 border text-[11px]"
-                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                    >
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(n => (
-                        <option key={n} value={n}>{n} Bln Terakhir</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Gap & Status Alert */}
-                {!isRangeInvalid && (
-                  <div className="flex items-center gap-2.5 text-[11px] font-bold">
-                    <span style={{ color: 'var(--color-on-surface-variant)' }}>
-                      Gap: <b style={{ color: gapMonths < 0 ? 'var(--color-led-red)' : 'var(--color-led-green)' }}>{Math.abs(gapMonths)} Bulan</b>
-                    </span>
-                    <div
-                      className="flex items-center gap-1 px-2 py-0.5 rounded border text-[10px] font-black uppercase tracking-wider"
-                      style={{
-                        backgroundColor: dynamicStatus.bg,
-                        borderColor: dynamicStatus.color,
-                        color: dynamicStatus.color
-                      }}
-                    >
-                      <span className="led-indicator" style={{ backgroundColor: dynamicStatus.color, width: 6, height: 6 }} />
-                      {dynamicStatus.label}
+                    <div className="flex items-center gap-1 border-l pl-2" style={{ borderColor: 'var(--color-steel-border)' }}>
+                      <span className="font-semibold text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>Analisis:</span>
+                      <select
+                        value={runRateLookback}
+                        onChange={e => setRunRateLookback(Number(e.target.value))}
+                        className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
+                        style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                      >
+                        <option value={3}>3 Bln Terakhir</option>
+                        <option value={6}>6 Bln Terakhir</option>
+                        <option value={12}>12 Bln Terakhir</option>
+                      </select>
                     </div>
                   </div>
-                )}
-              </div>
+
+                  <div className="flex items-center gap-2">
+                    {gapMonths !== null && (
+                      <span className="font-semibold text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>
+                        Gap: <b style={{ color: gapMonths < 0 ? '#ef4444' : 'var(--color-on-surface)' }}>{gapMonths} Bulan</b>
+                      </span>
+                    )}
+
+                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wider border uppercase flex items-center gap-1"
+                      style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)', color: '#ef4444' }}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+                      FAST MOVING
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Insight Cards — hanya muncul saat fullscreen + mode Riwayat */}

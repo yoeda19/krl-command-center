@@ -869,16 +869,17 @@ export default function AnomalyStockPage() {
                 <div>
                   <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Penyerapan Stok Anomali</h3>
                   <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
-                    Komparasi Rencana vs Aktual — <b>{referenceItem?.nama_material || 'Brake Pad Assy'} ({referenceItem?.nomor_material || '6005530'})</b>
+                    Komparasi Rencana vs Aktual
                   </p>
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                {/* 1. Button Tampilkan/Sembunyikan Deviasi */}
+              <div className="flex flex-nowrap items-center gap-2 w-full pr-8 overflow-hidden">
+                {/* 1. Button Ikon Tampilkan/Sembunyikan Deviasi */}
                 <button
                   onClick={() => setShowDeviation(prev => !prev)}
-                  className={`px-2.5 sm:px-3 py-1.5 rounded text-[11px] sm:text-xs font-extrabold transition-all ${
+                  title={showDeviation ? 'Sembunyikan Deviasi' : 'Tampilkan Deviasi'}
+                  className={`p-2 rounded text-xs font-extrabold transition-all flex items-center justify-center shrink-0 ${
                     showDeviation ? 'skeuomorphic-btn' : 'border'
                   }`}
                   style={
@@ -887,14 +888,16 @@ export default function AnomalyStockPage() {
                       : {}
                   }
                 >
-                  {showDeviation ? 'SEMBUNYIKAN DEVIASI' : 'TAMPILKAN DEVIASI'}
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                  </svg>
                 </button>
 
                 {/* 2. Filter Gudang */}
                 <select
                   value={selectedWarehouse}
                   onChange={e => setSelectedWarehouse(e.target.value)}
-                  className="rounded px-3 py-1.5 border text-xs font-bold w-full sm:w-auto sm:max-w-xs"
+                  className="rounded px-2.5 py-1.5 border text-xs font-bold shrink-0 max-w-[140px]"
                   style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                 >
                   <option value="SEMUA">Semua Gudang</option>
@@ -909,31 +912,31 @@ export default function AnomalyStockPage() {
                 </select>
 
                 {/* 3. Selektor Line/Bar */}
-                <div className="flex rounded p-0.5 border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
+                <div className="flex rounded p-0.5 border shrink-0" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
                   <button
                     onClick={() => setChartMode('line')}
-                    className="px-2.5 sm:px-3 py-1 rounded text-[10px] sm:text-[11px] font-extrabold transition-all"
+                    className="px-2 py-1 rounded text-[10px] sm:text-[11px] font-extrabold transition-all"
                     style={chartMode === 'line' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
                   >
                     LINE
                   </button>
                   <button
                     onClick={() => setChartMode('bar')}
-                    className="px-2.5 sm:px-3 py-1 rounded text-[10px] sm:text-[11px] font-extrabold transition-all"
+                    className="px-2 py-1 rounded text-[10px] sm:text-[11px] font-extrabold transition-all"
                     style={chartMode === 'bar' ? { backgroundColor: 'var(--color-primary)', color: 'white' } : { color: 'var(--color-on-surface-variant)' }}
                   >
                     BAR
                   </button>
                 </div>
 
-                {/* 4. Filter Material */}
+                {/* 4. Filter Material (Fleksibel & Truncate Teks Panjang) */}
                 <select
                   value={selectedMaterial || ''}
                   onChange={e => {
                     setSelectedMaterial(e.target.value);
                     setSelectedWarehouse('SEMUA');
                   }}
-                  className="rounded px-2.5 py-1 border text-xs font-bold w-full sm:w-auto min-w-[240px] max-w-[360px]"
+                  className="rounded px-2.5 py-1.5 border text-xs font-bold flex-1 min-w-0 truncate"
                   style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                 >
                   {uniqueMaterials.map(m => (
@@ -942,8 +945,117 @@ export default function AnomalyStockPage() {
                     </option>
                   ))}
                 </select>
+
+                {/* 5. Selector Periode Awal & Akhir (Menyatu di Baris 1 HANYA Saat Mode Fullscreen) */}
+                {isChartFullScreen && (
+                  <div className="flex items-center gap-1.5 text-xs ml-1">
+                    <span className="font-bold text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
+                    <select
+                      value={startMonth}
+                      onChange={e => setStartMonth(Number(e.target.value))}
+                      className="rounded px-1.5 py-1 border font-medium text-xs"
+                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                    >
+                      {MONTHS_OPTIONS.map(m => (
+                        <option key={m.value} value={m.value}>{m.name}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={startYear}
+                      onChange={e => setStartYear(Number(e.target.value))}
+                      className="rounded px-1.5 py-1 border font-medium text-xs"
+                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                    >
+                      {YEARS_OPTIONS.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+
+                    <span className="font-bold text-[11px] ml-1" style={{ color: 'var(--color-on-surface-variant)' }}>Selesai:</span>
+                    <select
+                      value={endMonth}
+                      onChange={e => setEndMonth(Number(e.target.value))}
+                      className="rounded px-1.5 py-1 border font-medium text-xs"
+                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                    >
+                      {MONTHS_OPTIONS.map(m => (
+                        <option key={m.value} value={m.value}>{m.name}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={endYear}
+                      onChange={e => setEndYear(Number(e.target.value))}
+                      className="rounded px-1.5 py-1 border font-medium text-xs"
+                      style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                    >
+                      {YEARS_OPTIONS.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Selector Periode Awal & Akhir (Di Baris Ke-2 HANYA Saat Mode Normal) */}
+            {!isChartFullScreen && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs border-t pt-2 mt-1" style={{ borderColor: 'var(--color-steel-border)' }}>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
+                  <select
+                    value={startMonth}
+                    onChange={e => setStartMonth(Number(e.target.value))}
+                    className="rounded px-2 py-1 border font-medium text-xs"
+                    style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                  >
+                    {MONTHS_OPTIONS.map(m => (
+                      <option key={m.value} value={m.value}>{m.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={startYear}
+                    onChange={e => setStartYear(Number(e.target.value))}
+                    className="rounded px-2 py-1 border font-medium text-xs"
+                    style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                  >
+                    {YEARS_OPTIONS.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>Selesai:</span>
+                  <select
+                    value={endMonth}
+                    onChange={e => setEndMonth(Number(e.target.value))}
+                    className="rounded px-2 py-1 border font-medium text-xs"
+                    style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                  >
+                    {MONTHS_OPTIONS.map(m => (
+                      <option key={m.value} value={m.value}>{m.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={endYear}
+                    onChange={e => setEndYear(Number(e.target.value))}
+                    className="rounded px-2 py-1 border font-medium text-xs"
+                    style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                  >
+                    {YEARS_OPTIONS.map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {isRangeInvalid && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded ml-auto flex items-center gap-1" style={{ backgroundColor: 'rgba(220,38,38,0.12)', color: 'var(--color-led-red)' }}>
+                    <span className="led-indicator led-red" style={{ width: 6, height: 6 }} />
+                    Rentang tidak valid.
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Tombol Full Screen yang selalu terkunci di pojok kanan atas */}
             <button
@@ -965,55 +1077,12 @@ export default function AnomalyStockPage() {
               )}
             </button>
 
-            {/* Selector Periode Awal & Akhir */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs border-t pt-2.5" style={{ borderColor: 'var(--color-steel-border)' }}>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>Mulai:</span>
-                <select
-                  value={startMonth}
-                  onChange={e => setStartMonth(Number(e.target.value))}
-                  className="rounded px-2 py-1 border font-medium text-xs"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                >
-                  {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
-                </select>
-                <select
-                  value={startYear}
-                  onChange={e => setStartYear(Number(e.target.value))}
-                  className="rounded px-2 py-1 border font-medium text-xs"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                >
-                  {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
-
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-xs" style={{ color: 'var(--color-on-surface-variant)' }}>Selesai:</span>
-                <select
-                  value={endMonth}
-                  onChange={e => setEndMonth(Number(e.target.value))}
-                  className="rounded px-2 py-1 border font-medium text-xs"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                >
-                  {MONTHS_OPTIONS.map(m => <option key={m.value} value={m.value}>{m.name}</option>)}
-                </select>
-                <select
-                  value={endYear}
-                  onChange={e => setEndYear(Number(e.target.value))}
-                  className="rounded px-2 py-1 border font-medium text-xs"
-                  style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                >
-                  {YEARS_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
-                </select>
-              </div>
-
-              {isRangeInvalid && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded ml-auto flex items-center gap-1" style={{ backgroundColor: 'rgba(220,38,38,0.12)', color: 'var(--color-led-red)' }}>
-                  <span className="led-indicator led-red" style={{ width: 6, height: 6 }} />
-                  Rentang tidak valid.
-                </span>
-              )}
-            </div>
+            {isRangeInvalid && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded ml-auto flex items-center gap-1" style={{ backgroundColor: 'rgba(220,38,38,0.12)', color: 'var(--color-led-red)' }}>
+                <span className="led-indicator led-red" style={{ width: 6, height: 6 }} />
+                Rentang tidak valid.
+              </span>
+            )}
           </div>
 
           <div className="chart-wrapper-el" style={{ height: isChartFullScreen ? 'calc(100vh - 75px)' : 480 }}>
