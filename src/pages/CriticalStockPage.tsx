@@ -28,7 +28,7 @@ function buildBulanLabels(): string[] {
 }
 const bulanLabels = buildBulanLabels();
 
-const depoOptions = ['Semua Depo', 'Gudang Depo Depok', 'Gudang Depo Bukit Duri', 'Gudang Overhaul Manggarai', 'Gudang Pusat', 'Gudang Depo Bogor'];
+const depoOptions = ['Semua Depo', 'Gudang Depo Depok', 'Gudang Depo Bukit Duri', 'Gudang Depo Manggarai', 'Gudang Overhaul Manggarai', 'Gudang Depo Bogor'];
 
 const exportCols = [
   { key: 'nomor_material', header: 'Kode Material' },
@@ -506,7 +506,7 @@ export default function CriticalStockPage() {
   const aggregatedData = (() => {
     const rawFiltered = filterDepo !== 'Semua Depo'
       ? criticalData.filter(row => row.gudang_label === filterDepo)
-      : criticalData;
+      : criticalData.filter(row => row.gudang !== 'C013' && row.gudang_label !== 'Gudang Pusat');
 
     const groups: Record<string, CriticalStockItem> = {};
     rawFiltered.forEach(row => {
@@ -634,9 +634,20 @@ export default function CriticalStockPage() {
     });
   })();
 
+  const getMaterialItemStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'BELUM PO' | 'AMAN' => {
+    const ss = d.safety_stock ?? 0;
+    const rop = d.rop ?? 0;
+    const sPo = (d as any).status_po;
+    
+    if (sPo === 'BELUM PO') return 'BELUM PO';
+    if (d.current_stock <= ss || sPo === 'KRITIS') return 'KRITIS';
+    if (d.current_stock <= rop || sPo === 'WASPADA') return 'WASPADA';
+    return 'AMAN';
+  };
+
   const filteredData: CriticalStockItem[] = aggregatedData.filter(row => {
-    const sPo = (row as any).status_po;
-    const matchStatus = filterStatus.length === 0 || filterStatus.includes(sPo);
+    const itemStatus = getMaterialItemStatus(row);
+    const matchStatus = filterStatus.length === 0 || filterStatus.includes(itemStatus);
     const matchSearch = row.nama_material.toLowerCase().includes(searchText.toLowerCase()) ||
                         row.nomor_material.toLowerCase().includes(searchText.toLowerCase());
     return matchStatus && matchSearch;
@@ -1001,34 +1012,10 @@ export default function CriticalStockPage() {
   })();
 
   // Dynamic status-based KPI calculations based on Safety Stock, ROP, and PO Status
-  const countKritis = aggregatedData.filter(d => {
-    const ss = d.safety_stock ?? 0;
-    const sPo = (d as any).status_po;
-    return d.current_stock <= ss || sPo === 'KRITIS';
-  }).length;
-
-  const countWaspada = aggregatedData.filter(d => {
-    const ss = d.safety_stock ?? 0;
-    const rop = d.rop ?? 0;
-    const sPo = (d as any).status_po;
-    return d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
-  }).length;
-
-  const countReorder = aggregatedData.filter(d => {
-    const rop = d.rop ?? 0;
-    const sPo = (d as any).status_po;
-    return d.current_stock <= rop && sPo === 'BELUM PO';
-  }).length;
-
-  const countAman = aggregatedData.filter(d => {
-    const ss = d.safety_stock ?? 0;
-    const rop = d.rop ?? 0;
-    const sPo = (d as any).status_po;
-    const isKritis = d.current_stock <= ss || sPo === 'KRITIS';
-    const isWaspada = d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
-    const isReorder = d.current_stock <= rop && sPo === 'BELUM PO';
-    return !isKritis && !isWaspada && !isReorder;
-  }).length;
+  const countKritis  = aggregatedData.filter(d => getMaterialItemStatus(d) === 'KRITIS').length;
+  const countWaspada = aggregatedData.filter(d => getMaterialItemStatus(d) === 'WASPADA').length;
+  const countReorder = aggregatedData.filter(d => getMaterialItemStatus(d) === 'BELUM PO').length;
+  const countAman    = aggregatedData.filter(d => getMaterialItemStatus(d) === 'AMAN').length;
 
   // Heatmap dinamis: hitung avg pct_ketersediaan per depo dari criticalData
   const allDepos = [...new Set(criticalData.map(d => d.gudang_label).filter(Boolean))];
@@ -1101,7 +1088,7 @@ export default function CriticalStockPage() {
         }
       `}</style>
       {/* Main Dashboard Layout: 2-column grid for large screens */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-1">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-stretch mt-1">
         
         {/* LEFT COLUMN: Absorption Chart & Critical Stock Table (Spans 2 columns) */}
         <div className="xl:col-span-2 space-y-6">
@@ -1198,20 +1185,6 @@ export default function CriticalStockPage() {
                       </option>
                     ))}
                   </select>
-
-                  {/* Tombol Ambang Batas */}
-                  <button
-                    onClick={() => setIsThresholdModalOpen(true)}
-                    className="rounded px-2.5 py-1 border text-[11px] font-bold flex items-center gap-1.5 transition-all shadow-sm hover:opacity-80"
-                    style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-                    title="Pengaturan Ambang Batas Tampilan"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="3"/>
-                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                    </svg>
-                    Ambang Batas
-                  </button>
                 </div>
               </div>
 
@@ -2096,24 +2069,64 @@ export default function CriticalStockPage() {
         </div>
 
         {/* RIGHT COLUMN: KPIs & Bar Chart (Spans 1 column) */}
-        <div className="space-y-6">
-          {/* KPI Cards (2x2 Grid) */}
-          <div className="grid grid-cols-2 gap-4">
-            <KpiCard label="Status Kritis" value={countKritis} borderColor="#ef4444" ledStatus={countKritis > 0 ? "red" : "green"} sparkData={[3, 2, 2, 3, 3, 3]} />
-            <KpiCard label="Status Waspada" value={countWaspada} borderColor="var(--color-led-amber)" ledStatus={countWaspada > 0 ? "amber" : "green"} sparkData={[5, 4, 3, 3, 4, 3]} />
-            <KpiCard label="Status Aman" value={countAman} borderColor="var(--color-led-green)" ledStatus="green" sparkData={[10, 11, 12, 13, 14, 15]} />
-            <KpiCard label="Perlu Reorder" value={countReorder} borderColor="#3b82f6" ledStatus={countReorder > 0 ? "blue" : "green"} sparkData={[1, 2, 1, 3, 2, 2]} />
+        <div className="flex flex-col justify-between h-full space-y-3">
+          {/* KPI Cards (2x2 Grid) — Interactive Clickable Filters */}
+          <div className="grid grid-cols-2 gap-3">
+            <div
+              onClick={() => setFilterStatus(prev => prev.length === 1 && prev[0] === 'KRITIS' ? [] : ['KRITIS'])}
+              className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              title="Klik untuk memfilter status Kritis"
+            >
+              <KpiCard label="Status Kritis" value={countKritis} borderColor="#ef4444" ledStatus={countKritis > 0 ? "red" : "green"} sparkData={[3, 2, 2, 3, 3, 3]} />
+            </div>
+
+            <div
+              onClick={() => setFilterStatus(prev => prev.length === 1 && prev[0] === 'WASPADA' ? [] : ['WASPADA'])}
+              className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              title="Klik untuk memfilter status Waspada"
+            >
+              <KpiCard label="Status Waspada" value={countWaspada} borderColor="var(--color-led-amber)" ledStatus={countWaspada > 0 ? "amber" : "green"} sparkData={[5, 4, 3, 3, 4, 3]} />
+            </div>
+
+            <div
+              onClick={() => setFilterStatus(prev => prev.length === 1 && prev[0] === 'AMAN' ? [] : ['AMAN'])}
+              className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              title="Klik untuk memfilter status Aman"
+            >
+              <KpiCard label="Status Aman" value={countAman} borderColor="var(--color-led-green)" ledStatus="green" sparkData={[10, 11, 12, 13, 14, 15]} />
+            </div>
+
+            <div
+              onClick={() => setFilterStatus(prev => prev.length === 1 && prev[0] === 'BELUM PO' ? [] : ['BELUM PO'])}
+              className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
+              title="Klik untuk memfilter status Perlu Reorder"
+            >
+              <KpiCard label="Perlu Reorder" value={countReorder} borderColor="#3b82f6" ledStatus={countReorder > 0 ? "blue" : "green"} sparkData={[1, 2, 1, 3, 2, 2]} />
+            </div>
           </div>
 
+          {/* Tombol Pengaturan Ambang Batas Ramping */}
+          <button
+            onClick={() => setIsThresholdModalOpen(true)}
+            className="w-full tactile-card rounded-lg px-3 py-2 flex items-center justify-center gap-2 text-xs font-bold transition-all hover:opacity-90 active:scale-[0.99]"
+            style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-primary)' }}>
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span>Pengaturan Ambang Batas</span>
+          </button>
+
           {/* ECharts — Pie Chart Status Distribusi */}
-          <div className="tactile-card rounded-lg overflow-hidden">
-            <div className="p-5 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+          <div className="tactile-card rounded-lg overflow-hidden flex-1 flex flex-col justify-between">
+            <div className="px-4 py-3 border-b flex justify-between items-center" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
               <div>
-                <h3 className="text-base font-bold" style={{ color: 'var(--color-on-surface)' }}>Status Distribusi</h3>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Persentase status material aman, waspada, dan kritis</p>
+                <h3 className="text-sm font-bold" style={{ color: 'var(--color-on-surface)' }}>Status Distribusi</h3>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Persentase status material aman, waspada, dan kritis</p>
               </div>
             </div>
-            <div className="p-4" style={{ backgroundColor: 'var(--color-background-metallic)' }}>
+            <div className="p-3 flex-1 flex flex-col justify-center items-center w-full min-h-[270px]" style={{ backgroundColor: 'var(--color-background-metallic)' }}>
               <ReactECharts
                 option={{
                   backgroundColor: 'transparent',
@@ -2130,55 +2143,56 @@ export default function CriticalStockPage() {
                   },
                   legend: {
                     orient: 'horizontal',
-                    bottom: 0,
+                    bottom: 6,
                     left: 'center',
-                    itemGap: 10,
+                    itemGap: 16,
                     itemWidth: 12,
-                    itemHeight: 8,
-                    textStyle: { color: ct.legendText, fontSize: 9.5, fontWeight: '600' },
+                    itemHeight: 12,
+                    textStyle: { color: ct.legendText, fontSize: 10.5, fontWeight: '700' },
+                    formatter: (name: string) => {
+                      const itemVal = filteredData.filter(d => {
+                        const ss = d.safety_stock ?? 0;
+                        const rop = d.rop ?? 0;
+                        const sPo = (d as any).status_po;
+                        if (name === 'Kritis') return d.current_stock <= ss || sPo === 'KRITIS';
+                        if (name === 'Waspada') return d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
+                        if (name === 'Reorder') return d.current_stock <= rop && sPo === 'BELUM PO';
+                        const isKritis = d.current_stock <= ss || sPo === 'KRITIS';
+                        const isWaspada = d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
+                        const isReorder = d.current_stock <= rop && sPo === 'BELUM PO';
+                        return !isKritis && !isWaspada && !isReorder;
+                      }).length;
+                      return `${name}: ${itemVal}`;
+                    }
                   },
                   series: [
                     {
                       name: 'Status Distribusi',
                       type: 'pie',
-                      radius: ['38%', '60%'],
-                      center: ['50%', '38%'],
+                      radius: ['48%', '75%'],
+                      center: ['50%', '42%'],
                       avoidLabelOverlap: true,
-                      minAngle: 10,
+                      minAngle: 8,
                       itemStyle: {
                         borderRadius: 6,
-                        borderColor: 'transparent',
-                        borderWidth: 0,
+                        borderColor: isDark ? '#0f172a' : '#ffffff',
+                        borderWidth: 2,
                       },
                       label: {
-                        show: true,
-                        position: 'outside',
-                        formatter: '{b}\n{d}%',
-                        color: ct.axisLabel,
-                        fontSize: 9.5,
-                        fontWeight: '700',
-                        lineHeight: 12,
-                        overflow: 'none',
+                        show: false
                       },
                       labelLine: {
-                        show: true,
-                        length: 6,
-                        length2: 6,
+                        show: false
                       },
                       emphasis: {
-                        label: {
-                          show: true,
-                          fontSize: 11,
-                          fontWeight: '800',
-                        },
+                        scale: true,
+                        scaleSize: 6,
+                        label: { show: false },
+                        labelLine: { show: false }
                       },
                       data: [
                         {
-                          value: filteredData.filter(d => {
-                            const ss = d.safety_stock ?? 0;
-                            const sPo = (d as any).status_po;
-                            return d.current_stock <= ss || sPo === 'KRITIS';
-                          }).length,
+                          value: countKritis,
                           name: 'Kritis',
                           itemStyle: {
                             color: {
@@ -2195,12 +2209,7 @@ export default function CriticalStockPage() {
                           },
                         },
                         {
-                          value: filteredData.filter(d => {
-                            const ss = d.safety_stock ?? 0;
-                            const rop = d.rop ?? 0;
-                            const sPo = (d as any).status_po;
-                            return d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
-                          }).length,
+                          value: countWaspada,
                           name: 'Waspada',
                           itemStyle: {
                             color: {
@@ -2217,11 +2226,7 @@ export default function CriticalStockPage() {
                           },
                         },
                         {
-                          value: filteredData.filter(d => {
-                            const rop = d.rop ?? 0;
-                            const sPo = (d as any).status_po;
-                            return d.current_stock <= rop && sPo === 'BELUM PO';
-                          }).length,
+                          value: countReorder,
                           name: 'Reorder',
                           itemStyle: {
                             color: {
@@ -2238,15 +2243,7 @@ export default function CriticalStockPage() {
                           },
                         },
                         {
-                          value: filteredData.filter(d => {
-                            const ss = d.safety_stock ?? 0;
-                            const rop = d.rop ?? 0;
-                            const sPo = (d as any).status_po;
-                            const isKritis = d.current_stock <= ss || sPo === 'KRITIS';
-                            const isWaspada = d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
-                            const isReorder = d.current_stock <= rop && sPo === 'BELUM PO';
-                            return !isKritis && !isWaspada && !isReorder;
-                          }).length,
+                          value: countAman,
                           name: 'Aman',
                           itemStyle: {
                             color: {
@@ -2266,7 +2263,8 @@ export default function CriticalStockPage() {
                     },
                   ],
                 }}
-                style={{ height: 260 }}
+                className="w-full h-full min-h-[250px]"
+                style={{ width: '100%', height: '100%' }}
                 opts={{ renderer: 'svg' }}
               />
             </div>
