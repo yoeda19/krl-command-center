@@ -267,22 +267,26 @@ export default function StockAgingPage() {
   return (
     <PageWrapper fullWidth>
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         {funnelData.map(cat => {
           const c = catCfg[cat.category_name];
           return (
-            <div key={cat.category_name} className="tactile-card rounded-lg p-5" style={{ borderLeft: `4px solid ${c.text}` }}>
-              <p className="text-[10px] font-black tracking-widest uppercase mb-2" style={{ color: c.text }}>{cat.category_name}</p>
-              <p className="text-4xl font-black" style={{ color: 'var(--color-on-surface)' }}>{cat.count}</p>
-              <p className="text-xs mt-1" style={{ color: 'var(--color-on-surface-variant)' }}>material</p>
-              <p className="text-xs font-bold mt-2" style={{ color: c.text }}>{formatRupiah(cat.nilai)}</p>
+            <div key={cat.category_name} className="tactile-card rounded-lg p-3.5 min-w-0 flex flex-col justify-between" style={{ borderLeft: `4px solid ${c.text}` }}>
+              <div>
+                <p className="text-[10px] font-black tracking-wider uppercase mb-1 truncate" style={{ color: c.text }}>{cat.category_name}</p>
+                <p className="text-2xl xl:text-3xl font-black" style={{ color: 'var(--color-on-surface)' }}>{cat.count}</p>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>material</p>
+              </div>
+              <p className="text-[11px] font-extrabold mt-2 truncate" title={formatRupiah(cat.nilai)} style={{ color: c.text }}>{formatRupiah(cat.nilai)}</p>
             </div>
           );
         })}
-        <div className="tactile-card rounded-lg p-5" style={{ borderLeft: '4px solid #ef4444' }}>
-          <p className="text-[10px] font-black tracking-widest uppercase mb-2" style={{ color: '#ef4444' }}>Est. Holding Cost</p>
-          <p className="text-2xl font-black" style={{ color: '#ef4444' }}>{formatRupiah(totalHoldingCost)}</p>
-          <p className="text-xs mt-1" style={{ color: 'var(--color-on-surface-variant)' }}>beban modal pengendapan</p>
+        <div className="tactile-card rounded-lg p-3.5 min-w-0 flex flex-col justify-between" style={{ borderLeft: '4px solid #ef4444' }}>
+          <div>
+            <p className="text-[10px] font-black tracking-wider uppercase mb-1 truncate" style={{ color: '#ef4444' }}>Est. Holding Cost</p>
+            <p className="text-xs xl:text-sm font-extrabold tracking-tight" title={formatRupiah(totalHoldingCost)} style={{ color: '#ef4444' }}>{formatRupiah(totalHoldingCost)}</p>
+            <p className="text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--color-on-surface-variant)' }}>beban modal pengendapan</p>
+          </div>
           <p className="text-[10px] font-bold mt-2 text-red-500">Rate {thresholdConfig.holdingCostPct}% p.a.</p>
         </div>
       </div>

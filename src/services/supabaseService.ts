@@ -60,7 +60,7 @@ async function idbSet(key: string, value: any): Promise<boolean> {
 
 export async function clearIndexedDBCache(): Promise<void> {
   cachedEquipmentData = null;
-  const cacheKey = 'skcd_recent_history_cache_v12';
+  const cacheKey = 'skcd_recent_history_cache_v13';
   try {
     const db = await getIDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -203,11 +203,11 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
     .select('nomor_material, plan_lead_time, tanggal_rencana_pengiriman, jumlah_dipesan, status, tanggal_gr, gr_release_date, po_release_date, tanggal_po');
 
   // Caching mechanism for recent_history (cutoff dari Januari 2025)
-  let history: { id: number; nomor_material: string; qty: number; tanggal: string | null; gudang: string; order_no: string | null }[] = [];
+  let history: { id: number; nomor_material: string; qty: number; tanggal: string | null; gudang: string; order_no: string | null; harga_satuan?: number }[] = [];
   const cutoffStr = '2025-01-01';
 
   try {
-    const cacheKey = 'skcd_recent_history_cache_v12';
+    const cacheKey = 'skcd_recent_history_cache_v13';
     let cachedData: any[] = [];
     const idbCached = await idbGet<any[]>(cacheKey);
     if (idbCached && Array.isArray(idbCached)) {
@@ -253,7 +253,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
           const to = from + pageSize - 1;
           const { data: pageData, error: dbErr } = await supabase
             .from('recent_history')
-            .select('id, nomor_material, qty, tanggal, gudang, order_no')
+            .select('id, nomor_material, qty, tanggal, gudang, order_no, harga_satuan')
             .gte('tanggal', queryStartStr)
             .in('nomor_material', chunk)
             .range(from, to);
@@ -317,7 +317,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
       const to = from + pageSize - 1;
       const { data: pageData, error: dbErr } = await supabase
         .from('recent_history')
-        .select('id, nomor_material, qty, tanggal, gudang, order_no')
+        .select('id, nomor_material, qty, tanggal, gudang, order_no, harga_satuan')
         .gte('tanggal', cutoffStr)
         .range(from, to);
 
@@ -690,7 +690,7 @@ export async function getSlowMovingData(): Promise<SlowMovingItem[]> {
 
   if (!materials) return [];
 
-  let history: any[] | null = await idbGet<any[]>('skcd_recent_history_cache_v12');
+  let history: any[] | null = await idbGet<any[]>('skcd_recent_history_cache_v13');
   if (!history || history.length === 0) {
     const matNos = materials.map(m => String(m.nomor_material).trim());
     if (matNos.length > 0) {
@@ -736,10 +736,11 @@ export async function getSlowMovingData(): Promise<SlowMovingItem[]> {
     const rec = recs?.find(r => r.nomor_material === m.nomor_material);
     const stats = matStats[m.nomor_material];
     
-    // Utamakan Harga Satuan Stok Saat Ini dari Nilai Aset resmi (karena harga cenderung naik), fallback ke transaksi riwayat
+    // Utamakan Harga Satuan Stok Saat Ini dari Nilai Aset resmi / harga_satuan master, fallback ke transaksi riwayat
+    const priceFromMat = Number((m as any).harga_satuan || (m as any).unit_price || (m as any).harga || (m as any).price_per_unit || (m as any).price || 0);
     const matValue = Number((m as any).value || (m as any).total_value || (m as any).nilai_aset || 0);
-    const calculatedCurrentPrice = m.total_stock > 0 ? Math.round(matValue / m.total_stock) : 0;
-    const harga_satuan = calculatedCurrentPrice > 0 ? calculatedCurrentPrice : (stats?.harga && stats.harga > 0 ? stats.harga : 0);
+    const calculatedCurrentPrice = m.total_stock > 0 && matValue > 0 ? Math.round(matValue / m.total_stock) : priceFromMat;
+    const harga_satuan = calculatedCurrentPrice > 0 ? calculatedCurrentPrice : (stats?.harga && stats.harga > 0 ? stats.harga : priceFromMat);
     
     // Calculate difference in days
     const lastDate = stats?.lastDate ?? today;
