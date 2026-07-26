@@ -235,39 +235,46 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
     }
 
     const registeredMaterialNosSet = new Set((materials || []).map(m => String(m.nomor_material).trim()));
+    const registeredMaterialNos = Array.from(registeredMaterialNosSet);
 
-    // Ambil data baru dari Supabase dengan loop paginasi (tanpa limit .in agar tidak error HTTP 414 URL Too Long)
+    // Ambil data baru dari Supabase dengan loop paginasi & batching 50 material (mencegah HTTP 414 & full table scan)
     let dbNewData: any[] = [];
-    let page = 0;
-    const pageSize = 1000;
-    let hasMore = true;
+    if (registeredMaterialNos.length > 0) {
+      const chunkSize = 50;
+      for (let i = 0; i < registeredMaterialNos.length; i += chunkSize) {
+        const chunk = registeredMaterialNos.slice(i, i + chunkSize);
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
 
-    while (hasMore) {
-      const from = page * pageSize;
-      const to = from + pageSize - 1;
-      const { data: pageData, error: dbErr } = await supabase
-        .from('recent_history')
-        .select('id, nomor_material, qty, tanggal, gudang, order_no')
-        .gte('tanggal', queryStartStr)
-        .range(from, to);
+        while (hasMore) {
+          const from = page * pageSize;
+          const to = from + pageSize - 1;
+          const { data: pageData, error: dbErr } = await supabase
+            .from('recent_history')
+            .select('id, nomor_material, qty, tanggal, gudang, order_no')
+            .gte('tanggal', queryStartStr)
+            .in('nomor_material', chunk)
+            .range(from, to);
 
-      if (dbErr) {
-        console.error(`Error fetching history page ${page}:`, dbErr);
-        hasMore = false;
-        break;
-      }
+          if (dbErr) {
+            console.error(`Error fetching history page ${page}:`, dbErr);
+            hasMore = false;
+            break;
+          }
 
-      if (pageData && pageData.length > 0) {
-        dbNewData = dbNewData.concat(pageData);
-        if (pageData.length < pageSize) {
-          hasMore = false;
-        } else {
-          page++;
+          if (pageData && pageData.length > 0) {
+            dbNewData = dbNewData.concat(pageData);
+            if (pageData.length < pageSize) {
+              hasMore = false;
+            } else {
+              page++;
+            }
+          } else {
+            hasMore = false;
+          }
         }
-      } else {
-        hasMore = false;
       }
-      // Fetch continuously until no more data (hasMore = false)
     }
 
     const newData = dbNewData || [];
@@ -682,10 +689,24 @@ export async function getSlowMovingData(): Promise<SlowMovingItem[]> {
 
   if (!materials) return [];
 
-  const { data: history } = await supabase
-    .from('recent_history')
-    .select('nomor_material, tanggal, harga_satuan')
-    .order('tanggal', { ascending: false });
+  let history: any[] | null = await idbGet<any[]>('skcd_recent_history_cache_v12');
+  if (!history || history.length === 0) {
+    const matNos = materials.map(m => String(m.nomor_material).trim());
+    if (matNos.length > 0) {
+      const chunkSize = 50;
+      let fetchedHistory: any[] = [];
+      for (let i = 0; i < matNos.length; i += chunkSize) {
+        const chunk = matNos.slice(i, i + chunkSize);
+        const { data: chunkData } = await supabase
+          .from('recent_history')
+          .select('nomor_material, tanggal, harga_satuan')
+          .in('nomor_material', chunk)
+          .order('tanggal', { ascending: false });
+        if (chunkData) fetchedHistory = fetchedHistory.concat(chunkData);
+      }
+      history = fetchedHistory;
+    }
+  }
 
   const today = new Date(); // Dynamic system current date
 
