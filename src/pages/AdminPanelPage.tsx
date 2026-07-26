@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
 import PageWrapper from '../components/layout/PageWrapper';
+import TableScrollWrapper from '../components/ui/TableScrollWrapper';
 import {
   getAdminParameters, saveAdminParameter, getMonthlyPlans, saveMonthlyPlans, addAuditLog,
   getProcurementData, addProcurement, updateProcurement, deleteProcurement,
@@ -11,12 +12,14 @@ import {
   getMaintenanceBomConfig, addMaintenanceBomConfig, updateMaintenanceBomConfig, deleteMaintenanceBomConfig,
   saveMaterialBomConfigs, deleteMaterialBomConfigs,
   getAllEquipment, getMaterialTransactionSummaryMap,
-  getGlobalThresholdsFromDB, saveGlobalThresholdsToDB, subscribeToRealtimeChanges
+  getGlobalThresholdsFromDB, saveGlobalThresholdsToDB, subscribeToRealtimeChanges,
+  getGlossaryFromDB, saveGlossaryToDB, getFormulasFromDB, saveFormulasToDB
 } from '../services/supabaseService';
 import type { MaterialTransactionSummary } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
 import { getThresholdConfig, saveThresholdConfig, resetThresholdConfig } from '../utils/thresholdSettings';
 import type { ThresholdConfig } from '../utils/thresholdSettings';
+import { DEFAULT_GLOSSARY_TERMS } from '../utils/defaultGlossary';
 import type {
   AdminParameter, MonthlyPlan, ProcurementItem, ProcurementStatus, RisikoLevel,
   MaintenanceSchedule, WorkOrder, JenisKereta, SeriKereta, PropulsiType, TipePerawatan, PelaksanaanStatus, PemenuhStatus,
@@ -24,7 +27,7 @@ import type {
 } from '../types';
 
 interface ConfirmModal { message?: string; customContent?: React.ReactNode; onConfirm: () => void; }
-type ActiveTab = 'parameter' | 'pengadaan' | 'perawatan' | 'bom' | 'thresholds';
+type ActiveTab = 'parameter' | 'pengadaan' | 'perawatan' | 'bom' | 'thresholds' | 'glosarium';
 
 const PROCUREMENT_STATUSES: ProcurementStatus[] = [
   'Dalam Pengadaan',
@@ -205,6 +208,98 @@ export default function AdminPanelPage() {
   const [newMasterSatuan, setNewMasterSatuan] = useState('PCS');
 
   const [txSummaryMap, setTxSummaryMap] = useState<Record<string, MaterialTransactionSummary>>({});
+
+  // Glosarium tab state
+  const [editableTerms, setEditableTerms] = useState<{ kategori: string; istilah: string; definisi: string; konteks: string }[]>(DEFAULT_GLOSSARY_TERMS);
+  const [glossaryFilterQuery, setGlossaryFilterQuery] = useState('');
+  const [glossaryModalOpen, setGlossaryModalOpen] = useState(false);
+  const [editingGlossaryIndex, setEditingGlossaryIndex] = useState<number | null>(null);
+  const [glossaryForm, setGlossaryForm] = useState<{ kategori: string; istilah: string; definisi: string; konteks: string }>({
+    kategori: 'Istilah Bisnis',
+    istilah: '',
+    definisi: '',
+    konteks: ''
+  });
+
+  useEffect(() => {
+    getGlossaryFromDB().then(data => {
+      if (data && data.length > 0) {
+        setEditableTerms(data);
+      } else {
+        setEditableTerms(DEFAULT_GLOSSARY_TERMS);
+      }
+    }).catch(() => {
+      setEditableTerms(DEFAULT_GLOSSARY_TERMS);
+    });
+  }, []);
+
+  const handleResetGlossary = async () => {
+    if (!window.confirm('Apakah Anda yakin ingin mengembalikan seluruh definisi Glosarium ke standar awal?')) return;
+    setEditableTerms(DEFAULT_GLOSSARY_TERMS);
+    await saveGlossaryToDB(DEFAULT_GLOSSARY_TERMS);
+    setSuccessMsg('Definisi Glosarium dikembalikan ke standar awal.');
+    setTimeout(() => setSuccessMsg(null), 3000);
+  };
+
+  const handleOpenAddGlossary = () => {
+    setEditingGlossaryIndex(null);
+    setGlossaryForm({
+      kategori: 'Istilah Bisnis',
+      istilah: '',
+      definisi: '',
+      konteks: ''
+    });
+    setGlossaryModalOpen(true);
+  };
+
+  const handleOpenEditGlossary = (idx: number) => {
+    setEditingGlossaryIndex(idx);
+    setGlossaryForm({ ...editableTerms[idx] });
+    setGlossaryModalOpen(true);
+  };
+
+  const handleSaveGlossaryForm = async () => {
+    if (!glossaryForm.istilah.trim() || !glossaryForm.definisi.trim()) {
+      setErrorMsg('Nama istilah dan penjelasan definisi tidak boleh kosong.');
+      setTimeout(() => setErrorMsg(null), 3000);
+      return;
+    }
+
+    let updated: typeof editableTerms;
+    if (editingGlossaryIndex !== null) {
+      updated = [...editableTerms];
+      updated[editingGlossaryIndex] = { ...glossaryForm };
+    } else {
+      updated = [glossaryForm, ...editableTerms];
+    }
+    setEditableTerms(updated);
+    setGlossaryModalOpen(false);
+
+    try {
+      await saveGlossaryToDB(updated);
+      setSuccessMsg(editingGlossaryIndex !== null ? 'Definisi Glosarium berhasil diperbarui!' : 'Definisi Glosarium baru berhasil ditambahkan!');
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal menyimpan Glosarium');
+      setTimeout(() => setErrorMsg(null), 3000);
+    }
+  };
+
+  const handleDeleteGlossaryTerm = async (idx: number) => {
+    const termToDelete = editableTerms[idx]?.istilah || 'istilah ini';
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus "${termToDelete}"?`)) return;
+
+    const updated = editableTerms.filter((_, i) => i !== idx);
+    setEditableTerms(updated);
+    try {
+      await saveGlossaryToDB(updated);
+      setSuccessMsg(`Definisi "${termToDelete}" berhasil dihapus.`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Gagal menghapus Glosarium');
+      setTimeout(() => setErrorMsg(null), 3000);
+    }
+  };
 
   useEffect(() => {
     async function loadData() {
@@ -1438,6 +1533,16 @@ export default function AdminPanelPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
             )
+          },
+          {
+            id: 'glosarium',
+            full: 'Glosarium & Definisi',
+            short: 'Glosarium',
+            icon: (
+              <svg className="w-4 h-4 sm:mr-1.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            )
           }
         ].map(t => (
           <button key={t.id} onClick={() => setActiveTab(t.id as ActiveTab)}
@@ -1475,7 +1580,7 @@ export default function AdminPanelPage() {
             <div className="p-4 border-b" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
               <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Parameter Material</h3>
             </div>
-            <div className="overflow-x-auto">
+            <TableScrollWrapper maxHeight="550px">
               <table className="w-full text-left border-collapse min-w-[950px] data-table">
                 <thead>
                   <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
@@ -1548,7 +1653,7 @@ export default function AdminPanelPage() {
                 })}
               </tbody>
               </table>
-            </div>
+            </TableScrollWrapper>
             <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
           </div>
 
@@ -1665,7 +1770,7 @@ export default function AdminPanelPage() {
                       </select>
                     </div>
                   </div>
-                  <div className="overflow-x-auto rounded-lg border" style={{ borderColor: 'var(--color-steel-border)' }}>
+                  <TableScrollWrapper maxHeight="350px">
                     <table className="w-full text-left border-collapse text-xs min-w-[800px]">
                       <thead>
                         <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
@@ -1695,7 +1800,7 @@ export default function AdminPanelPage() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </TableScrollWrapper>
                 </div>
                 <div className="flex gap-3 justify-end border-t pt-4" style={{ borderColor: 'var(--color-steel-border)' }}>
                   <button onClick={() => { setEditingId(null); setEditValues(null); }}
@@ -1739,7 +1844,7 @@ export default function AdminPanelPage() {
                 🔐 Hanya Admin
               </span>
             </div>
-            <div className="overflow-x-auto">
+            <TableScrollWrapper maxHeight="550px">
               <table className="w-full text-left border-collapse min-w-[1200px] data-table">
                 <thead>
                   <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
@@ -1791,7 +1896,7 @@ export default function AdminPanelPage() {
                   )}
                 </tbody>
               </table>
-            </div>
+            </TableScrollWrapper>
             <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
           </div>
         </>
@@ -1921,7 +2026,7 @@ export default function AdminPanelPage() {
           )}
 
           <div className="tactile-card rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
+            <TableScrollWrapper maxHeight="550px">
               <table className="w-full text-left border-collapse data-table">
                 <thead>
                   <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
@@ -1951,7 +2056,7 @@ export default function AdminPanelPage() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableScrollWrapper>
             <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
           </div>
         </div>
@@ -2236,7 +2341,7 @@ export default function AdminPanelPage() {
               </div>
 
               {/* Tabel Material */}
-              <div className="overflow-x-auto rounded-lg border" style={{ borderColor: 'var(--color-steel-border)' }}>
+              <TableScrollWrapper maxHeight="450px">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
@@ -2291,7 +2396,7 @@ export default function AdminPanelPage() {
                     )}
                   </tbody>
                 </table>
-              </div>
+              </TableScrollWrapper>
 
               <div className="flex justify-end pt-2">
                 <button onClick={() => setSelectedScheduleForBOM(null)} className="skeuomorphic-btn px-5 py-2 rounded text-xs">
@@ -2822,6 +2927,271 @@ export default function AdminPanelPage() {
                 className="px-3 py-2 text-sm rounded-lg border bg-transparent font-bold focus:outline-none"
                 style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: Kelola Glosarium & Definisi ── */}
+      {activeTab === 'glosarium' && (
+        <div className="space-y-6">
+          <div className="tactile-card rounded-xl p-5 border space-y-4" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
+            
+            {/* Header Toolbar */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border-b pb-4" style={{ borderColor: 'var(--color-steel-border)' }}>
+              <div>
+                <h3 className="font-bold text-base flex items-center gap-2" style={{ color: 'var(--color-on-surface)' }}>
+                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span>Daftar Glosarium &amp; Definisi Bisnis ({editableTerms.length} Istilah)</span>
+                </h3>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>
+                  Klik tombol <b>Edit</b> untuk mengubah definisi pada pop-up modal, atau <b>+ Tambah Istilah Baru</b> untuk menambah kata khusus.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleResetGlossary}
+                  className="px-3 py-2 rounded-lg border text-xs font-bold transition-all hover:opacity-80 flex items-center gap-1.5"
+                  style={{ borderColor: 'rgba(239,68,68,0.3)', color: '#ef4444', backgroundColor: 'rgba(239,68,68,0.06)' }}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  <span>Reset Standar</span>
+                </button>
+
+                <button
+                  onClick={handleOpenAddGlossary}
+                  className="skeuomorphic-btn px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  <span>+ Tambah Istilah Baru</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Search Input */}
+            <div className="relative">
+              <input
+                type="text"
+                value={glossaryFilterQuery}
+                onChange={e => setGlossaryFilterQuery(e.target.value)}
+                placeholder="Cari istilah, definisi, atau kata kunci..."
+                className="w-full px-3.5 py-2 pl-9 rounded-lg border text-xs font-medium focus:outline-none"
+                style={{
+                  backgroundColor: 'var(--color-surface-container-high)',
+                  borderColor: 'var(--color-steel-border)',
+                  color: 'var(--color-on-surface)'
+                }}
+              />
+              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+            </div>
+
+            {/* View Data Table */}
+            <div className="tactile-card rounded-xl overflow-hidden border" style={{ borderColor: 'var(--color-steel-border)' }}>
+              <TableScrollWrapper maxHeight="600px">
+                <table className="w-full text-left border-collapse min-w-[950px] data-table">
+                  <thead>
+                    <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
+                      <th className="sticky left-0 z-20 px-3 py-3 text-[11px] font-black uppercase tracking-wider w-[50px] text-center" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
+                        NO
+                      </th>
+                      <th className="sticky left-[50px] z-20 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-3 py-3 text-[11px] font-black uppercase tracking-wider min-w-[150px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
+                        Kategori
+                      </th>
+                      <th className="px-4 py-3 text-[11px] font-black uppercase tracking-wider min-w-[200px]" style={{ color: 'var(--color-on-primary-container)' }}>
+                        Istilah / Kata Khusus
+                      </th>
+                      <th className="px-4 py-3 text-[11px] font-black uppercase tracking-wider min-w-[340px]" style={{ color: 'var(--color-on-primary-container)' }}>
+                        Penjelasan &amp; Definisi Bisnis
+                      </th>
+                      <th className="px-4 py-3 text-[11px] font-black uppercase tracking-wider min-w-[180px]" style={{ color: 'var(--color-on-primary-container)' }}>
+                        Konteks Penggunaan
+                      </th>
+                      <th className="px-4 py-3 text-[11px] font-black uppercase tracking-wider w-[120px] text-center" style={{ color: 'var(--color-on-primary-container)' }}>
+                        Aksi
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {editableTerms
+                      .map((term, idx) => ({ term, idx }))
+                      .filter(({ term }) => !glossaryFilterQuery || 
+                        term.istilah.toLowerCase().includes(glossaryFilterQuery.toLowerCase()) ||
+                        term.definisi.toLowerCase().includes(glossaryFilterQuery.toLowerCase()) ||
+                        term.konteks.toLowerCase().includes(glossaryFilterQuery.toLowerCase())
+                      )
+                      .map(({ term, idx }) => {
+                        const rowBg = idx % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)';
+                        return (
+                          <tr key={idx} style={{ backgroundColor: rowBg }}>
+                            <td className="sticky left-0 z-10 px-3 py-3 text-xs font-bold text-center" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface-variant)' }}>
+                              {idx + 1}
+                            </td>
+                            <td className="sticky left-[50px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-3 py-3 text-xs font-bold" style={{ backgroundColor: rowBg }}>
+                              <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
+                                {term.kategori}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>
+                              {term.istilah}
+                            </td>
+                            <td className="px-4 py-3 text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
+                              {term.definisi}
+                            </td>
+                            <td className="px-4 py-3 text-xs font-semibold" style={{ color: 'var(--color-secondary)' }}>
+                              {term.konteks}
+                            </td>
+                            <td className="px-4 py-3 text-xs text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => handleOpenEditGlossary(idx)}
+                                  className="px-2 py-1 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition-all text-[11px] font-bold flex items-center gap-1"
+                                  title="Edit Definisi"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteGlossaryTerm(idx)}
+                                  className="px-2 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all text-[11px] font-bold flex items-center gap-1"
+                                  title="Hapus Definisi"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                  <span>Hapus</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </TableScrollWrapper>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ── POP-UP MODAL: TAMBAH / EDIT GLOSARIUM ── */}
+      {glossaryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div 
+            className="tactile-card rounded-2xl w-full max-w-lg p-6 border shadow-2xl space-y-4 relative"
+            style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}
+          >
+            <div className="flex justify-between items-center border-b pb-3" style={{ borderColor: 'var(--color-steel-border)' }}>
+              <h3 className="font-bold text-base flex items-center gap-2" style={{ color: 'var(--color-on-surface)' }}>
+                <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span>{editingGlossaryIndex !== null ? 'Edit Definisi Glosarium' : 'Tambah Istilah Glosarium Baru'}</span>
+              </h3>
+              <button
+                onClick={() => setGlossaryModalOpen(false)}
+                className="text-gray-400 hover:text-white text-lg font-bold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="font-bold block mb-1" style={{ color: 'var(--color-on-surface)' }}>Istilah / Kata Khusus *</label>
+                <input
+                  type="text"
+                  value={glossaryForm.istilah}
+                  onChange={e => setGlossaryForm({ ...glossaryForm, istilah: e.target.value })}
+                  placeholder="Contoh: Over-absorption"
+                  className="w-full px-3 py-2 rounded-lg border font-bold focus:outline-none"
+                  style={{
+                    backgroundColor: 'var(--color-surface-container-high)',
+                    borderColor: 'var(--color-steel-border)',
+                    color: 'var(--color-on-surface)'
+                  }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold block mb-1" style={{ color: 'var(--color-on-surface)' }}>Kategori *</label>
+                  <select
+                    value={glossaryForm.kategori}
+                    onChange={e => setGlossaryForm({ ...glossaryForm, kategori: e.target.value as any })}
+                    className="w-full px-3 py-2 rounded-lg border font-bold focus:outline-none"
+                    style={{
+                      backgroundColor: 'var(--color-surface-container-high)',
+                      borderColor: 'var(--color-steel-border)',
+                      color: 'var(--color-on-surface)'
+                    }}
+                  >
+                    <option value="Istilah Bisnis">Istilah Bisnis</option>
+                    <option value="Pengadaan">Pengadaan</option>
+                    <option value="Logistik & Perawatan">Logistik &amp; Perawatan</option>
+                    <option value="Status & Indikator">Status &amp; Indikator</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-bold block mb-1" style={{ color: 'var(--color-on-surface)' }}>Konteks Penggunaan</label>
+                  <input
+                    type="text"
+                    value={glossaryForm.konteks}
+                    onChange={e => setGlossaryForm({ ...glossaryForm, konteks: e.target.value })}
+                    placeholder="Contoh: Grafik Anomali Stok"
+                    className="w-full px-3 py-2 rounded-lg border font-semibold focus:outline-none"
+                    style={{
+                      backgroundColor: 'var(--color-surface-container-high)',
+                      borderColor: 'var(--color-steel-border)',
+                      color: 'var(--color-on-surface)'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1" style={{ color: 'var(--color-on-surface)' }}>Penjelasan &amp; Definisi Bisnis *</label>
+                <textarea
+                  rows={4}
+                  value={glossaryForm.definisi}
+                  onChange={e => setGlossaryForm({ ...glossaryForm, definisi: e.target.value })}
+                  placeholder="Tuliskan penjelasan lengkap definisi bisnis istilah ini..."
+                  className="w-full px-3 py-2 rounded-lg border leading-relaxed focus:outline-none"
+                  style={{
+                    backgroundColor: 'var(--color-surface-container-high)',
+                    borderColor: 'var(--color-steel-border)',
+                    color: 'var(--color-on-surface)'
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end items-center gap-2 pt-3 border-t" style={{ borderColor: 'var(--color-steel-border)' }}>
+              <button
+                onClick={() => setGlossaryModalOpen(false)}
+                className="px-4 py-2 rounded-lg border text-xs font-bold hover:opacity-80"
+                style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleSaveGlossaryForm}
+                className="skeuomorphic-btn px-5 py-2 rounded-lg text-xs font-bold"
+              >
+                Simpan Definisi
+              </button>
             </div>
           </div>
         </div>

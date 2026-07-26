@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import PageWrapper from '../components/layout/PageWrapper';
 import ExportButton from '../components/ui/ExportButton';
 import ReactECharts from 'echarts-for-react';
+import TableScrollWrapper from '../components/ui/TableScrollWrapper';
 import { getProcurementData } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
 import type { ProcurementStatus, RisikoLevel, ProcurementItem } from '../types';
@@ -405,12 +406,12 @@ export default function ProgressPOPage() {
       {/* Table View */}
       {viewMode === 'table' && (
         <div className="tactile-card rounded-lg overflow-hidden">
-          <div className="overflow-x-auto">
+          <TableScrollWrapper maxHeight="650px">
             <table className="w-full text-left border-collapse min-w-[2200px] data-table">
               <thead>
                 <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
                   {[
-                    'NO', 'NOD Status', 'Progress', 'Nomor Material', 'Nama Material', 'Proposed by', 'NOD Number', 'Plan NOD', 'Realisasi NOD',
+                    'NO', 'Nomor Material', 'Nama Material', 'NOD Status', 'Progress', 'Proposed by', 'NOD Number', 'Plan NOD', 'Realisasi NOD',
                     'RKAP/NON RKAP', 'Link Doc NOD', 'Category', 
                     'Plan Spektek', 'Realisasi Spektek',
                     'Plan CTPE', 'Realisasi CTPE',
@@ -420,15 +421,20 @@ export default function ProgressPOPage() {
                     'PR Number', 'Plan PR', 'Realisasi PR', 'Approval',
                     'Aanwijzing', 'Vendor', 'PO Number', 'Plan PO', 'Realisasi PO',
                     'Plan GI', 'Realisasi GI', 'Plan GR', 'Realisasi GR', 'Duration', 'Status', 'Cost'
-                  ].map(h => {
+                  ].map((h, idx) => {
                     let textColor = 'var(--color-on-primary-container)';
                     if (h.toLowerCase().includes('plan')) {
                       textColor = '#3b82f6'; // Biru untuk Plan
                     } else if (h.toLowerCase().includes('realisasi')) {
                       textColor = '#f97316'; // Orange untuk Realisasi
                     }
+                    const stickyClass = idx === 0 ? 'sticky left-0 z-20 bg-[var(--color-primary-container)]'
+                      : idx === 1 ? 'sticky left-[48px] z-20 bg-[var(--color-primary-container)]'
+                      : idx === 2 ? 'sticky left-[158px] z-20 bg-[var(--color-primary-container)] shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)]'
+                      : '';
+
                     return (
-                      <th key={h} className="px-3 py-3 text-[10px] font-black tracking-widest uppercase whitespace-nowrap text-center first:text-left last:text-right"
+                      <th key={h} className={`px-3 py-3 text-[10px] font-black tracking-widest uppercase whitespace-nowrap text-center first:text-left last:text-right ${stickyClass}`}
                         style={{ color: textColor }}>{h}</th>
                     );
                   })}
@@ -437,12 +443,24 @@ export default function ProgressPOPage() {
               <tbody>
                 {filtered.map((row, i) => {
                   const cfg = statusCfg[row.status] || { bg: 'rgba(107,114,128,0.12)', text: '#9ca3af', border: 'rgba(107,114,128,0.3)' };
+                  const rowBg = i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)';
+
                   return (
-                    <tr key={row.id} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
+                    <tr key={row.id} style={{ backgroundColor: rowBg }}>
                       {/* 1. NO */}
-                      <td className="px-3 py-3 text-xs font-bold text-center">{i + 1}</td>
+                      <td className="sticky left-0 z-10 px-3 py-3 text-xs font-bold text-center" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>{i + 1}</td>
                       
-                      {/* 2. NOD */}
+                      {/* 2. Nomor Material */}
+                      <td className="sticky left-[48px] z-10 px-3 py-3 text-xs font-mono font-bold text-center whitespace-nowrap" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
+                        {row.nomor_material || '—'}
+                      </td>
+
+                      {/* 3. Nama Material */}
+                      <td className="sticky left-[158px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-3 py-3 text-xs font-semibold whitespace-nowrap min-w-[200px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
+                        {row.uraian_material || '—'}
+                      </td>
+
+                      {/* 4. NOD */}
                       <td className="px-3 py-3 text-xs text-center">
                         {row.publish_nod ? (
                           <span className="text-green-500 font-extrabold text-[10px]">✓ READY</span>
@@ -451,7 +469,7 @@ export default function ProgressPOPage() {
                         )}
                       </td>
                       
-                      {/* 3. Progress */}
+                      {/* 5. Progress */}
                       <td className="px-3 py-3 text-xs">
                         {(() => {
                           let stepCount = 0;
@@ -471,16 +489,6 @@ export default function ProgressPOPage() {
                             </div>
                           );
                         })()}
-                      </td>
-
-                      {/* 4. Nomor Material */}
-                      <td className="px-3 py-3 text-xs font-mono font-bold text-center whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>
-                        {row.nomor_material || '—'}
-                      </td>
-
-                      {/* 5. Nama Material */}
-                      <td className="px-3 py-3 text-xs font-semibold whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface)' }}>
-                        {row.uraian_material || '—'}
                       </td>
                       
                       {/* 4. Proposed by */}
@@ -684,7 +692,7 @@ export default function ProgressPOPage() {
                 )}
               </tbody>
              </table>
-          </div>
+          </TableScrollWrapper>
         </div>
       )}
 

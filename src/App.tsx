@@ -11,6 +11,7 @@ import WorkOrderPage from './pages/WorkOrderPage';
 import TrainCompositionPage from './pages/TrainCompositionPage';
 import AdminPanelPage from './pages/AdminPanelPage';
 import AuditLogPage from './pages/AuditLogPage';
+import GlossaryPage from './pages/GlossaryPage';
 import type { ThemeMode } from './types';
 import { useAppStore } from './store/useAppStore';
 
@@ -92,6 +93,7 @@ function ProtectedLayout({ theme, onThemeToggle, collapsed, onToggle }: Protecte
                 : <AuditLogPage />
             } 
           />
+          <Route path="/glossary"      element={<GlossaryPage />} />
           <Route path="*"              element={<Navigate to="/critical-stock" replace />} />
         </Routes>
       </div>

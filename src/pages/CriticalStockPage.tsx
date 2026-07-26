@@ -6,6 +6,7 @@ import KpiCard from '../components/ui/KpiCard';
 import StatusBadge from '../components/ui/StatusBadge';
 import ExportButton from '../components/ui/ExportButton';
 import ThresholdModal from '../components/ui/ThresholdModal';
+import TableScrollWrapper from '../components/ui/TableScrollWrapper';
 import { getThresholdConfig } from '../utils/thresholdSettings';
 import { getCriticalStockData, getFleetMetrics, getRealSAPTrains, getMaintenanceSchedule, getProcurementData, subscribeToRealtimeChanges } from '../services/supabaseService';
 import type { CriticalStockItem, FleetMetrics, MaintenanceSchedule, ProcurementItem } from '../types';
@@ -73,7 +74,7 @@ const MONTHS_OPTIONS = [
   { value: 11, name: 'November' },
   { value: 12, name: 'Desember' }
 ];
-const YEARS_OPTIONS = [2025, 2026, 2027, 2028, 2029, 2030];
+const YEARS_OPTIONS = [2024, 2025, 2026, 2027, 2028, 2029, 2030];
 
 function calculateDynamicMetrics(
   item: CriticalStockItem,
@@ -676,18 +677,7 @@ export default function CriticalStockPage() {
 
     if (chartViewMode === 'SALDO') {
       const labels = rangeMonths.map(m => m.label);
-      const actualsRaw = rangeMonths.map(m => {
-        if (m.year > currentTodayYear || (m.year === currentTodayYear && m.month > currentTodayMonth)) return 0;
-        const hist = referenceItem.all_history?.filter(h => {
-          if (!h.tanggal) return false;
-          const d = new Date(h.tanggal);
-          return d.getFullYear() === m.year && (d.getMonth() + 1) === m.month;
-        }) || [];
-        return hist.reduce((sum, item) => sum + (item.qty || 0), 0);
-      });
 
-      const julyIdx = rangeMonths.findIndex(m => m.year === currentTodayYear && m.month === currentTodayMonth);
-      
       let runRateMultiplier = 1;
       if (calcMode === 'RIWAYAT') {
         let sumActualsForRate = 0;
@@ -722,47 +712,75 @@ export default function CriticalStockPage() {
       }
       const poQty = referenceItem.jumlah_dipesan || 0;
 
-      const plansBalance: (number | null)[] = Array(rangeMonths.length).fill(null);
-      const correctedBalance: (number | null)[] = Array(rangeMonths.length).fill(null);
-      const actualsBalance: (number | null)[] = Array(rangeMonths.length).fill(null);
+      // Simulasi proyeksi saldo berkesinambungan dari hari ini (Juli 2026) hingga akhir rentang filter
+      const lastMonth = rangeMonths[rangeMonths.length - 1];
+      const startSimYear = Math.min(currentTodayYear, rangeMonths[0].year);
+      const startSimMonth = startSimYear === currentTodayYear ? currentTodayMonth : rangeMonths[0].month;
 
-      if (julyIdx !== -1) {
-        plansBalance[julyIdx] = referenceItem.current_stock;
-        correctedBalance[julyIdx] = referenceItem.current_stock;
-        actualsBalance[julyIdx] = referenceItem.current_stock;
-
-        // Populate forward
-        for (let i = julyIdx + 1; i < rangeMonths.length; i++) {
-          const m = rangeMonths[i];
-          const hasPO = showChartWithPO && m.year === poYear && m.month === poMonth;
-          
-          const p = referenceItem.all_plans?.find(pl => pl.tahun === m.year && pl.bulan === m.month);
-          const pQty = p ? p.plan_qty : 0;
-          
-          const prevPlansBal = plansBalance[i - 1] ?? referenceItem.current_stock;
-          plansBalance[i] = Math.max(0, prevPlansBal - pQty + (hasPO ? poQty : 0));
-
-          const adjustedPlan = Math.round(pQty * runRateMultiplier);
-          const prevCorrectedBal = correctedBalance[i - 1] ?? referenceItem.current_stock;
-          correctedBalance[i] = Math.max(0, prevCorrectedBal - adjustedPlan + (hasPO ? poQty : 0));
+      const simMonths: { year: number; month: number; key: string }[] = [];
+      let curY = startSimYear;
+      let curM = startSimMonth;
+      while (curY < lastMonth.year || (curY === lastMonth.year && curM <= lastMonth.month)) {
+        simMonths.push({ year: curY, month: curM, key: `${curY}-${curM}` });
+        curM++;
+        if (curM > 12) {
+          curM = 1;
+          curY++;
         }
       }
 
-      let poIdx = rangeMonths.findIndex(m => m.year === poYear && m.month === poMonth);
+      const simPlansBal = new Map<string, number>();
+      const simCorrBal = new Map<string, number>();
 
-      // Cari bulan di mana garis kuning (correctedBalance) PERTAMA KALI menyentuh Safety Stock
-      // Lalu mundurkan lead_time bulan ke belakang → posisi Batas Order (ROP)
+      let curPlanBal = referenceItem.current_stock;
+      let curCorrBal = referenceItem.current_stock;
+
+      simMonths.forEach((sm, idx) => {
+        if (idx === 0) {
+          simPlansBal.set(sm.key, curPlanBal);
+          simCorrBal.set(sm.key, curCorrBal);
+        } else {
+          const hasPO = showChartWithPO && sm.year === poYear && sm.month === poMonth;
+          const p = referenceItem.all_plans?.find(pl => pl.tahun === sm.year && pl.bulan === sm.month);
+          const pQty = p ? p.plan_qty : 0;
+          const adjustedPlan = Math.round(pQty * runRateMultiplier);
+
+          curPlanBal = Math.max(0, curPlanBal - pQty + (hasPO ? poQty : 0));
+          curCorrBal = Math.max(0, curCorrBal - adjustedPlan + (hasPO ? poQty : 0));
+
+          simPlansBal.set(sm.key, curPlanBal);
+          simCorrBal.set(sm.key, curCorrBal);
+        }
+      });
+
+      const plansBalance = rangeMonths.map(m => {
+        const k = `${m.year}-${m.month}`;
+        return simPlansBal.has(k) ? simPlansBal.get(k)! : null;
+      });
+
+      const correctedBalance = rangeMonths.map(m => {
+        const k = `${m.year}-${m.month}`;
+        return simCorrBal.has(k) ? simCorrBal.get(k)! : null;
+      });
+
+      const actualsBalance = rangeMonths.map(m => {
+        const k = `${m.year}-${m.month}`;
+        if (m.year === currentTodayYear && m.month === currentTodayMonth) {
+          return referenceItem.current_stock;
+        }
+        return null;
+      });
+
+      let poIdx = rangeMonths.findIndex(m => m.year === poYear && m.month === poMonth);
       let ropExhaustIdx = -1;
       const ssVal = referenceItem.safety_stock ?? 0;
       const leadTimeMonths = Math.round(referenceItem.lead_time ?? 2);
-      if (julyIdx !== -1) {
-        for (let i = julyIdx + 1; i < rangeMonths.length; i++) {
-          const val = correctedBalance[i];
-          if (val !== null && val <= ssVal) {
-            // ROP = leadTimeMonths sebelum SS tersentuh
-            ropExhaustIdx = Math.max(julyIdx + 1, i - leadTimeMonths);
-            break;
-          }
+
+      for (let i = 0; i < rangeMonths.length; i++) {
+        const val = correctedBalance[i];
+        if (val !== null && val <= ssVal) {
+          ropExhaustIdx = Math.max(0, i - leadTimeMonths);
+          break;
         }
       }
 
@@ -1181,7 +1199,7 @@ export default function CriticalStockPage() {
                         className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
                         style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                       >
-                        {[2024, 2025, 2026, 2027].map(y => (
+                        {YEARS_OPTIONS.map(y => (
                           <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
@@ -1203,7 +1221,7 @@ export default function CriticalStockPage() {
                         className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
                         style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                       >
-                        {[2024, 2025, 2026, 2027].map(y => (
+                        {YEARS_OPTIONS.map(y => (
                           <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
@@ -1259,7 +1277,7 @@ export default function CriticalStockPage() {
                         className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
                         style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                       >
-                        {[2024, 2025, 2026, 2027].map(y => (
+                        {YEARS_OPTIONS.map(y => (
                           <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
@@ -1283,7 +1301,7 @@ export default function CriticalStockPage() {
                         className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
                         style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                       >
-                        {[2024, 2025, 2026, 2027].map(y => (
+                        {YEARS_OPTIONS.map(y => (
                           <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
@@ -2359,13 +2377,13 @@ export default function CriticalStockPage() {
           </div>
           <ExportButton data={filteredData as unknown as Record<string, unknown>[]} filename="critical_stock_analysis" columns={exportCols} />
         </div>
-        <div className="overflow-x-auto overflow-y-auto max-h-[500px]">
+        <TableScrollWrapper maxHeight="500px">
           <table className="w-full text-left border-collapse min-w-[1100px] data-table">
             <thead>
               {/* Row 1: Groups */}
               <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-left whitespace-nowrap align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>Nomor Material</th>
-                <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-left whitespace-nowrap align-middle border-b border-r min-w-[200px]" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>Deskripsi Material</th>
+                <th rowSpan={2} className="sticky left-0 z-20 px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-left whitespace-nowrap align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)', borderColor: 'var(--color-steel-border)' }}>Nomor Material</th>
+                <th rowSpan={2} className="sticky left-[105px] z-20 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-left whitespace-nowrap align-middle border-b border-r min-w-[200px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)', borderColor: 'var(--color-steel-border)' }}>Deskripsi Material</th>
                 
                 <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-center align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>
                   Stok Saat Ini<br/><span className="text-[8px] font-normal lowercase opacity-75">(pc/set/l)</span>
@@ -2416,21 +2434,21 @@ export default function CriticalStockPage() {
                   ? 'var(--color-led-amber)'
                   : 'var(--color-led-red)';
                 const isSelected = row.nomor_material === referenceItem?.nomor_material;
+                const rowBg = isSelected 
+                  ? 'var(--color-surface-container-high)' 
+                  : i % 2 === 0 
+                  ? 'var(--color-surface-dim)' 
+                  : 'var(--color-background)';
+
                 return (
                   <tr
                     key={row.nomor_material}
                     onClick={() => setSelectedMaterial(row.nomor_material)}
-                    className="cursor-pointer transition-all hover:bg-[rgba(37,99,235,0.06)]"
-                    style={{
-                      backgroundColor: isSelected 
-                        ? 'rgba(37,99,235,0.12)' 
-                        : i % 2 === 0 
-                        ? 'var(--color-surface-dim)' 
-                        : 'var(--color-background)'
-                    }}
+                    className="cursor-pointer transition-all hover:bg-[var(--color-surface-container-highest)]"
+                    style={{ backgroundColor: rowBg }}
                   >
-                    <td className="px-2 py-2 font-bold text-[11px]" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                    <td className="px-2 py-2 text-[11px] whitespace-nowrap font-medium min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }} title={row.nama_material}>{row.nama_material}</td>
+                    <td className="sticky left-0 z-10 px-2 py-2 font-bold text-[11px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
+                    <td className="sticky left-[105px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-2 py-2 text-[11px] whitespace-nowrap font-medium min-w-[200px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface-variant)' }} title={row.nama_material}>{row.nama_material}</td>
                     <td className="px-2 py-2 text-[11px] text-center font-medium" style={{ color: 'var(--color-on-surface)' }}>{row.current_stock.toLocaleString('id-ID')}</td>
                     <td className="px-2 py-2 text-[11px] text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{row.stok_ideal.toLocaleString('id-ID')}</td>
                     <td className="px-2 py-2 text-[11px] text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{(row.safety_stock ?? 0).toLocaleString('id-ID')}</td>
@@ -2498,7 +2516,7 @@ export default function CriticalStockPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </TableScrollWrapper>
         <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
       </div>
 

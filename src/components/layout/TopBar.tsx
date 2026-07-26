@@ -12,6 +12,7 @@ const pageLabels: Record<string, string> = {
   '/composition': 'Komposisi Rangkaian',
   '/admin-panel': 'Panel Admin',
   '/audit-log': 'Log Audit',
+  '/glossary': 'Glosarium & Panduan',
 };
 
 interface TopBarProps {

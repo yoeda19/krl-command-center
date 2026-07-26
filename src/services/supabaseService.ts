@@ -1444,3 +1444,71 @@ export function subscribeToRealtimeChanges(
     }
   };
 }
+
+// ── 11. GLOSSARY & FORMULA MANAGEMENT ──────────────────────
+const GLOSSARY_STORAGE_KEY = 'prisma_glossary_overrides_v1';
+const FORMULAS_STORAGE_KEY = 'prisma_formulas_overrides_v1';
+
+export async function getGlossaryFromDB(): Promise<any[] | null> {
+  try {
+    const { data, error } = await supabase
+      .from('app_glossary')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if (!error && data && data.length > 0) return data;
+  } catch (err) {
+    console.warn('Supabase app_glossary table fallback to localStorage:', err);
+  }
+
+  try {
+    const local = localStorage.getItem(GLOSSARY_STORAGE_KEY);
+    return local ? JSON.parse(local) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveGlossaryToDB(terms: any[]): Promise<{ error: string | null }> {
+  try {
+    localStorage.setItem(GLOSSARY_STORAGE_KEY, JSON.stringify(terms));
+    const { error } = await supabase
+      .from('app_glossary')
+      .upsert(terms, { onConflict: 'istilah' });
+    return { error: error ? error.message : null };
+  } catch (err: any) {
+    return { error: err.message || null };
+  }
+}
+
+export async function getFormulasFromDB(): Promise<any[] | null> {
+  try {
+    const { data, error } = await supabase
+      .from('app_formulas')
+      .select('*')
+      .order('id', { ascending: true });
+
+    if (!error && data && data.length > 0) return data;
+  } catch (err) {
+    console.warn('Supabase app_formulas table fallback to localStorage:', err);
+  }
+
+  try {
+    const local = localStorage.getItem(FORMULAS_STORAGE_KEY);
+    return local ? JSON.parse(local) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveFormulasToDB(formulas: any[]): Promise<{ error: string | null }> {
+  try {
+    localStorage.setItem(FORMULAS_STORAGE_KEY, JSON.stringify(formulas));
+    const { error } = await supabase
+      .from('app_formulas')
+      .upsert(formulas, { onConflict: 'nama' });
+    return { error: error ? error.message : null };
+  } catch (err: any) {
+    return { error: err.message || null };
+  }
+}

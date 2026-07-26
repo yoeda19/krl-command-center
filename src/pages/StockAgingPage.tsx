@@ -4,6 +4,7 @@ import ReactECharts from 'echarts-for-react';
 import PageWrapper from '../components/layout/PageWrapper';
 import ExportButton from '../components/ui/ExportButton';
 import ThresholdModal from '../components/ui/ThresholdModal';
+import TableScrollWrapper from '../components/ui/TableScrollWrapper';
 import { getThresholdConfig } from '../utils/thresholdSettings';
 import { getSlowMovingData, getRestockData, getCriticalStockData, subscribeToRealtimeChanges } from '../services/supabaseService';
 import { formatRupiah, formatTanggal } from '../utils/calculations';
@@ -654,12 +655,21 @@ export default function StockAgingPage() {
 
       {/* Table */}
       <div className="tactile-card rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
+        <TableScrollWrapper maxHeight="500px">
           <table className="w-full text-left border-collapse min-w-[900px] data-table">
             <thead>
               <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                {['Kode Material','Nama Material','Stok','Nilai Aset','Holding Cost (10%/th)','Pergerakan Terakhir','Usia Pengendapan','Kategori','Rekomendasi'].map(h => (
-                  <th key={h} className="px-4 py-3 text-[11px] font-black tracking-widest uppercase whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
+                {['Kode Material','Nama Material','Stok','Nilai Aset','Holding Cost (10%/th)','Pergerakan Terakhir','Usia Pengendapan','Kategori','Rekomendasi'].map((h, idx) => (
+                  <th
+                    key={h}
+                    className={`px-4 py-3 text-[11px] font-black tracking-widest uppercase whitespace-nowrap ${
+                      idx === 0 ? 'sticky left-0 z-20 bg-[var(--color-primary-container)]' :
+                      idx === 1 ? 'sticky left-[120px] z-20 bg-[var(--color-primary-container)] shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)]' : ''
+                    }`}
+                    style={{ color: 'var(--color-on-primary-container)' }}
+                  >
+                    {h}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -667,10 +677,11 @@ export default function StockAgingPage() {
               {filtered.map((row, i) => {
                 const c = catCfg[row.kategori];
                 const hc = (row.kategori === 'Fresh' || row.kategori === 'Stock Out') ? 0 : Math.round(row.nilai_aset * 0.10 * (row.usia_pengendapan_hari / 365));
+                const rowBg = i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)';
                 return (
-                  <tr key={row.nomor_material} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
-                    <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                    <td className="px-4 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
+                  <tr key={row.nomor_material} style={{ backgroundColor: rowBg }}>
+                    <td className="sticky left-0 z-10 px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
+                    <td className="sticky left-[120px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-4 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
                     <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.current_stock} {row.satuan}</td>
                     <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-secondary)' }}>{formatRupiah(row.nilai_aset)}</td>
                     <td className="px-4 py-3 text-xs font-bold text-red-500 whitespace-nowrap">{hc > 0 ? formatRupiah(hc) : '-'}</td>
@@ -685,7 +696,7 @@ export default function StockAgingPage() {
               })}
             </tbody>
           </table>
-        </div>
+        </TableScrollWrapper>
       </div>
 
       {/* Restock Section Header */}
@@ -856,7 +867,7 @@ export default function StockAgingPage() {
 
       {/* Restock Table */}
       <div className="tactile-card rounded-lg overflow-hidden">
-        <div className="overflow-x-auto" style={{ maxHeight: '430px', overflowY: 'auto' }}>
+        <TableScrollWrapper maxHeight="430px">
           <table className="w-full text-left border-collapse min-w-[900px] data-table">
             <thead>
               <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
@@ -897,7 +908,7 @@ export default function StockAgingPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </TableScrollWrapper>
         <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
       </div>
 
