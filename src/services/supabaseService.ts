@@ -1371,22 +1371,46 @@ export async function saveGlobalThresholdsToDB(thresholds: any): Promise<{ error
   }
 }
 
+const activeRealtimeChannels = new Map<string, {
+  channel: any;
+  listeners: Map<number, (payload: any) => void>;
+  nextId: number;
+}>();
+
 export function subscribeToRealtimeChanges(
   tableName: string,
   onChangeCallback: (payload: any) => void
 ): () => void {
-  const channel = supabase
-    .channel(`public_realtime_${tableName}_${Date.now()}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: tableName },
-      (payload) => {
-        onChangeCallback(payload);
-      }
-    )
-    .subscribe();
+  let channelObj = activeRealtimeChannels.get(tableName);
+
+  if (!channelObj) {
+    const listeners = new Map<number, (payload: any) => void>();
+    const channel = supabase
+      .channel(`public_realtime_${tableName}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: tableName },
+        (payload) => {
+          listeners.forEach((cb) => cb(payload));
+        }
+      )
+      .subscribe();
+
+    channelObj = { channel, listeners, nextId: 1 };
+    activeRealtimeChannels.set(tableName, channelObj);
+  }
+
+  const listenerId = channelObj.nextId++;
+  channelObj.listeners.set(listenerId, onChangeCallback);
 
   return () => {
-    supabase.removeChannel(channel);
+    const active = activeRealtimeChannels.get(tableName);
+    if (active) {
+      active.listeners.delete(listenerId);
+      if (active.listeners.size === 0) {
+        supabase.removeChannel(active.channel);
+        activeRealtimeChannels.delete(tableName);
+      }
+    }
   };
 }
