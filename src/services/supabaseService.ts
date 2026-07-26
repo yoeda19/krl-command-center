@@ -59,6 +59,7 @@ async function idbSet(key: string, value: any): Promise<boolean> {
 }
 
 export async function clearIndexedDBCache(): Promise<void> {
+  cachedEquipmentData = null;
   const cacheKey = 'skcd_recent_history_cache_v12';
   try {
     const db = await getIDB();
