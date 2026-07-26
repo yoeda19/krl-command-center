@@ -1013,7 +1013,13 @@ export async function getRealSAPTrains(): Promise<{ id: string; name: string; mo
   return data;
 }
 
+let cachedEquipmentData: { id: string; parent_id: string | null; level: number; name: string; model_no?: string | null; funct_loc_descrip?: string | null }[] | null = null;
+
 export async function getAllEquipment(): Promise<{ id: string; parent_id: string | null; level: number; name: string; model_no?: string | null; funct_loc_descrip?: string | null }[]> {
+  if (cachedEquipmentData && cachedEquipmentData.length > 0) {
+    return cachedEquipmentData;
+  }
+
   let allData: any[] = [];
   let from = 0;
   const limit = 1000;
@@ -1031,7 +1037,8 @@ export async function getAllEquipment(): Promise<{ id: string; parent_id: string
     from += limit;
   }
 
-  return allData as { id: string; parent_id: string | null; level: number; name: string; model_no?: string | null; funct_loc_descrip?: string | null }[];
+  cachedEquipmentData = allData as { id: string; parent_id: string | null; level: number; name: string; model_no?: string | null; funct_loc_descrip?: string | null }[];
+  return cachedEquipmentData;
 }
 
 export async function getRealSAPOrders(): Promise<{ order_no: string; description: string }[]> {
