@@ -935,29 +935,14 @@ export default function CriticalStockPage() {
 
   const poLabel = chartData.poIdx >= 0 ? chartData.labels[chartData.poIdx] : null;
 
-  // Cari titik habis stok dari Plan Terkoreksi (corrected)
-  const correctedExhaustIdx = (() => {
-    // Hanya cari titik habis stok dari bulan berjalan ke depan
-    const currentMonthIdx = rangeMonths.findIndex(m => m.year === currentTodayYear && m.month === currentTodayMonth);
-    const startScanIdx = currentMonthIdx !== -1 ? currentMonthIdx : 1;
-    
-    // Jika di bulan berjalan (Juli 2026) stoknya memang sudah 0, langsung kembalikan bulan berjalan
-    if ((chartData.corrected[startScanIdx] ?? 0) === 0) {
-      return startScanIdx;
-    }
-    
-    // Cari index pertama di mana nilai corrected menjadi 0 setelah sebelumnya > 0
-    for (let i = startScanIdx + 1; i < chartData.corrected.length; i++) {
-      const prev = chartData.corrected[i - 1];
-      const curr = chartData.corrected[i];
-      if ((prev ?? 0) > 0 && (curr ?? 0) === 0) return i;
-    }
-    // Jika tidak ada titik 0, lihat apakah nilai terakhir = 0
-    const lastIdx = chartData.corrected.length - 1;
-    if (lastIdx >= startScanIdx && (chartData.corrected[lastIdx] ?? 0) === 0) return lastIdx;
-    return -1;
-  })();
-  const exhaustLabel = correctedExhaustIdx >= 0 ? chartData.labels[correctedExhaustIdx] : null;
+  const correctedExhaustionLabelNoPO = referenceItem ? (() => {
+    const { correctedExhaustionLabelNoPO } = calculateDynamicMetrics(referenceItem, rangeMonths, endYear, endMonth, calcMode, runRateLookback);
+    return correctedExhaustionLabelNoPO !== '-' ? correctedExhaustionLabelNoPO : null;
+  })() : null;
+
+  const exhaustLabel = correctedExhaustionLabelNoPO && chartData.labels.includes(correctedExhaustionLabelNoPO)
+    ? correctedExhaustionLabelNoPO
+    : null;
 
   // Insight data untuk kartu info mode Riwayat
   const riwayatInsight = (() => {
@@ -1007,11 +992,32 @@ export default function CriticalStockPage() {
     return { sumAct, sumPlan, multiplier, avgCorrected, nonSaldoMax, exhaustLabel, rangeLabel };
   })();
 
-  const gapMonths = referenceItem
-    ? (showChartWithPO
-        ? (referenceItem as any).gap_to_po ?? 0
-        : (referenceItem as any).gap_no_po ?? 0)
-    : 0;
+  const gapMonths = (() => {
+    if (!referenceItem) return 0;
+    if (!showChartWithPO || !poLabel) {
+      return (referenceItem as any).gap_no_po ?? 0;
+    }
+    const ss = referenceItem.safety_stock ?? 0;
+    const todayLabelIdx = chartData.labels.findIndex(l => l.includes("Jul '26"));
+    const startSearchIdx = todayLabelIdx >= 0 ? todayLabelIdx : 0;
+    let rawBreachIdx = chartData.corrected.findIndex((val, idx) => {
+      return idx >= startSearchIdx && val !== null && val <= ss;
+    });
+    let safetyBreachIdx = rawBreachIdx;
+    if (rawBreachIdx > startSearchIdx) {
+      safetyBreachIdx = rawBreachIdx - 1;
+    }
+    const currentBreachLabel = safetyBreachIdx >= 0 ? chartData.labels[safetyBreachIdx] : null;
+    const targetExhaustLabel = chartViewMode === 'SALDO' ? (currentBreachLabel ?? exhaustLabel) : exhaustLabel;
+    if (!targetExhaustLabel) return (referenceItem as any).gap_to_po ?? 0;
+    
+    const idxEx = chartData.labels.indexOf(targetExhaustLabel);
+    const idxPo = chartData.labels.indexOf(poLabel);
+    if (idxEx >= 0 && idxPo >= 0) {
+      return idxEx - idxPo;
+    }
+    return (referenceItem as any).gap_to_po ?? 0;
+  })();
 
   const dynamicStatus = (() => {
     if (isRangeInvalid || !referenceItem) return { label: 'TIDAK VALID', color: '#9ca3af', bg: 'rgba(156,163,175,0.12)' };
@@ -1139,8 +1145,8 @@ export default function CriticalStockPage() {
                     className="rounded px-2 py-1 border text-[11px] font-bold shrink-0"
                     style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                   >
-                    <option value="STANDAR">STANDAR</option>
-                    <option value="RIWAYAT">RIWAYAT</option>
+                    <option value="STANDAR">Standar</option>
+                    <option value="RIWAYAT">Riwayat</option>
                   </select>
 
                   {/* 2. Dropdown Mode Tampilan: Konsumsi vs Saldo Stok */}
@@ -1150,8 +1156,8 @@ export default function CriticalStockPage() {
                     className="rounded px-2 py-1 border text-[11px] font-bold shrink-0"
                     style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                   >
-                    <option value="KONSUMSI">KONSUMSI</option>
-                    <option value="SALDO">SALDO STOK</option>
+                    <option value="KONSUMSI">Konsumsi</option>
+                    <option value="SALDO">Saldo Stok</option>
                   </select>
 
                   {/* 3. Dropdown Filter PO: Tanpa PO vs Dengan PO */}
@@ -1161,8 +1167,8 @@ export default function CriticalStockPage() {
                     className="rounded px-2 py-1 border text-[11px] font-bold shrink-0"
                     style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                   >
-                    <option value="TANPA_PO">TANPA PO</option>
-                    <option value="DENGAN_PO">DENGAN PO</option>
+                    <option value="TANPA_PO">Tanpa PO</option>
+                    <option value="DENGAN_PO">Dengan PO</option>
                   </select>
 
                   {/* 4. Dropdown Material (Fleksibel & Truncate Teks Panjang) */}
@@ -1329,10 +1335,10 @@ export default function CriticalStockPage() {
                       </span>
                     )}
 
-                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wider border uppercase flex items-center gap-1"
-                      style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)', color: '#ef4444' }}>
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                      FAST MOVING
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wide border flex items-center gap-1"
+                      style={{ backgroundColor: 'rgba(225, 29, 72, 0.08)', borderColor: 'rgba(225, 29, 72, 0.25)', color: '#e11d48' }}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse inline-block" />
+                      Fast Moving
                     </span>
                   </div>
                 </div>
@@ -1705,9 +1711,9 @@ export default function CriticalStockPage() {
                         // safety_stock sudah dihitung ulang di aggregatedData berdasarkan runRateLookback
                         const ss = referenceItem.safety_stock ?? 0;
 
-                        markLineData.push(
+                        markLineData.push([
                           {
-                            yAxis: ss,
+                            coord: [chartData.labels[0], ss],
                             lineStyle: {
                               color: '#ef4444',
                               width: 1.5,
@@ -1724,8 +1730,9 @@ export default function CriticalStockPage() {
                               padding: [2, 4],
                               borderRadius: 2
                             }
-                          }
-                        );
+                          },
+                          { coord: [chartData.labels[chartData.labels.length - 1], ss] }
+                        ]);
 
                         // 1. Garis Vertikal saat Proyeksi Saldo (Kuning) memotong garis Safety Stock (Merah)
                         const todayLabelIdx = chartData.labels.findIndex(l => l.includes("Jul '26"));
@@ -1750,15 +1757,18 @@ export default function CriticalStockPage() {
 
                         if (ropExhaustLabel) {
                           const yPopupRop = yMax * 0.50;
-                          markLineData.push({
-                            xAxis: ropExhaustLabel,
-                            lineStyle: {
-                              color: '#3b82f6',
-                              width: 2,
-                              type: 'solid'
+                          markLineData.push([
+                            {
+                              coord: [ropExhaustLabel, 0],
+                              lineStyle: {
+                                color: '#3b82f6',
+                                width: 2,
+                                type: 'solid'
+                              },
+                              label: { show: false }
                             },
-                            label: { show: false }
-                          });
+                            { coord: [ropExhaustLabel, yMax * 1.02] }
+                          ]);
                           markPointData.push(
                             {
                               name: 'ROP Label',
@@ -1777,12 +1787,12 @@ export default function CriticalStockPage() {
                                 show: true,
                                 position: 'inside',
                                 formatter: [
-                                  `{title|BATAS ORDER (ROP)}`,
+                                  `{title|Batas Order (ROP)}`,
                                   `{date|${ropExhaustLabel}}`,
                                 ].join('\n'),
                                 rich: {
-                                  title: { color: '#3b82f6', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                  date: { color: isDark ? '#93c5fd' : '#1d4ed8', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                  title: { color: '#2563eb', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                  date: { color: isDark ? '#93c5fd' : '#1e40af', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                 },
                                 align: 'center',
                               }
@@ -1793,10 +1803,10 @@ export default function CriticalStockPage() {
                               symbol: 'circle',
                               symbolSize: 14,
                               itemStyle: {
-                                color: '#3b82f6',
+                                color: '#2563eb',
                                 borderColor: '#fff',
                                 borderWidth: 2.5,
-                                shadowColor: 'rgba(59,130,246,0.7)',
+                                shadowColor: 'rgba(37,99,235,0.7)',
                                 shadowBlur: 10,
                               },
                               label: { show: false }
@@ -1806,15 +1816,18 @@ export default function CriticalStockPage() {
 
                         if (safetyBreachLabel && safetyBreachLabel !== ropExhaustLabel) {
                           const yPopupSS = yMax * 0.32;
-                          markLineData.push({
-                            xAxis: safetyBreachLabel,
-                            lineStyle: {
-                              color: '#f59e0b',
-                              width: 2,
-                              type: 'solid'
+                          markLineData.push([
+                            {
+                              coord: [safetyBreachLabel, 0],
+                              lineStyle: {
+                                color: '#d97706',
+                                width: 2,
+                                type: 'solid'
+                              },
+                              label: { show: false }
                             },
-                            label: { show: false }
-                          });
+                            { coord: [safetyBreachLabel, yMax * 1.02] }
+                          ]);
                           markPointData.push(
                             {
                               name: 'Safety Stock Breach Label',
@@ -1824,21 +1837,21 @@ export default function CriticalStockPage() {
                               symbolOffset: [0, 0],
                               itemStyle: {
                                 color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
-                                borderColor: '#f59e0b',
+                                borderColor: '#d97706',
                                 borderWidth: 1.5,
-                                shadowColor: 'rgba(245,158,11,0.3)',
+                                shadowColor: 'rgba(217,119,6,0.3)',
                                 shadowBlur: 10,
                               },
                               label: {
                                 show: true,
                                 position: 'inside',
                                 formatter: [
-                                  `{title|< SAFETY STOCK}`,
+                                  `{title|Safety Stock Breach}`,
                                   `{date|${safetyBreachLabel}}`,
                                 ].join('\n'),
                                 rich: {
-                                  title: { color: '#f59e0b', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                  date: { color: isDark ? '#fde68a' : '#d97706', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                  title: { color: '#d97706', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                  date: { color: isDark ? '#fde68a' : '#b45309', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                 },
                                 align: 'center',
                               }
@@ -1863,39 +1876,45 @@ export default function CriticalStockPage() {
                         const BULAN_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
                         const currentMonthLabel = `${BULAN_SHORT[currentTodayMonth - 1]} '${String(currentTodayYear).slice(2)}`;
                         if (chartData.labels.includes(currentMonthLabel)) {
-                          markLineData.push({
-                            xAxis: currentMonthLabel,
-                            lineStyle: {
-                              color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
-                              width: 1.5,
-                              type: 'solid'
+                          markLineData.push([
+                            {
+                              coord: [currentMonthLabel, 0],
+                              lineStyle: {
+                                color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
+                                width: 1.5,
+                                type: 'solid'
+                              },
+                              label: {
+                                show: true,
+                                position: 'end',
+                                rotate: 0,
+                                formatter: 'Hari Ini',
+                                color: isDark ? '#cbd5e1' : '#475569',
+                                fontSize: 10,
+                                fontWeight: 'bold',
+                                backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
+                                padding: [3, 6],
+                                borderRadius: 4
+                              }
                             },
-                            label: {
-                              show: true,
-                              position: 'end',
-                              rotate: 0,
-                              formatter: 'Hari Ini',
-                              color: isDark ? '#cbd5e1' : '#475569',
-                              fontSize: 10,
-                              fontWeight: 'bold',
-                              backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
-                              padding: [3, 6],
-                              borderRadius: 4
-                            }
-                          });
+                            { coord: [currentMonthLabel, yMax * 1.02] }
+                          ]);
                         }
 
                         if (poLabel && showChartWithPO) {
                           const yPopupPO = yMax * 0.76;
-                          markLineData.push({
-                            xAxis: poLabel,
-                            lineStyle: {
-                              color: '#10b981',
-                              width: 2,
-                              type: 'solid'
+                          markLineData.push([
+                            {
+                              coord: [poLabel, 0],
+                              lineStyle: {
+                                color: '#10b981',
+                                width: 2,
+                                type: 'solid'
+                              },
+                              label: { show: false }
                             },
-                            label: { show: false }
-                          });
+                            { coord: [poLabel, yMax * 1.02] }
+                          ]);
                           markPointData.push(
                             {
                               name: 'PO Masuk Label',
@@ -1914,11 +1933,11 @@ export default function CriticalStockPage() {
                                 show: true,
                                 position: 'inside',
                                 formatter: [
-                                  `{title|RENCANA GR}`,
+                                  `{title|Rencana GR}`,
                                   `{date|${poLabel}}`,
                                 ].join('\n'),
                                 rich: {
-                                  title: { color: '#10b981', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                  title: { color: '#059669', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
                                   date: { color: isDark ? '#a7f3d0' : '#047857', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                 },
                                 align: 'center',
@@ -1940,18 +1959,59 @@ export default function CriticalStockPage() {
                             }
                           );
                         }
+
+                        if (safetyBreachLabel && poLabel && showChartWithPO && chartData.labels.includes(safetyBreachLabel) && chartData.labels.includes(poLabel)) {
+                          const yGap = yMax * 0.48;
+                          const idxStart = chartData.labels.indexOf(safetyBreachLabel);
+                          const idxEnd = chartData.labels.indexOf(poLabel);
+                          const displayGap = (idxStart >= 0 && idxEnd >= 0) ? Math.abs(idxEnd - idxStart) : Math.abs(gapMonths ?? 2);
+                          markLineData.push([
+                            {
+                              coord: [safetyBreachLabel, yGap],
+                              lineStyle: {
+                                color: '#ef4444',
+                                width: 2,
+                                type: 'solid',
+                              },
+                              symbol: 'arrow',
+                              symbolSize: 8,
+                              label: {
+                                show: true,
+                                position: 'middle',
+                                formatter: `Defisit ${displayGap} Bln`,
+                                color: '#ffffff',
+                                backgroundColor: '#ef4444',
+                                fontWeight: 'bold',
+                                fontSize: 8.5,
+                                fontFamily: 'inherit',
+                                padding: [1.5, 4],
+                                borderRadius: 6,
+                                shadowBlur: 8,
+                                shadowColor: 'rgba(239, 68, 68, 0.4)',
+                              }
+                            },
+                            {
+                              coord: [poLabel, yGap],
+                              symbol: 'arrow',
+                              symbolSize: 8
+                            }
+                          ]);
+                        }
                       } else {
                         if (poLabel && showChartWithPO) {
                           const yPopupPO = yMax * 0.76;
-                          markLineData.push({
-                            xAxis: poLabel,
-                            lineStyle: {
-                              color: '#10b981',
-                              width: 2,
-                              type: 'solid'
+                          markLineData.push([
+                            {
+                              coord: [poLabel, 0],
+                              lineStyle: {
+                                color: '#10b981',
+                                width: 2,
+                                type: 'solid'
+                              },
+                              label: { show: false }
                             },
-                            label: { show: false }
-                          });
+                            { coord: [poLabel, yMax * 1.02] }
+                          ]);
                           markPointData.push(
                             {
                               name: 'PO Masuk Label',
@@ -1970,11 +2030,11 @@ export default function CriticalStockPage() {
                                 show: true,
                                 position: 'inside',
                                 formatter: [
-                                  `{title|RENCANA GR}`,
+                                  `{title|Rencana GR}`,
                                   `{date|${poLabel}}`,
                                 ].join('\n'),
                                 rich: {
-                                  title: { color: '#10b981', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                  title: { color: '#059669', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
                                   date: { color: isDark ? '#a7f3d0' : '#047857', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                 },
                                 align: 'center',
@@ -1999,39 +2059,45 @@ export default function CriticalStockPage() {
 
                         const currentMonthLabel = "Jul '26";
                         if (chartData.labels.includes(currentMonthLabel)) {
-                          markLineData.push({
-                            xAxis: currentMonthLabel,
-                            lineStyle: {
-                              color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
-                              width: 1.5,
-                              type: 'solid'
+                          markLineData.push([
+                            {
+                              coord: [currentMonthLabel, 0],
+                              lineStyle: {
+                                color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)',
+                                width: 1.5,
+                                type: 'solid'
+                              },
+                              label: {
+                                show: true,
+                                position: 'end',
+                                rotate: 0,
+                                formatter: 'Hari Ini',
+                                color: isDark ? '#cbd5e1' : '#475569',
+                                fontSize: 10,
+                                fontWeight: 'bold',
+                                backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
+                                padding: [3, 6],
+                                borderRadius: 4
+                              }
                             },
-                            label: {
-                              show: true,
-                              position: 'end',
-                              rotate: 0,
-                              formatter: 'Hari Ini',
-                              color: isDark ? '#cbd5e1' : '#475569',
-                              fontSize: 10,
-                              fontWeight: 'bold',
-                              backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
-                              padding: [3, 6],
-                              borderRadius: 4
-                            }
-                          });
+                            { coord: [currentMonthLabel, yMax * 1.02] }
+                          ]);
                         }
 
                         if (exhaustLabel) {
                           const yPopupEx = yMax * 0.62;
-                          markLineData.push({
-                            xAxis: exhaustLabel,
-                            lineStyle: {
-                              color: '#ef4444',
-                              width: 2,
-                              type: 'solid'
+                          markLineData.push([
+                            {
+                              coord: [exhaustLabel, 0],
+                              lineStyle: {
+                                color: '#ef4444',
+                                width: 2,
+                                type: 'solid'
+                              },
+                              label: { show: false }
                             },
-                            label: { show: false }
-                          });
+                            { coord: [exhaustLabel, yMax * 1.02] }
+                          ]);
                           markPointData.push(
                             {
                               name: 'Stok Habis Label',
@@ -2041,21 +2107,21 @@ export default function CriticalStockPage() {
                               symbolOffset: [0, 0],
                               itemStyle: {
                                 color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
-                                borderColor: '#ef4444',
+                                borderColor: '#e11d48',
                                 borderWidth: 1.5,
-                                shadowColor: 'rgba(239,68,68,0.3)',
+                                shadowColor: 'rgba(225,29,72,0.3)',
                                 shadowBlur: 10,
                               },
                               label: {
                                 show: true,
                                 position: 'inside',
                                 formatter: [
-                                  `{title|STOK HABIS}`,
+                                  `{title|Stok Habis}`,
                                   `{date|${exhaustLabel}}`,
                                 ].join('\n'),
                                 rich: {
-                                  title: { color: '#ef4444', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                  date: { color: isDark ? '#fca5a5' : '#dc2626', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                  title: { color: '#e11d48', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                  date: { color: isDark ? '#fca5a5' : '#be123c', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                 },
                                 align: 'center',
                               }
@@ -2066,15 +2132,53 @@ export default function CriticalStockPage() {
                               symbol: 'circle',
                               symbolSize: 14,
                               itemStyle: {
-                                color: '#ef4444',
+                                color: '#e11d48',
                                 borderColor: '#fff',
                                 borderWidth: 2.5,
-                                shadowColor: 'rgba(239,68,68,0.7)',
+                                shadowColor: 'rgba(225,29,72,0.7)',
                                 shadowBlur: 10,
                               },
                               label: { show: false }
                             }
                           );
+                        }
+
+                        if (exhaustLabel && poLabel && showChartWithPO && chartData.labels.includes(exhaustLabel) && chartData.labels.includes(poLabel)) {
+                          const yGap = yMax * 0.48;
+                          const idxStart = chartData.labels.indexOf(exhaustLabel);
+                          const idxEnd = chartData.labels.indexOf(poLabel);
+                          const displayGap = (idxStart >= 0 && idxEnd >= 0) ? Math.abs(idxEnd - idxStart) : Math.abs(gapMonths ?? 1);
+                          markLineData.push([
+                            {
+                              coord: [exhaustLabel, yGap],
+                              lineStyle: {
+                                color: '#ef4444',
+                                width: 2,
+                                type: 'solid',
+                              },
+                              symbol: 'arrow',
+                              symbolSize: 8,
+                              label: {
+                                show: true,
+                                position: 'middle',
+                                formatter: `Defisit ${displayGap} Bln`,
+                                color: '#ffffff',
+                                backgroundColor: '#ef4444',
+                                fontWeight: 'bold',
+                                fontSize: 8.5,
+                                fontFamily: 'inherit',
+                                padding: [1.5, 4],
+                                borderRadius: 6,
+                                shadowBlur: 8,
+                                shadowColor: 'rgba(239, 68, 68, 0.4)',
+                              }
+                            },
+                            {
+                              coord: [poLabel, yGap],
+                              symbol: 'arrow',
+                              symbolSize: 8
+                            }
+                          ]);
                         }
                       }
 

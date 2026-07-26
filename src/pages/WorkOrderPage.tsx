@@ -531,7 +531,7 @@ export default function WorkOrderPage() {
             <table className="w-full text-left border-collapse data-table">
               <thead>
                 <tr style={{ backgroundColor: 'var(--color-surface-container-high)' }}>
-                  {['Nomor Rangkaian', 'Seri', 'Tipe Perawatan', 'Dipo / Lokasi', 'Status Plan', 'Realisasi SAP (Order)', 'Status Kepatuhan'].map(h => (
+                  {['Nomor Rangkaian', 'Seri', 'Tipe Perawatan', 'Dipo / Lokasi', 'Status Plan', 'Realisasi Order', 'Status Kepatuhan'].map(h => (
                     <th key={h} className="px-4 py-2 text-[10px] font-black uppercase tracking-wider" style={{ color: 'var(--color-on-surface)' }}>{h}</th>
                   ))}
                 </tr>
