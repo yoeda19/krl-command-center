@@ -1,4 +1,4 @@
-export default function StatusBadge({ status }: { status: any }) {
+export default function StatusBadge({ status, perspective }: { status: any; perspective?: 'GAP' | 'FISIK' }) {
   let cls = 'badge-aman';
   if (status === 'KRITIS' || status === 'FAST MOVING' || status === 'BELUM PO') {
     cls = 'badge-kritis';
@@ -10,7 +10,16 @@ export default function StatusBadge({ status }: { status: any }) {
     cls = 'bg-slate-100 dark:bg-slate-900/40 text-slate-700 dark:text-slate-400 border border-slate-300 dark:border-slate-700/60';
   }
 
-  const labelText = status === 'BELUM PO' ? 'Belum PO' : status;
+  let labelText = status === 'BELUM PO' ? 'Belum PO' : status;
+  if (perspective === 'GAP') {
+    if (status === 'KRITIS') labelText = 'Alert High';
+    else if (status === 'WASPADA') labelText = 'Alert Med';
+    else if (status === 'AMAN') labelText = 'Alert Low';
+  } else if (perspective === 'FISIK') {
+    if (status === 'KRITIS') labelText = 'Kritis';
+    else if (status === 'WASPADA') labelText = 'Waspada';
+    else if (status === 'AMAN') labelText = 'Aman';
+  }
 
   return (
     <div className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md whitespace-nowrap ${cls}`}>

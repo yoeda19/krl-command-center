@@ -645,29 +645,34 @@ export default function CriticalStockPage() {
     });
   })();
 
-  const getMaterialItemStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'BELUM PO' | 'AMAN' => {
+  const getFisikStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'BELUM PO' | 'AMAN' => {
     const sPo = (d as any).status_po;
     if (sPo === 'BELUM PO') return 'BELUM PO';
 
-    if (kpiPerspective === 'FISIK') {
-      // 📦 Perspektif Stok Fisik Rak Gudang (Safety Stock & ROP dalam satuan Bulan)
-      const ssMo = thresholdConfig.safetyStockMonths ?? 1.0;
-      const ropMo = thresholdConfig.ropMonths ?? 2.0;
+    const ssMo = thresholdConfig.safetyStockMonths ?? 1.0;
+    const ropMo = thresholdConfig.ropMonths ?? 2.0;
 
-      const ss = d.safety_stock_manual || (d.plan_bulanan > 0 ? Math.round(d.plan_bulanan * ssMo) : (d.safety_stock ?? 0));
-      const rop = d.plan_bulanan > 0 ? Math.round(d.plan_bulanan * ropMo) : (d.rop ?? 0);
+    const ss = d.safety_stock_manual || (d.plan_bulanan > 0 ? Math.round(d.plan_bulanan * ssMo) : (d.safety_stock ?? 0));
+    const rop = d.plan_bulanan > 0 ? Math.round(d.plan_bulanan * ropMo) : (d.rop ?? 0);
 
-      if (d.current_stock <= ss || sPo === 'KRITIS') return 'KRITIS';
-      if (d.current_stock <= rop || sPo === 'WASPADA') return 'WASPADA';
-      return 'AMAN';
-    }
+    if (d.current_stock <= ss) return 'KRITIS';
+    if (d.current_stock <= rop) return 'WASPADA';
+    return 'AMAN';
+  };
 
-    // ⏱️ Perspektif Gap Lead Time (Poin 10 Notulen Rapat 06 Juli 2026)
+  const getGapStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'BELUM PO' | 'AMAN' => {
+    const sPo = (d as any).status_po;
+    if (sPo === 'BELUM PO') return 'BELUM PO';
+
     const gapVal = typeof (d as any).gap_to_po === 'number' ? (d as any).gap_to_po : (typeof (d as any).gap_defisit === 'number' ? (d as any).gap_defisit : 0);
 
-    if (gapVal <= thresholdConfig.limitKritis || sPo === 'KRITIS') return 'KRITIS';
-    if (gapVal <= thresholdConfig.limitWaspada || sPo === 'WASPADA') return 'WASPADA';
-    return 'AMAN';
+    if (gapVal <= thresholdConfig.limitKritis) return 'KRITIS'; // Alert High (<= 2 bulan)
+    if (gapVal <= thresholdConfig.limitWaspada) return 'WASPADA'; // Alert Med (3 bulan)
+    return 'AMAN'; // Alert Low (>= 4 bulan)
+  };
+
+  const getMaterialItemStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'BELUM PO' | 'AMAN' => {
+    return kpiPerspective === 'FISIK' ? getFisikStatus(d) : getGapStatus(d);
   };
 
   const filteredData: CriticalStockItem[] = aggregatedData.filter(row => {
@@ -2622,6 +2627,9 @@ export default function CriticalStockPage() {
                 <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-center align-middle border-b border-r whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>
                   ROP<br/><span className="text-[8px] font-normal lowercase opacity-75">(pc/set/l)</span>
                 </th>
+                <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-center align-middle border-b border-r whitespace-nowrap" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>
+                  Status ROP
+                </th>
                 {['% Ketersediaan','Habis (Plan)'].map(h => (
                   <th key={h} rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-center whitespace-nowrap align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>{h}</th>
                 ))}
@@ -2678,6 +2686,9 @@ export default function CriticalStockPage() {
                     <td className="px-2 py-2 text-[11px] text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{row.stok_ideal.toLocaleString('id-ID')}</td>
                     <td className="px-2 py-2 text-[11px] text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{(row.safety_stock ?? 0).toLocaleString('id-ID')}</td>
                     <td className="px-2 py-2 text-[11px] text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{(row.rop ?? 0).toLocaleString('id-ID')}</td>
+                    <td className="px-2 py-2 text-center whitespace-nowrap">
+                      <StatusBadge status={getFisikStatus(row)} perspective="FISIK" />
+                    </td>
                     <td className="px-2 py-2 text-[11px] text-center">
                       {/* % Ketersediaan bar */}
                       <div className="flex items-center justify-center gap-1">
@@ -2703,7 +2714,7 @@ export default function CriticalStockPage() {
                       {(row as any).gap_to_po === null ? '-' : `${(row as any).gap_to_po > 0 ? '+' : ''}${(row as any).gap_to_po}`}
                     </td>
                     <td className="px-2 py-2 text-center whitespace-nowrap" style={{ backgroundColor: 'rgba(217,119,6,0.02)' }}>
-                      <StatusBadge status={(row as any).status_po} />
+                      <StatusBadge status={getGapStatus(row)} perspective="GAP" />
                     </td>
 
                     {/* Skenario Dengan PO (Green Tint) */}
