@@ -76,39 +76,109 @@ export default function ThresholdModal({
         </div>
 
         {/* Inputs */}
-        <div className="flex flex-col gap-3.5 max-h-[60vh] overflow-y-auto pr-1">
-          {isFieldVisible('limitKritis') && (
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                Batas Kritis (Bulan)
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                min="0.1"
-                value={config.limitKritis}
-                onChange={e => setConfig({ ...config, limitKritis: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-1.5 text-sm rounded-lg border bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
-              />
+        <div className="flex flex-col gap-4 max-h-[60vh] overflow-y-auto pr-1">
+          
+          {/* SEKSI 1: AMBANG WAKTU GAP (NOTULEN RAPAT 06 JULI 2026) */}
+          {(isFieldVisible('limitKritis') || isFieldVisible('limitWaspada') || isFieldVisible('limitAman')) && (
+            <div className="flex flex-col gap-2.5 p-3 rounded-lg border bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800">
+              <span className="text-xs font-bold flex items-center gap-1.5 text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                ⏱️ Ambang Waktu Gap Pengadaan
+              </span>
+
+              {isFieldVisible('limitKritis') && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Alert High (Bulan)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    value={config.limitKritis}
+                    onChange={e => setConfig({ ...config, limitKritis: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 text-sm rounded-lg border bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
+                  />
+                </div>
+              )}
+
+              {isFieldVisible('limitWaspada') && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Alert Med (Bulan)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    value={config.limitWaspada}
+                    onChange={e => setConfig({ ...config, limitWaspada: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 text-sm rounded-lg border bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
+                  />
+                </div>
+              )}
+
+              {isFieldVisible('limitAman') && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Alert Low (Bulan)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    value={config.limitAman ?? 4.0}
+                    onChange={e => setConfig({ ...config, limitAman: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 text-sm rounded-lg border bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
+                  />
+                  <p className="text-[10.5px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
+                    * Gap ≤ {config.limitKritis} bln ➔ Alert High | = {config.limitWaspada} bln ➔ Alert Med | ≥ {config.limitAman ?? 4.0} bln ➔ Alert Low.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
-          {isFieldVisible('limitWaspada') && (
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
-                Batas Waspada (Bulan)
-              </label>
-              <input
-                type="number"
-                step="0.1"
-                min="0.1"
-                value={config.limitWaspada}
-                onChange={e => setConfig({ ...config, limitWaspada: parseFloat(e.target.value) || 0 })}
-                className="w-full px-3 py-1.5 text-sm rounded-lg border bg-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
-              />
-              <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
-                * Batas Aman: Otomatis di atas {config.limitWaspada} bulan.
-              </p>
+          {/* SEKSI 2: AMBANG STOK FISIK GUDANG (SAFETY STOCK & ROP) */}
+          {(isFieldVisible('safetyStockMonths') || isFieldVisible('ropMonths') || isFieldVisible('safetyStockDays') || isFieldVisible('ropDays')) && (
+            <div className="flex flex-col gap-2.5 p-3 rounded-lg border bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40">
+              <span className="text-xs font-bold flex items-center gap-1.5 text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                📦 Ambang Stok Fisik Gudang (Safety Stock & ROP)
+              </span>
+
+              {(isFieldVisible('safetyStockMonths') || isFieldVisible('safetyStockDays')) && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Batas Kritis / Safety Stock (Bulan)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    value={config.safetyStockMonths ?? 1.0}
+                    onChange={e => setConfig({ ...config, safetyStockMonths: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 text-sm rounded-lg border bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-amber-500 border-slate-300 dark:border-slate-700"
+                  />
+                </div>
+              )}
+
+              {(isFieldVisible('ropMonths') || isFieldVisible('ropDays')) && (
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Batas Waspada / Re-Order Point (Bulan)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    value={config.ropMonths ?? 2.0}
+                    onChange={e => setConfig({ ...config, ropMonths: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-1.5 text-sm rounded-lg border bg-white dark:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-amber-500 border-slate-300 dark:border-slate-700"
+                  />
+                  <p className="text-[10.5px] text-amber-600 dark:text-amber-400 font-medium mt-0.5">
+                    * Stok Fisik ≤ {config.safetyStockMonths ?? 1.0} bln ➔ Kritis | ≤ {config.ropMonths ?? 2.0} bln ➔ Waspada | &gt; {config.ropMonths ?? 2.0} bln ➔ Aman.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

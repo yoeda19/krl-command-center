@@ -123,15 +123,18 @@ export default function WorkOrderPage() {
     // Check compatibility first
     const sched = scheduleList.find(s => s.nomor_rangkaian === nomor_rangkaian);
     if (sched) {
+      const normalizeStr = (s?: string | null) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
       if (bom.compat_seri_kereta) {
-        const list = bom.compat_seri_kereta.split(',').map(x => x.trim()).filter(Boolean);
-        if (list.length > 0 && !list.includes(sched.seri_kereta)) {
+        const list = bom.compat_seri_kereta.split(',').map(x => normalizeStr(x)).filter(Boolean);
+        const targetSeri = normalizeStr(sched.seri_kereta);
+        if (list.length > 0 && targetSeri && !list.some(item => item === targetSeri || targetSeri.includes(item) || item.includes(targetSeri))) {
           return 0; // not compatible
         }
       }
       if (bom.compat_propulsi) {
-        const list = bom.compat_propulsi.split(',').map(x => x.trim()).filter(Boolean);
-        if (list.length > 0 && !list.includes(sched.jenis_propulsi)) {
+        const list = bom.compat_propulsi.split(',').map(x => normalizeStr(x)).filter(Boolean);
+        const targetProp = normalizeStr(sched.jenis_propulsi);
+        if (list.length > 0 && targetProp && !list.some(item => item === targetProp || targetProp.includes(item) || item.includes(targetProp))) {
           return 0; // not compatible
         }
       }

@@ -66,7 +66,10 @@ export function calculateScheduleCompliance(
   monthlyPlans.forEach(plan => {
     const matchedEntryKey = Array.from(realisedMap.keys()).find(k => {
       const entry = realisedMap.get(k);
-      return entry && entry.nomor_rangkaian.toLowerCase() === plan.nomor_rangkaian.toLowerCase();
+      if (!entry) return false;
+      const cleanEntry = entry.nomor_rangkaian.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const cleanPlan = plan.nomor_rangkaian.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return cleanEntry && cleanPlan && (cleanEntry === cleanPlan || cleanEntry.includes(cleanPlan) || cleanPlan.includes(cleanEntry));
     });
 
     if (matchedEntryKey || plan.status_pelaksanaan === 'Selesai' || plan.status_pelaksanaan === 'Sedang Dirawat') {

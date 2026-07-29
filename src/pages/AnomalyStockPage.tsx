@@ -288,8 +288,10 @@ export default function AnomalyStockPage() {
       const plan_bulanan = rangeMonths.length > 0 ? Math.round((totalPlan / rangeMonths.length) * 10) / 10 : 0;
       const actual_monthly_avg = actualMonthsCount > 0 ? Math.round((totalActual / actualMonthsCount) * 10) / 10 : 0;
       const deviasi_qty = Math.round((actual_monthly_avg - plan_bulanan) * 10) / 10;
-      const deviasi_pct = plan_bulanan > 0 ? Math.round((deviasi_qty / plan_bulanan) * 100) : 0;
-      const status = (deviasi_pct > tolerancePlus || deviasi_pct < -toleranceMinus) ? 'ANOMALI' : 'NORMAL';
+      const deviasi_pct = plan_bulanan > 0 
+        ? Math.round((deviasi_qty / plan_bulanan) * 100) 
+        : (actual_monthly_avg > 0 ? 100 : 0);
+      const status = (deviasi_pct > tolerancePlus || deviasi_pct < -toleranceMinus || (plan_bulanan === 0 && actual_monthly_avg > 0)) ? 'ANOMALI' : 'NORMAL';
 
       return {
         nomor_material: mat.nomor_material,

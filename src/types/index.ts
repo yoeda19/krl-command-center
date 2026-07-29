@@ -64,6 +64,7 @@ export interface CriticalStockItem {
   use_formula?: boolean;
   rop?: number;
   tanggal_rencana_pengiriman?: string | null;
+  active_pos?: { po_number?: string | null; jumlah_dipesan: number; tanggal_rencana_pengiriman: string | null; status?: string }[];
 }
 
 export interface SafetyStockItem {

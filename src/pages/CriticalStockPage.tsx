@@ -230,7 +230,16 @@ function calculateDynamicMetrics(
 
   for (let i = 0; i < rangeMonths.length; i++) {
     const m = rangeMonths[i];
-    if (m.year === poYear && m.month === poMonth) {
+    if (item.active_pos && item.active_pos.length > 0) {
+      item.active_pos.forEach(po => {
+        if (po.tanggal_rencana_pengiriman) {
+          const d = new Date(po.tanggal_rencana_pengiriman);
+          if (d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
+            correctedStockWithPO += po.jumlah_dipesan;
+          }
+        }
+      });
+    } else if (m.year === poYear && m.month === poMonth) {
       correctedStockWithPO += (item.jumlah_dipesan || 0);
     }
     // Bulan lalu dikurangi realisasi aktual
@@ -361,6 +370,7 @@ export default function CriticalStockPage() {
   const [chartViewMode, setChartViewMode] = useState<'KONSUMSI' | 'SALDO'>('KONSUMSI');
   const [isThresholdModalOpen, setIsThresholdModalOpen] = useState(false);
   const [thresholdConfig, setThresholdConfig] = useState(() => getThresholdConfig());
+  const [kpiPerspective, setKpiPerspective] = useState<'GAP' | 'FISIK'>('GAP');
 
   const [totalTrains, setTotalTrains] = useState(0);
   const [inMaintenanceCount, setInMaintenanceCount] = useState(0);
@@ -636,13 +646,27 @@ export default function CriticalStockPage() {
   })();
 
   const getMaterialItemStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'BELUM PO' | 'AMAN' => {
-    const ss = d.safety_stock ?? 0;
-    const rop = d.rop ?? 0;
     const sPo = (d as any).status_po;
-    
     if (sPo === 'BELUM PO') return 'BELUM PO';
-    if (d.current_stock <= ss || sPo === 'KRITIS') return 'KRITIS';
-    if (d.current_stock <= rop || sPo === 'WASPADA') return 'WASPADA';
+
+    if (kpiPerspective === 'FISIK') {
+      // 📦 Perspektif Stok Fisik Rak Gudang (Safety Stock & ROP dalam satuan Bulan)
+      const ssMo = thresholdConfig.safetyStockMonths ?? 1.0;
+      const ropMo = thresholdConfig.ropMonths ?? 2.0;
+
+      const ss = d.safety_stock_manual || (d.plan_bulanan > 0 ? Math.round(d.plan_bulanan * ssMo) : (d.safety_stock ?? 0));
+      const rop = d.plan_bulanan > 0 ? Math.round(d.plan_bulanan * ropMo) : (d.rop ?? 0);
+
+      if (d.current_stock <= ss || sPo === 'KRITIS') return 'KRITIS';
+      if (d.current_stock <= rop || sPo === 'WASPADA') return 'WASPADA';
+      return 'AMAN';
+    }
+
+    // ⏱️ Perspektif Gap Lead Time (Poin 10 Notulen Rapat 06 Juli 2026)
+    const gapVal = typeof (d as any).gap_to_po === 'number' ? (d as any).gap_to_po : (typeof (d as any).gap_defisit === 'number' ? (d as any).gap_defisit : 0);
+
+    if (gapVal <= thresholdConfig.limitKritis || sPo === 'KRITIS') return 'KRITIS';
+    if (gapVal <= thresholdConfig.limitWaspada || sPo === 'WASPADA') return 'WASPADA';
     return 'AMAN';
   };
 
@@ -714,8 +738,8 @@ export default function CriticalStockPage() {
 
       // Simulasi proyeksi saldo berkesinambungan dari hari ini (Juli 2026) hingga akhir rentang filter
       const lastMonth = rangeMonths[rangeMonths.length - 1];
-      const startSimYear = Math.min(currentTodayYear, rangeMonths[0].year);
-      const startSimMonth = startSimYear === currentTodayYear ? currentTodayMonth : rangeMonths[0].month;
+      const startSimYear = rangeMonths[0].year;
+      const startSimMonth = rangeMonths[0].month;
 
       const simMonths: { year: number; month: number; key: string }[] = [];
       let curY = startSimYear;
@@ -732,26 +756,66 @@ export default function CriticalStockPage() {
       const simPlansBal = new Map<string, number>();
       const simCorrBal = new Map<string, number>();
 
-      let curPlanBal = referenceItem.current_stock;
-      let curCorrBal = referenceItem.current_stock;
+      const todayIdx = simMonths.findIndex(sm => sm.year === currentTodayYear && sm.month === currentTodayMonth);
 
-      simMonths.forEach((sm, idx) => {
-        if (idx === 0) {
-          simPlansBal.set(sm.key, curPlanBal);
-          simCorrBal.set(sm.key, curCorrBal);
-        } else {
-          const hasPO = showChartWithPO && sm.year === poYear && sm.month === poMonth;
+      if (todayIdx >= 0) {
+        simPlansBal.set(simMonths[todayIdx].key, referenceItem.current_stock);
+        simCorrBal.set(simMonths[todayIdx].key, referenceItem.current_stock);
+
+        // Pas Lalu (Backward Pass dari Hari Ini ke Jan '26)
+        let bPlan = referenceItem.current_stock;
+        let bCorr = referenceItem.current_stock;
+        for (let i = todayIdx - 1; i >= 0; i--) {
+          const sm = simMonths[i];
+          const hist = referenceItem.all_history?.filter(h => {
+            if (!h.tanggal) return false;
+            const d = new Date(h.tanggal);
+            return d.getFullYear() === sm.year && (d.getMonth() + 1) === sm.month;
+          }) || [];
+          const actVal = hist.reduce((sum, item) => sum + (item.qty || 0), 0);
+          bPlan += actVal;
+          bCorr += actVal;
+          simPlansBal.set(sm.key, Math.round(bPlan));
+          simCorrBal.set(sm.key, Math.round(bCorr));
+        }
+
+        // Pas Masa Depan (Forward Pass dari Hari Ini ke Des '27)
+        let fPlan = referenceItem.current_stock;
+        let fCorr = referenceItem.current_stock;
+        for (let i = todayIdx + 1; i < simMonths.length; i++) {
+          const sm = simMonths[i];
           const p = referenceItem.all_plans?.find(pl => pl.tahun === sm.year && pl.bulan === sm.month);
           const pQty = p ? p.plan_qty : 0;
           const adjustedPlan = Math.round(pQty * runRateMultiplier);
 
-          curPlanBal = Math.max(0, curPlanBal - pQty + (hasPO ? poQty : 0));
-          curCorrBal = Math.max(0, curCorrBal - adjustedPlan + (hasPO ? poQty : 0));
+          let poQtyToAdd = 0;
+          if (showChartWithPO) {
+            if (referenceItem.active_pos && referenceItem.active_pos.length > 0) {
+              referenceItem.active_pos.forEach(po => {
+                if (po.tanggal_rencana_pengiriman) {
+                  const d = new Date(po.tanggal_rencana_pengiriman);
+                  if (d.getFullYear() === sm.year && (d.getMonth() + 1) === sm.month) {
+                    poQtyToAdd += po.jumlah_dipesan;
+                  }
+                }
+              });
+            } else if (sm.year === poYear && sm.month === poMonth) {
+              poQtyToAdd = poQty;
+            }
+          }
 
-          simPlansBal.set(sm.key, curPlanBal);
-          simCorrBal.set(sm.key, curCorrBal);
+          // Tambahkan stok GR baru terlebih dahulu agar lompatan kedatangan barang terlihat jelas pada kurva saldo
+          fPlan = Math.max(0, fPlan + poQtyToAdd);
+          fCorr = Math.max(0, fCorr + poQtyToAdd);
+
+          simPlansBal.set(sm.key, Math.round(fPlan));
+          simCorrBal.set(sm.key, Math.round(fCorr));
+
+          // Setelah dicatat titik puncak kedatangan GR, kurangi pemakaian konsumsi bulan tersebut untuk titik berikutnya
+          fPlan = Math.max(0, fPlan - pQty);
+          fCorr = Math.max(0, fCorr - adjustedPlan);
         }
-      });
+      }
 
       const plansBalance = rangeMonths.map(m => {
         const k = `${m.year}-${m.month}`;
@@ -873,8 +937,19 @@ export default function CriticalStockPage() {
 
     rangeMonths.forEach((m, idx) => {
       // Tambahkan kuantiti PO jika opsi Dengan PO diaktifkan
-      if (showChartWithPO && m.year === poYear && m.month === poMonth) {
-        remainingStock += (referenceItem.jumlah_dipesan || 0);
+      if (showChartWithPO) {
+        if (referenceItem.active_pos && referenceItem.active_pos.length > 0) {
+          referenceItem.active_pos.forEach(po => {
+            if (po.tanggal_rencana_pengiriman) {
+              const d = new Date(po.tanggal_rencana_pengiriman);
+              if (d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
+                remainingStock += po.jumlah_dipesan;
+              }
+            }
+          });
+        } else if (m.year === poYear && m.month === poMonth) {
+          remainingStock += (referenceItem.jumlah_dipesan || 0);
+        }
       }
 
       // Past month (< July 2026)
@@ -1235,7 +1310,7 @@ export default function CriticalStockPage() {
                       {/* Info Gap & Fast Moving */}
                       {gapMonths !== null && (
                         <span className="ml-1 font-bold text-[10px] px-1.5 py-0.5 rounded border" style={{ backgroundColor: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: '#ef4444' }}>
-                          Gap: {gapMonths} Bln
+                          {chartViewMode === 'SALDO' ? `Gap Aman: ${Math.abs(gapMonths)} Bln` : `Defisit: ${Math.abs(gapMonths)} Bln`}
                         </span>
                       )}
                     </div>
@@ -1901,63 +1976,74 @@ export default function CriticalStockPage() {
                           ]);
                         }
 
-                        if (poLabel && showChartWithPO) {
-                          const yPopupPO = yMax * 0.76;
-                          markLineData.push([
-                            {
-                              coord: [poLabel, 0],
-                              lineStyle: {
-                                color: '#10b981',
-                                width: 2,
-                                type: 'solid'
-                              },
-                              label: { show: false }
-                            },
-                            { coord: [poLabel, yMax * 1.02] }
-                          ]);
-                          markPointData.push(
-                            {
-                              name: 'PO Masuk Label',
-                              coord: [poLabel, yPopupPO],
-                              symbol: 'roundRect',
-                              symbolSize: [95, 36],
-                              symbolOffset: [0, 0],
-                              itemStyle: {
-                                color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
-                                borderColor: '#10b981',
-                                borderWidth: 1.5,
-                                shadowColor: 'rgba(16,185,129,0.3)',
-                                shadowBlur: 10,
-                              },
-                              label: {
-                                show: true,
-                                position: 'inside',
-                                formatter: [
-                                  `{title|Rencana GR}`,
-                                  `{date|${poLabel}}`,
-                                ].join('\n'),
-                                rich: {
-                                  title: { color: '#059669', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                  date: { color: isDark ? '#a7f3d0' : '#047857', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                        if (showChartWithPO) {
+                          const activePOsToRender = (referenceItem.active_pos && referenceItem.active_pos.length > 0)
+                            ? referenceItem.active_pos
+                            : (poLabel ? [{ po_number: null, jumlah_dipesan: referenceItem.jumlah_dipesan || 0, tanggal_rencana_pengiriman: referenceItem.tanggal_rencana_pengiriman || null }] : []);
+
+                          activePOsToRender.forEach((po, poIdx) => {
+                            if (!po.tanggal_rencana_pengiriman) return;
+                            const dPO = new Date(po.tanggal_rencana_pengiriman);
+                            const pLabel = `${BULAN_SHORT[dPO.getMonth()]} '${String(dPO.getFullYear()).slice(2)}`;
+                            if (!chartData.labels.includes(pLabel)) return;
+
+                            const yPopupPO = yMax * (0.76 - (poIdx * 0.12));
+                            markLineData.push([
+                              {
+                                coord: [pLabel, 0],
+                                lineStyle: {
+                                  color: '#10b981',
+                                  width: 2,
+                                  type: 'solid'
                                 },
-                                align: 'center',
-                              }
-                            },
-                            {
-                              name: 'PO Masuk Dot',
-                              coord: [poLabel, 0],
-                              symbol: 'circle',
-                              symbolSize: 14,
-                              itemStyle: {
-                                color: '#10b981',
-                                borderColor: '#fff',
-                                borderWidth: 2.5,
-                                shadowColor: 'rgba(16,185,129,0.7)',
-                                shadowBlur: 10,
+                                label: { show: false }
                               },
-                              label: { show: false }
-                            }
-                          );
+                              { coord: [pLabel, yMax * 1.02] }
+                            ]);
+                            markPointData.push(
+                              {
+                                name: `PO Masuk Saldo Label ${poIdx}`,
+                                coord: [pLabel, yPopupPO],
+                                symbol: 'roundRect',
+                                symbolSize: [100, 36],
+                                symbolOffset: [0, 0],
+                                itemStyle: {
+                                  color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                  borderColor: '#10b981',
+                                  borderWidth: 1.5,
+                                  shadowColor: 'rgba(16,185,129,0.3)',
+                                  shadowBlur: 10,
+                                },
+                                label: {
+                                  show: true,
+                                  position: 'inside',
+                                  formatter: [
+                                    `{title|Rencana GR}`,
+                                    `{date|${pLabel} (+${po.jumlah_dipesan.toLocaleString('id-ID')})}`,
+                                  ].join('\n'),
+                                  rich: {
+                                    title: { color: '#059669', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                    date: { color: isDark ? '#a7f3d0' : '#047857', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                  },
+                                  align: 'center',
+                                }
+                              },
+                              {
+                                name: `PO Masuk Saldo Dot ${poIdx}`,
+                                coord: [pLabel, 0],
+                                symbol: 'circle',
+                                symbolSize: 14,
+                                itemStyle: {
+                                  color: '#10b981',
+                                  borderColor: '#fff',
+                                  borderWidth: 2.5,
+                                  shadowColor: 'rgba(16,185,129,0.7)',
+                                  shadowBlur: 10,
+                                },
+                                label: { show: false }
+                              }
+                            );
+                          });
                         }
 
                         if (safetyBreachLabel && poLabel && showChartWithPO && chartData.labels.includes(safetyBreachLabel) && chartData.labels.includes(poLabel)) {
@@ -1978,7 +2064,7 @@ export default function CriticalStockPage() {
                               label: {
                                 show: true,
                                 position: 'middle',
-                                formatter: `Defisit ${displayGap} Bln`,
+                                formatter: `Gap Aman ${displayGap} Bln`,
                                 color: '#ffffff',
                                 backgroundColor: '#ef4444',
                                 fontWeight: 'bold',
@@ -1998,63 +2084,75 @@ export default function CriticalStockPage() {
                           ]);
                         }
                       } else {
-                        if (poLabel && showChartWithPO) {
-                          const yPopupPO = yMax * 0.76;
-                          markLineData.push([
-                            {
-                              coord: [poLabel, 0],
-                              lineStyle: {
-                                color: '#10b981',
-                                width: 2,
-                                type: 'solid'
-                              },
-                              label: { show: false }
-                            },
-                            { coord: [poLabel, yMax * 1.02] }
-                          ]);
-                          markPointData.push(
-                            {
-                              name: 'PO Masuk Label',
-                              coord: [poLabel, yPopupPO],
-                              symbol: 'roundRect',
-                              symbolSize: [90, 36],
-                              symbolOffset: [0, 0],
-                              itemStyle: {
-                                color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
-                                borderColor: '#10b981',
-                                borderWidth: 1.5,
-                                shadowColor: 'rgba(16,185,129,0.3)',
-                                shadowBlur: 10,
-                              },
-                              label: {
-                                show: true,
-                                position: 'inside',
-                                formatter: [
-                                  `{title|Rencana GR}`,
-                                  `{date|${poLabel}}`,
-                                ].join('\n'),
-                                rich: {
-                                  title: { color: '#059669', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                  date: { color: isDark ? '#a7f3d0' : '#047857', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                        if (showChartWithPO) {
+                          const BULAN_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+                          const activePOsToRender = (referenceItem.active_pos && referenceItem.active_pos.length > 0)
+                            ? referenceItem.active_pos
+                            : (poLabel ? [{ po_number: null, jumlah_dipesan: referenceItem.jumlah_dipesan || 0, tanggal_rencana_pengiriman: referenceItem.tanggal_rencana_pengiriman || null }] : []);
+
+                          activePOsToRender.forEach((po, poIdx) => {
+                            if (!po.tanggal_rencana_pengiriman) return;
+                            const dPO = new Date(po.tanggal_rencana_pengiriman);
+                            const pLabel = `${BULAN_SHORT[dPO.getMonth()]} '${String(dPO.getFullYear()).slice(2)}`;
+                            if (!chartData.labels.includes(pLabel)) return;
+
+                            const yPopupPO = yMax * (0.76 - (poIdx * 0.12));
+                            markLineData.push([
+                              {
+                                coord: [pLabel, 0],
+                                lineStyle: {
+                                  color: '#10b981',
+                                  width: 2,
+                                  type: 'solid'
                                 },
-                                align: 'center',
-                              }
-                            },
-                            {
-                              name: 'PO Masuk Dot',
-                              coord: [poLabel, 0],
-                              symbol: 'circle',
-                              symbolSize: 14,
-                              itemStyle: {
-                                color: '#10b981',
-                                borderColor: '#fff',
-                                borderWidth: 2.5,
-                                shadowColor: 'rgba(16,185,129,0.7)',
-                                shadowBlur: 10,
+                                label: { show: false }
                               },
-                              label: { show: false }
-                            }
-                          );
+                              { coord: [pLabel, yMax * 1.02] }
+                            ]);
+                            markPointData.push(
+                              {
+                                name: `PO Masuk Label ${poIdx}`,
+                                coord: [pLabel, yPopupPO],
+                                symbol: 'roundRect',
+                                symbolSize: [100, 36],
+                                symbolOffset: [0, 0],
+                                itemStyle: {
+                                  color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                  borderColor: '#10b981',
+                                  borderWidth: 1.5,
+                                  shadowColor: 'rgba(16,185,129,0.3)',
+                                  shadowBlur: 10,
+                                },
+                                label: {
+                                  show: true,
+                                  position: 'inside',
+                                  formatter: [
+                                    `{title|Rencana GR}`,
+                                    `{date|${pLabel} (+${po.jumlah_dipesan.toLocaleString('id-ID')})}`,
+                                  ].join('\n'),
+                                  rich: {
+                                    title: { color: '#059669', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
+                                    date: { color: isDark ? '#a7f3d0' : '#047857', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                  },
+                                  align: 'center',
+                                }
+                              },
+                              {
+                                name: `PO Masuk Dot ${poIdx}`,
+                                coord: [pLabel, 0],
+                                symbol: 'circle',
+                                symbolSize: 14,
+                                itemStyle: {
+                                  color: '#10b981',
+                                  borderColor: '#fff',
+                                  borderWidth: 2.5,
+                                  shadowColor: 'rgba(16,185,129,0.7)',
+                                  shadowBlur: 10,
+                                },
+                                label: { show: false }
+                              }
+                            );
+                          });
                         }
 
                         const currentMonthLabel = "Jul '26";
@@ -2227,53 +2325,76 @@ export default function CriticalStockPage() {
 
         {/* RIGHT COLUMN: KPIs & Bar Chart (Spans 1 column) */}
         <div className="flex flex-col justify-between h-full space-y-3">
-          {/* KPI Cards (2x2 Grid) — Interactive Clickable Filters */}
+          {/* KPI Cards (2x2 Grid) — Dynamic Labels based on kpiPerspective */}
           <div className="grid grid-cols-2 gap-3">
             <div
               onClick={() => setFilterStatus(prev => prev.length === 1 && prev[0] === 'KRITIS' ? [] : ['KRITIS'])}
               className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              title="Klik untuk memfilter status Kritis"
+              title={`Klik untuk memfilter status ${kpiPerspective === 'GAP' ? 'Alert High' : 'Stok Kritis'}`}
             >
-              <KpiCard label="Status Kritis" value={countKritis} borderColor="#ef4444" ledStatus={countKritis > 0 ? "red" : "green"} sparkData={[3, 2, 2, 3, 3, 3]} />
+              <KpiCard label={kpiPerspective === 'GAP' ? "Alert High" : "Stok Kritis"} value={countKritis} borderColor="#ef4444" ledStatus={countKritis > 0 ? "red" : "green"} sparkData={[3, 2, 2, 3, 3, 3]} />
             </div>
 
             <div
               onClick={() => setFilterStatus(prev => prev.length === 1 && prev[0] === 'WASPADA' ? [] : ['WASPADA'])}
               className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              title="Klik untuk memfilter status Waspada"
+              title={`Klik untuk memfilter status ${kpiPerspective === 'GAP' ? 'Alert Med' : 'Stok Waspada'}`}
             >
-              <KpiCard label="Status Waspada" value={countWaspada} borderColor="var(--color-led-amber)" ledStatus={countWaspada > 0 ? "amber" : "green"} sparkData={[5, 4, 3, 3, 4, 3]} />
+              <KpiCard label={kpiPerspective === 'GAP' ? "Alert Med" : "Stok Waspada"} value={countWaspada} borderColor="var(--color-led-amber)" ledStatus={countWaspada > 0 ? "amber" : "green"} sparkData={[5, 4, 3, 3, 4, 3]} />
             </div>
 
             <div
               onClick={() => setFilterStatus(prev => prev.length === 1 && prev[0] === 'AMAN' ? [] : ['AMAN'])}
               className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              title="Klik untuk memfilter status Aman"
+              title={`Klik untuk memfilter status ${kpiPerspective === 'GAP' ? 'Alert Low' : 'Stok Aman'}`}
             >
-              <KpiCard label="Status Aman" value={countAman} borderColor="var(--color-led-green)" ledStatus="green" sparkData={[10, 11, 12, 13, 14, 15]} />
+              <KpiCard label={kpiPerspective === 'GAP' ? "Alert Low" : "Stok Aman"} value={countAman} borderColor="var(--color-led-green)" ledStatus="green" sparkData={[10, 11, 12, 13, 14, 15]} />
             </div>
 
             <div
               onClick={() => setFilterStatus(prev => prev.length === 1 && prev[0] === 'BELUM PO' ? [] : ['BELUM PO'])}
               className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              title="Klik untuk memfilter status Perlu Reorder"
+              title="Klik untuk memfilter status Belum PO"
             >
-              <KpiCard label="Perlu Reorder" value={countReorder} borderColor="#3b82f6" ledStatus={countReorder > 0 ? "blue" : "green"} sparkData={[1, 2, 1, 3, 2, 2]} />
+              <KpiCard label="Belum PO" value={countReorder} borderColor="#3b82f6" ledStatus={countReorder > 0 ? "blue" : "green"} sparkData={[1, 2, 1, 3, 2, 2]} />
             </div>
           </div>
 
-          {/* Tombol Pengaturan Ambang Batas Ramping */}
-          <button
-            onClick={() => setIsThresholdModalOpen(true)}
-            className="w-full tactile-card rounded-lg px-3 py-2 flex items-center justify-center gap-2 text-xs font-bold transition-all hover:opacity-90 active:scale-[0.99]"
-            style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-primary)' }}>
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-            </svg>
-            <span>Pengaturan Ambang Batas</span>
-          </button>
+          {/* Controls Bar: Perspective Selector & Threshold Settings */}
+          <div className="flex gap-2 items-center">
+            {/* Segmented Perspective Toggle Selector */}
+            <div className="flex-1 flex rounded-lg p-0.5 border text-[10px] font-bold" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
+              <button
+                onClick={() => setKpiPerspective('GAP')}
+                className={`flex-1 py-1 px-1.5 rounded transition-all text-center ${kpiPerspective === 'GAP' ? 'shadow-sm font-black' : 'opacity-70 hover:opacity-100'}`}
+                style={kpiPerspective === 'GAP' ? { backgroundColor: 'var(--color-primary)', color: '#ffffff' } : { color: 'var(--color-on-surface-variant)' }}
+                title="Perspektif Waktu Gap Lead Time Pengadaan"
+              >
+                Gap (Lead Time)
+              </button>
+              <button
+                onClick={() => setKpiPerspective('FISIK')}
+                className={`flex-1 py-1 px-1.5 rounded transition-all text-center ${kpiPerspective === 'FISIK' ? 'shadow-sm font-black' : 'opacity-70 hover:opacity-100'}`}
+                style={kpiPerspective === 'FISIK' ? { backgroundColor: 'var(--color-primary)', color: '#ffffff' } : { color: 'var(--color-on-surface-variant)' }}
+                title="Perspektif Saldo Stok Fisik Rak Gudang (Safety Stock & ROP)"
+              >
+                Fisik (ROP)
+              </button>
+            </div>
+
+            {/* Tombol Pengaturan Ambang Batas Ramping */}
+            <button
+              onClick={() => setIsThresholdModalOpen(true)}
+              className="tactile-card rounded-lg px-2.5 py-1.5 flex items-center justify-center gap-1 text-xs font-bold transition-all hover:opacity-90 active:scale-[0.99]"
+              style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+              title="Pengaturan Ambang Batas"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-primary)' }}>
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </button>
+          </div>
 
           {/* ECharts — Pie Chart Status Distribusi */}
           <div className="tactile-card rounded-lg overflow-hidden flex-1 flex flex-col justify-between">
@@ -2449,10 +2570,10 @@ export default function CriticalStockPage() {
           <span style={{ color: 'var(--color-on-surface-variant)' }}>Status:</span>
           {(['KRITIS', 'WASPADA', 'AMAN', 'BELUM PO'] as const).map(s => {
             let labelText = '';
-            if (s === 'KRITIS') labelText = 'Kritis';
-            else if (s === 'WASPADA') labelText = 'Waspada';
-            else if (s === 'AMAN') labelText = 'Aman';
-            else if (s === 'BELUM PO') labelText = 'No PO';
+            if (s === 'KRITIS') labelText = kpiPerspective === 'GAP' ? 'Alert High' : 'Stok Kritis';
+            else if (s === 'WASPADA') labelText = kpiPerspective === 'GAP' ? 'Alert Med' : 'Stok Waspada';
+            else if (s === 'AMAN') labelText = kpiPerspective === 'GAP' ? 'Alert Low' : 'Stok Aman';
+            else if (s === 'BELUM PO') labelText = 'Belum PO';
 
             return (
               <label key={s} className="flex items-center gap-1 cursor-pointer">
@@ -2581,7 +2702,7 @@ export default function CriticalStockPage() {
                     <td className="px-2 py-2 text-[11px] text-center font-bold" style={{ backgroundColor: 'rgba(217,119,6,0.02)', color: (row as any).gap_to_po === null ? 'var(--color-on-surface-variant)' : 'var(--color-on-surface)' }}>
                       {(row as any).gap_to_po === null ? '-' : `${(row as any).gap_to_po > 0 ? '+' : ''}${(row as any).gap_to_po}`}
                     </td>
-                    <td className="px-2 py-2 text-center" style={{ backgroundColor: 'rgba(217,119,6,0.02)' }}>
+                    <td className="px-2 py-2 text-center whitespace-nowrap" style={{ backgroundColor: 'rgba(217,119,6,0.02)' }}>
                       <StatusBadge status={(row as any).status_po} />
                     </td>
 
@@ -2668,7 +2789,7 @@ export default function CriticalStockPage() {
         isOpen={isThresholdModalOpen}
         onClose={() => setIsThresholdModalOpen(false)}
         onSave={setThresholdConfig}
-        allowedFields={['limitKritis', 'limitWaspada']}
+        allowedFields={['limitKritis', 'limitWaspada', 'limitAman', 'safetyStockMonths', 'ropMonths']}
       />
     </PageWrapper>
   );

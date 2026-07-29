@@ -51,6 +51,24 @@ export default function GlossaryPage() {
 
   const defaultGlossaryTerms: GlossaryTerm[] = [
     {
+      kategori: 'Pengadaan',
+      istilah: 'Multi-PO (Multi Purchase Order)',
+      definisi: 'Dukungan pengelolaan dan akumulasi beberapa dokumen pesanan pengadaan (Purchase Order) yang berjalan secara simultan untuk satu material dengan tanggal pengiriman (GR) parsial bertahap.',
+      konteks: 'Tabel & Grafik Stok Kritis (Multi-Stage Line Jump)'
+    },
+    {
+      kategori: 'Status & Indikator',
+      istilah: 'Defisit Stok',
+      definisi: 'Durasi jarak waktu (bulan) dari saat persediaan stok fisik mencapai 0 unit hingga barang dari PO pengadaan pertama tiba di gudang.',
+      konteks: 'Mode Konsumsi pada Grafik Stok Kritis'
+    },
+    {
+      kategori: 'Status & Indikator',
+      istilah: 'Gap Aman (Safety Stock Gap)',
+      definisi: 'Durasi jarak waktu (bulan) sejak persediaan stok menembus batas Stok Pengaman (Safety Stock) hingga barang dari PO pengadaan pertama tiba di gudang.',
+      konteks: 'Mode Saldo Stok pada Grafik Stok Kritis'
+    },
+    {
       kategori: 'Istilah Bisnis',
       istilah: 'Anomali Stok (Instability)',
       definisi: 'Kondisi ketidaksesuaian pola konsumsi material terhadap jadwal perawatan (over-absorption / under-absorption) akibat lonjakan pemakaian insidentil atau keterlambatan pelaksanaan perawatan.',
@@ -222,16 +240,16 @@ export default function GlossaryPage() {
       penjelasan: 'Menyesuaikan rencana penyerapan bulanan ke depan berdasarkan laju keborosan konsumsi nyata.'
     },
     {
-      nama: 'Proyeksi Saldo Stok (Dengan PO)',
+      nama: 'Proyeksi Saldo Stok (Dengan Multi-PO)',
       komponen: 'Grafik Saldo Stok Kritis',
-      rumus: 'Saldo(t-1) - Penyerapan(t) + (Qty PO jika t == Bulan Kedatangan PO)',
-      penjelasan: 'Simulasi penurunan saldo stok bulanan yang secara otomatis bertambah saat PO pengadaan yang dipesan dijadwatchan tiba.'
+      rumus: 'Saldo(t) = Saldo(t-1) - Konsumsi(t) + Sum(Qty PO_i yang tiba pada bulan t)',
+      penjelasan: 'Simulasi pergerakan saldo persediaan yang melompat naik secara dinamis pada setiap bulan kedatangan dari masing-masing PO aktif.'
     },
     {
-      nama: 'Gap Ke PO (Bulan)',
-      komponen: 'Tabel Skenario Pengadaan',
-      rumus: 'Bulan Kedatangan PO - Bulan Estimasi Stok Habis',
-      penjelasan: 'Mengukur jarak antara estimasi stok habis dengan kedatangan barang. Nilai minus menunjukkan risiko kekosongan stok (Stock-out).'
+      nama: 'Gap Ke PO (Defisit vs Gap Aman)',
+      komponen: 'Toolbar & Grafik Stok Kritis',
+      rumus: 'Mode Konsumsi = Bulan PO - Bulan Stok Habis (0 Unit) | Mode Saldo Stok = Bulan PO - Bulan Safety Stock Breach',
+      penjelasan: 'Mengukur durasi risiko kekosongan barang total (Defisit) pada Mode Konsumsi atau durasi operasi di bawah batas pengaman (Gap Aman) pada Mode Saldo Stok.'
     }
   ];
 

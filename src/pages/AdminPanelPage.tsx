@@ -521,6 +521,7 @@ export default function AdminPanelPage() {
 
       const fresh = await getMaintenanceBomConfig();
       setBomList(fresh);
+      useAppStore.getState().clearCache();
       setActiveBOMMaterialModal(null);
       showSuccess(`Konfigurasi BOM untuk material ${bomModalMaterial} berhasil disimpan.`);
     } catch (err) {
@@ -890,6 +891,7 @@ export default function AdminPanelPage() {
         });
         setProcureList(prev => prev.map(p => p.id === updatedPO.id ? updatedPO : p));
         setEditingPO(null);
+        clearCache();
         showSuccess(`Progress PO #${updatedPO.id} (${updatedPO.nomor_material}) berhasil diperbarui.`);
       } else {
         // Sync legacy fields for new PO
@@ -926,6 +928,7 @@ export default function AdminPanelPage() {
         setProcureList(freshData);
         setNewPO(emptyPO());
         setShowAddForm(false);
+        clearCache();
         showSuccess(`NOD/PO baru untuk ${finalNewPO.nomor_material} berhasil disimpan.`);
       }
     } finally {

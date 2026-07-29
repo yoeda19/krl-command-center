@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
+import { getLatestDataDates } from '../../services/supabaseService';
 
 // SVG icon components — bersih, tidak ada AI-generated icon
 const Icons = {
@@ -93,6 +95,18 @@ interface SidebarProps {
 export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }: SidebarProps) {
   const { userRole } = useAppStore();
   const isViewer = userRole?.toLowerCase() === 'viewer';
+
+  const [syncDates, setSyncDates] = useState<{ lastOrders: string; lastPenyerapan: string }>({
+    lastOrders: '11 Jul 2026',
+    lastPenyerapan: '11 Jul 2026',
+  });
+
+  useEffect(() => {
+    getLatestDataDates().then(res => {
+      if (res) setSyncDates(res);
+    });
+  }, []);
+
   const visibleNavItems = navItems.filter(item => {
     if (isViewer && (item.path === '/admin-panel' || item.path === '/audit-log')) {
       return false;
@@ -180,6 +194,29 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
           ))}
         </ul>
       </div>
+
+      {/* ── Status Sync Database SAP ── */}
+      {!collapsed && (
+        <div className="mx-2 mb-2 p-2 rounded-lg border text-[10px] space-y-1.5 shadow-sm" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
+          <div className="flex justify-between items-center font-bold border-b pb-1" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
+            <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/></svg>
+              Status Data System
+            </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" title="Database Terhubung" />
+          </div>
+          <div className="space-y-1 text-[9.5px]">
+            <div className="flex justify-between items-center" style={{ color: 'var(--color-on-surface-variant)' }}>
+              <span>Orders (WO):</span>
+              <strong style={{ color: 'var(--color-on-surface)' }}>{syncDates.lastOrders}</strong>
+            </div>
+            <div className="flex justify-between items-center" style={{ color: 'var(--color-on-surface-variant)' }}>
+              <span>Riwayat Penyerapan:</span>
+              <strong style={{ color: 'var(--color-on-surface)' }}>{syncDates.lastPenyerapan}</strong>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Toggle ── */}
       <div className="p-2.5 border-t shrink-0" style={{ borderColor: 'var(--color-steel-border)' }}>

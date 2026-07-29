@@ -200,7 +200,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
 
   const { data: adminParams } = await supabase
     .from('procurement_progress')
-    .select('nomor_material, plan_lead_time, tanggal_rencana_pengiriman, jumlah_dipesan, status, tanggal_gr, gr_release_date, po_release_date, tanggal_po');
+    .select('nomor_material, plan_lead_time, tanggal_rencana_pengiriman, jumlah_dipesan, status, tanggal_gr, gr_release_date, po_release_date, tanggal_po, po_number, nomor_po');
 
   // Caching mechanism for recent_history (cutoff dari Januari 2025)
   let history: { id: number; nomor_material: string; qty: number; tanggal: string | null; gudang: string; order_no: string | null; harga_satuan?: number }[] = [];
@@ -344,10 +344,25 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
 
   materials.forEach(mat => {
     const config = configs?.find(c => c.nomor_material === mat.nomor_material);
-    const activeParam = adminParams?.find(p => p.nomor_material === mat.nomor_material && p.status !== 'Goods Receipt (GR)');
-    const anyParam = adminParams?.find(p => p.nomor_material === mat.nomor_material);
-    const param = activeParam || anyParam;
-    const deliveryDateStr = param?.tanggal_rencana_pengiriman || param?.tanggal_gr || param?.gr_release_date || param?.po_release_date || param?.tanggal_po || null;
+    const activeParams = adminParams?.filter(p => p.nomor_material === mat.nomor_material && p.status !== 'Goods Receipt (GR)') || [];
+    const anyParams = adminParams?.filter(p => p.nomor_material === mat.nomor_material) || [];
+    const paramsToUse = activeParams.length > 0 ? activeParams : anyParams;
+    const totalJumlahDipesan = activeParams.reduce((sum, p) => sum + (Number(p.jumlah_dipesan) || 0), 0);
+
+    let deliveryDateStr: string | null = null;
+    activeParams.forEach(p => {
+      const dStr = p.tanggal_rencana_pengiriman || p.tanggal_gr || p.gr_release_date || p.po_release_date || p.tanggal_po;
+      if (dStr) {
+        if (!deliveryDateStr || new Date(dStr) < new Date(deliveryDateStr)) {
+          deliveryDateStr = dStr;
+        }
+      }
+    });
+    if (!deliveryDateStr && paramsToUse.length > 0) {
+      const param = paramsToUse[0];
+      deliveryDateStr = param.tanggal_rencana_pengiriman || param.tanggal_gr || param.gr_release_date || param.po_release_date || param.tanggal_po || null;
+    }
+    const param = paramsToUse[0];
     const matHistory = history?.filter(h => h.nomor_material === mat.nomor_material) || [];
     const matPlans = (monthlyPlans || []).filter(p => p.nomor_material === mat.nomor_material).map(p => ({
       ...p,
@@ -536,7 +551,13 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
         })(),
         all_history: whHistory.map(h => ({ qty: h.qty, tanggal: h.tanggal, gudang: h.gudang, order_no: h.order_no })),
         tanggal_rencana_pengiriman: deliveryDateStr,
-        jumlah_dipesan: param?.jumlah_dipesan || 0,
+        jumlah_dipesan: totalJumlahDipesan || (paramsToUse[0]?.jumlah_dipesan ? Number(paramsToUse[0]?.jumlah_dipesan) : 0),
+        active_pos: activeParams.map(p => ({
+          po_number: p.nomor_po || p.po_number || null,
+          jumlah_dipesan: Number(p.jumlah_dipesan) || 0,
+          tanggal_rencana_pengiriman: p.tanggal_rencana_pengiriman || p.tanggal_gr || p.gr_release_date || p.po_release_date || p.tanggal_po || null,
+          status: p.status || 'Dalam Pengadaan'
+        })),
       });
     });
   });
@@ -602,8 +623,14 @@ export async function getProcurementData(): Promise<ProcurementItem[]> {
     const po_number = item.po_number || item.nomor_po;
     const pr_number = item.pr_number || item.nomor_pr;
     const po_release_date = item.po_release_date || item.tanggal_po;
-    const gr_release_date = item.gr_release_date || item.tanggal_gr || item.tanggal_penerimaan_barang;
-    const tanggal_rencana_pengiriman = item.tanggal_rencana_pengiriman || item.tanggal_gr || '';
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    const rawGrDate = item.gr_release_date || item.tanggal_gr || item.tanggal_penerimaan_barang;
+    // Sanitizer Proteksi: Realisasi GR tidak boleh bertanggal masa depan (belum tiba bulannya)
+    const isFutureGr = rawGrDate ? new Date(rawGrDate) > today : false;
+    const gr_release_date = (rawGrDate && !isFutureGr) ? rawGrDate : null;
+    const tanggal_rencana_pengiriman = item.tanggal_rencana_pengiriman || (isFutureGr ? rawGrDate : item.tanggal_gr || '');
 
     const costVal = item.cost ?? item.total_harga ?? 0;
     const isLelang = costVal >= 500000000;
@@ -1443,6 +1470,44 @@ export function subscribeToRealtimeChanges(
       }
     }
   };
+}
+
+export async function getLatestDataDates(): Promise<{ lastOrders: string; lastPenyerapan: string }> {
+  try {
+    const { data: ord } = await supabase
+      .from('orders')
+      .select('order_date')
+      .order('order_date', { ascending: false })
+      .limit(1);
+
+    let lastOrders = '11 Jul 2026';
+    if (ord && ord[0]?.order_date) {
+      const d = new Date(ord[0].order_date);
+      if (!isNaN(d.getTime())) {
+        const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+        lastOrders = `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+      }
+    }
+
+    const { data: hist } = await supabase
+      .from('recent_history')
+      .select('tanggal')
+      .order('tanggal', { ascending: false })
+      .limit(1);
+
+    let lastPenyerapan = '11 Jul 2026';
+    if (hist && hist[0]?.tanggal) {
+      const d = new Date(hist[0].tanggal);
+      if (!isNaN(d.getTime())) {
+        const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+        lastPenyerapan = `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+      }
+    }
+
+    return { lastOrders, lastPenyerapan };
+  } catch {
+    return { lastOrders: '11 Jul 2026', lastPenyerapan: '11 Jul 2026' };
+  }
 }
 
 // ── 11. GLOSSARY & FORMULA MANAGEMENT ──────────────────────

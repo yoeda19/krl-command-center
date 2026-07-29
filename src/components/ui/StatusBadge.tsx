@@ -13,8 +13,8 @@ export default function StatusBadge({ status }: { status: any }) {
   const labelText = status === 'BELUM PO' ? 'Belum PO' : status;
 
   return (
-    <div className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md ${cls}`}>
-      <span className="text-[11px] font-semibold tracking-wide">{labelText}</span>
+    <div className={`inline-flex items-center justify-center px-2 py-0.5 rounded-md whitespace-nowrap ${cls}`}>
+      <span className="text-[10px] font-bold tracking-wide whitespace-nowrap">{labelText}</span>
     </div>
   );
 }
