@@ -336,14 +336,18 @@ export default function AdminPanelPage() {
   useEffect(() => {
     const unsub = subscribeToRealtimeChanges('global_thresholds', (payload) => {
       if (payload.new) {
-        const updated = {
+        const updated: ThresholdConfig = {
+          ...getThresholdConfig(),
           limitKritis: Number(payload.new.limit_kritis),
           limitWaspada: Number(payload.new.limit_waspada),
+          limitAman: Number(payload.new.limit_aman ?? 4.0),
           limitSlowMoving: Number(payload.new.limit_slow_moving),
           limitAtRisk: Number(payload.new.limit_at_risk),
           limitDeadStock: Number(payload.new.limit_dead_stock),
           holdingCostPct: Number(payload.new.holding_cost_pct),
           anomaliTolerancePct: Number(payload.new.anomali_tolerance_pct),
+          safetyStockMonths: Number(payload.new.safety_stock_months ?? 1.0),
+          ropMonths: Number(payload.new.rop_months ?? 2.0),
         };
         setGlobalThresholds(updated);
         saveThresholdConfig(updated);
