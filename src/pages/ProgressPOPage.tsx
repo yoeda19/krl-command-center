@@ -428,9 +428,9 @@ export default function ProgressPOPage() {
                     } else if (h.toLowerCase().includes('realisasi')) {
                       textColor = '#f97316'; // Orange untuk Realisasi
                     }
-                    const stickyClass = idx === 0 ? 'sticky left-0 z-20 bg-[var(--color-primary-container)]'
-                      : idx === 1 ? 'sticky left-[48px] z-20 bg-[var(--color-primary-container)]'
-                      : idx === 2 ? 'sticky left-[158px] z-20 bg-[var(--color-primary-container)] shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)]'
+                    const stickyClass = idx === 0 ? 'md:sticky left-0 z-20 bg-[var(--color-primary-container)]'
+                      : idx === 1 ? 'md:sticky left-[48px] z-20 bg-[var(--color-primary-container)]'
+                      : idx === 2 ? 'md:sticky left-[158px] z-20 bg-[var(--color-primary-container)] shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)]'
                       : '';
 
                     return (
@@ -448,15 +448,15 @@ export default function ProgressPOPage() {
                   return (
                     <tr key={row.id} style={{ backgroundColor: rowBg }}>
                       {/* 1. NO */}
-                      <td className="sticky left-0 z-10 px-3 py-3 text-xs font-bold text-center" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>{i + 1}</td>
+                      <td className="md:sticky left-0 z-10 px-3 py-3 text-xs font-bold text-center" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>{i + 1}</td>
                       
                       {/* 2. Nomor Material */}
-                      <td className="sticky left-[48px] z-10 px-3 py-3 text-xs font-mono font-bold text-center whitespace-nowrap" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
+                      <td className="md:sticky left-[48px] z-10 px-3 py-3 text-xs font-mono font-bold text-center whitespace-nowrap" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
                         {row.nomor_material || '—'}
                       </td>
 
                       {/* 3. Nama Material */}
-                      <td className="sticky left-[158px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-3 py-3 text-xs font-semibold whitespace-nowrap min-w-[200px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
+                      <td className="md:sticky left-[158px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-3 py-3 text-xs font-semibold whitespace-nowrap min-w-[200px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
                         {row.uraian_material || '—'}
                       </td>
 

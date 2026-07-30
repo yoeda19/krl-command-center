@@ -423,10 +423,10 @@ export default function GlossaryPage() {
                 <table className="w-full text-left border-collapse min-w-[850px] data-table">
                   <thead>
                     <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                      <th className="sticky left-0 z-20 px-4 py-3 text-[11px] font-black uppercase tracking-wider min-w-[140px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
+                      <th className="md:sticky left-0 z-20 px-4 py-3 text-[11px] font-black uppercase tracking-wider min-w-[140px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
                         Kategori
                       </th>
-                      <th className="sticky left-[140px] z-20 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-4 py-3 text-[11px] font-black uppercase tracking-wider min-w-[180px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
+                      <th className="md:sticky left-[140px] z-20 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-4 py-3 text-[11px] font-black uppercase tracking-wider min-w-[180px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
                         Istilah / Kata Khusus
                       </th>
                       <th className="px-4 py-3 text-[11px] font-black uppercase tracking-wider" style={{ color: 'var(--color-on-primary-container)' }}>
@@ -442,12 +442,12 @@ export default function GlossaryPage() {
                       const rowBg = i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)';
                       return (
                         <tr key={row.istilah} style={{ backgroundColor: rowBg }}>
-                          <td className="sticky left-0 z-10 px-4 py-3 text-xs font-bold" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
+                          <td className="md:sticky left-0 z-10 px-4 py-3 text-xs font-bold" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
                             <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
                               {row.kategori}
                             </span>
                           </td>
-                          <td className="sticky left-[140px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
+                          <td className="md:sticky left-[140px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
                             {row.istilah}
                           </td>
                           <td className="px-4 py-3 text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
@@ -480,7 +480,7 @@ export default function GlossaryPage() {
               <table className="w-full text-left border-collapse min-w-[900px] data-table">
                 <thead>
                   <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                    <th className="sticky left-0 z-20 px-4 py-3 text-[11px] font-black uppercase tracking-wider min-w-[200px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
+                    <th className="md:sticky left-0 z-20 px-4 py-3 text-[11px] font-black uppercase tracking-wider min-w-[200px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
                       Nama Perhitungan
                     </th>
                     <th className="px-4 py-3 text-[11px] font-black uppercase tracking-wider min-w-[180px]" style={{ color: 'var(--color-on-primary-container)' }}>
@@ -499,7 +499,7 @@ export default function GlossaryPage() {
                     const rowBg = i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)';
                     return (
                       <tr key={f.nama} style={{ backgroundColor: rowBg }}>
-                        <td className="sticky left-0 z-10 px-4 py-3.5 text-xs font-bold" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
+                        <td className="md:sticky left-0 z-10 px-4 py-3.5 text-xs font-bold" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>
                           {f.nama}
                         </td>
                         <td className="px-4 py-3.5 text-xs font-semibold" style={{ color: 'var(--color-secondary)' }}>

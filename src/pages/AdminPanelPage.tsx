@@ -3007,10 +3007,10 @@ export default function AdminPanelPage() {
                 <table className="w-full text-left border-collapse min-w-[950px] data-table">
                   <thead>
                     <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                      <th className="sticky left-0 z-20 px-3 py-3 text-[11px] font-black uppercase tracking-wider w-[50px] text-center" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
+                      <th className="md:sticky left-0 z-20 px-3 py-3 text-[11px] font-black uppercase tracking-wider w-[50px] text-center" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
                         NO
                       </th>
-                      <th className="sticky left-[50px] z-20 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-3 py-3 text-[11px] font-black uppercase tracking-wider min-w-[150px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
+                      <th className="md:sticky left-[50px] z-20 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-3 py-3 text-[11px] font-black uppercase tracking-wider min-w-[150px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)' }}>
                         Kategori
                       </th>
                       <th className="px-4 py-3 text-[11px] font-black uppercase tracking-wider min-w-[200px]" style={{ color: 'var(--color-on-primary-container)' }}>
@@ -3039,10 +3039,10 @@ export default function AdminPanelPage() {
                         const rowBg = idx % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)';
                         return (
                           <tr key={idx} style={{ backgroundColor: rowBg }}>
-                            <td className="sticky left-0 z-10 px-3 py-3 text-xs font-bold text-center" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface-variant)' }}>
+                            <td className="md:sticky left-0 z-10 px-3 py-3 text-xs font-bold text-center" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface-variant)' }}>
                               {idx + 1}
                             </td>
-                            <td className="sticky left-[50px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-3 py-3 text-xs font-bold" style={{ backgroundColor: rowBg }}>
+                            <td className="md:sticky left-[50px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-3 py-3 text-xs font-bold" style={{ backgroundColor: rowBg }}>
                               <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
                                 {term.kategori}
                               </span>

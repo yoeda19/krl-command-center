@@ -2612,8 +2612,8 @@ export default function CriticalStockPage() {
             <thead>
               {/* Row 1: Groups */}
               <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                <th rowSpan={2} className="sticky left-0 z-20 px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-left whitespace-nowrap align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)', borderColor: 'var(--color-steel-border)' }}>Nomor Material</th>
-                <th rowSpan={2} className="sticky left-[105px] z-20 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-left whitespace-nowrap align-middle border-b border-r min-w-[200px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)', borderColor: 'var(--color-steel-border)' }}>Deskripsi Material</th>
+                <th rowSpan={2} className="md:sticky left-0 z-20 px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-left whitespace-nowrap align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)', borderColor: 'var(--color-steel-border)' }}>Nomor Material</th>
+                <th rowSpan={2} className="md:sticky left-[105px] z-20 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-left whitespace-nowrap align-middle border-b border-r min-w-[200px]" style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)', borderColor: 'var(--color-steel-border)' }}>Deskripsi Material</th>
                 
                 <th rowSpan={2} className="px-2 py-2.5 text-[10px] font-black tracking-widest uppercase text-center align-middle border-b border-r" style={{ color: 'var(--color-on-primary-container)', borderColor: 'var(--color-steel-border)' }}>
                   Stok Saat Ini<br/><span className="text-[8px] font-normal lowercase opacity-75">(pc/set/l)</span>
@@ -2680,8 +2680,8 @@ export default function CriticalStockPage() {
                     className="cursor-pointer transition-all hover:bg-[var(--color-surface-container-highest)]"
                     style={{ backgroundColor: rowBg }}
                   >
-                    <td className="sticky left-0 z-10 px-2 py-2 font-bold text-[11px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                    <td className="sticky left-[105px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-2 py-2 text-[11px] whitespace-nowrap font-medium min-w-[200px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface-variant)' }} title={row.nama_material}>{row.nama_material}</td>
+                    <td className="md:sticky left-0 z-10 px-2 py-2 font-bold text-[11px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
+                    <td className="md:sticky left-[105px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-2 py-2 text-[11px] whitespace-nowrap font-medium min-w-[200px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface-variant)' }} title={row.nama_material}>{row.nama_material}</td>
                     <td className="px-2 py-2 text-[11px] text-center font-medium" style={{ color: 'var(--color-on-surface)' }}>{row.current_stock.toLocaleString('id-ID')}</td>
                     <td className="px-2 py-2 text-[11px] text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{row.stok_ideal.toLocaleString('id-ID')}</td>
                     <td className="px-2 py-2 text-[11px] text-center" style={{ color: 'var(--color-on-surface-variant)' }}>{(row.safety_stock ?? 0).toLocaleString('id-ID')}</td>

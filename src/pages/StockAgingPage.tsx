@@ -663,8 +663,8 @@ export default function StockAgingPage() {
                   <th
                     key={h}
                     className={`px-4 py-3 text-[11px] font-black tracking-widest uppercase whitespace-nowrap ${
-                      idx === 0 ? 'sticky left-0 z-20 bg-[var(--color-primary-container)]' :
-                      idx === 1 ? 'sticky left-[120px] z-20 bg-[var(--color-primary-container)] shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)]' : ''
+                      idx === 0 ? 'md:sticky left-0 z-20 bg-[var(--color-primary-container)]' :
+                      idx === 1 ? 'md:sticky left-[120px] z-20 bg-[var(--color-primary-container)] shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)]' : ''
                     }`}
                     style={{ color: 'var(--color-on-primary-container)' }}
                   >
@@ -680,8 +680,8 @@ export default function StockAgingPage() {
                 const rowBg = i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)';
                 return (
                   <tr key={row.nomor_material} style={{ backgroundColor: rowBg }}>
-                    <td className="sticky left-0 z-10 px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
-                    <td className="sticky left-[120px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-4 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
+                    <td className="md:sticky left-0 z-10 px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
+                    <td className="md:sticky left-[120px] z-10 shadow-[3px_0_6px_-2px_rgba(0,0,0,0.3)] px-4 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ backgroundColor: rowBg, color: 'var(--color-on-surface-variant)' }}>{row.nama_material}</td>
                     <td className="px-4 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.current_stock} {row.satuan}</td>
                     <td className="px-4 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-secondary)' }}>{formatRupiah(row.nilai_aset)}</td>
                     <td className="px-4 py-3 text-xs font-bold text-red-500 whitespace-nowrap">{hc > 0 ? formatRupiah(hc) : '-'}</td>
