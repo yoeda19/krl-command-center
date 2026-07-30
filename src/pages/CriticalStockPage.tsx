@@ -366,6 +366,7 @@ export default function CriticalStockPage() {
   const [calcMode, setCalcMode] = useState<'STANDAR' | 'RIWAYAT'>('STANDAR');
   const [isChartFullScreen, setIsChartFullScreen] = useState(false);
   const [showInsight, setShowInsight] = useState(true);
+  const [showCalculationHelp, setShowCalculationHelp] = useState(false);
   const [runRateLookback, setRunRateLookback] = useState<number>(6);
   const [chartViewMode, setChartViewMode] = useState<'KONSUMSI' | 'SALDO'>('KONSUMSI');
   const [isThresholdModalOpen, setIsThresholdModalOpen] = useState(false);
@@ -2758,42 +2759,54 @@ export default function CriticalStockPage() {
 
       {/* Catatan & Keterangan Rumus Analisis Tabel */}
       <div className="mt-4 p-4 rounded-xl border flex flex-col gap-3 text-xs" style={{ backgroundColor: 'var(--color-surface-container-elevated)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}>
-        <div className="flex items-center gap-2 font-bold" style={{ color: 'var(--color-on-surface)' }}>
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: 'var(--color-led-amber)' }}>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>Keterangan Perhitungan Tabel:</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>
-          <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
-            <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>1. % Ketersediaan</span>
-            <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
-              (Stok Saat Ini / Stok Ideal) × 100%
-            </code>
-            Persentase kecukupan persediaan barang fisik di depo saat ini dibanding batas aman ideal.
+        <button
+          onClick={() => setShowCalculationHelp(prev => !prev)}
+          className="flex items-center justify-between font-bold w-full text-left cursor-pointer select-none"
+          style={{ color: 'var(--color-on-surface)' }}
+        >
+          <div className="flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: 'var(--color-led-amber)' }}>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Keterangan Perhitungan Tabel:</span>
           </div>
-          <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
-            <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>2. Habis (Plan)</span>
-            <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
-              Stok Saat Ini / Target Pemakaian Bulanan
-            </code>
-            Estimasi waktu stok habis jika pemakaian barang tepat sesuai target rencana perawatan baku.
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
+            {showCalculationHelp ? 'Sembunyikan ▲' : 'Tampilkan ▼'}
+          </span>
+        </button>
+
+        {showCalculationHelp && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>
+            <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+              <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>1. % Ketersediaan</span>
+              <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
+                (Stok Saat Ini / Stok Ideal) × 100%
+              </code>
+              Persentase kecukupan persediaan barang fisik di depo saat ini dibanding batas aman ideal.
+            </div>
+            <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+              <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>2. Habis (Plan)</span>
+              <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
+                Stok Saat Ini / Target Pemakaian Bulanan
+              </code>
+              Estimasi waktu stok habis jika pemakaian barang tepat sesuai target rencana perawatan baku.
+            </div>
+            <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+              <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>3. Habis (Tanpa PO / Riwayat)</span>
+              <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
+                Stok Saat Ini / Rata-Rata Pemakaian Riil
+              </code>
+              Estimasi waktu stok habis berdasarkan laju konsumsi barang yang pernah terjadi di lapangan tanpa tambahan barang baru.
+            </div>
+            <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
+              <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>4. Gap Defisit (Bulan)</span>
+              <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
+                Estimasi Bulan Habis - Rencana Kirim Barang
+              </code>
+              Selisih bulan antara waktu persediaan barang habis dengan perkiraan datangnya pasokan pengadaan baru.
+            </div>
           </div>
-          <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
-            <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>3. Habis (Tanpa PO / Riwayat)</span>
-            <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
-              Stok Saat Ini / Rata-Rata Pemakaian Riil
-            </code>
-            Estimasi waktu stok habis berdasarkan laju konsumsi barang yang pernah terjadi di lapangan tanpa tambahan barang baru.
-          </div>
-          <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
-            <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>4. Gap Defisit (Bulan)</span>
-            <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
-              Estimasi Bulan Habis - Rencana Kirim Barang
-            </code>
-            Selisih bulan antara waktu persediaan barang habis dengan perkiraan datangnya pasokan pengadaan baru.
-          </div>
-        </div>
+        )}
       </div>
 
       <ThresholdModal

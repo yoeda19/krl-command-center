@@ -79,6 +79,7 @@ export default function AnomalyStockPage() {
   const [isChartFullScreen, setIsChartFullScreen] = useState(false);
   const [tolerancePlus, setTolerancePlus] = useState<number>(15);
   const [toleranceMinus, setToleranceMinus] = useState<number>(15);
+  const [showAnomalyInsight, setShowAnomalyInsight] = useState(false);
 
   // Transaction history modal states
   const [selectedTxMonth, setSelectedTxMonth] = useState<MonthRangeItem | null>(null);
@@ -779,74 +780,7 @@ export default function AnomalyStockPage() {
           }
         }
       `}</style>
-      {/* Dynamic Root Cause Insight Banner (Akumulasi Seluruh Rentang Bulan) */}
-      {(() => {
-        let aggregatedTotalPlan = 0;
-        let aggregatedTepatWaktu = 0;
-        let aggregatedTerlambat = 0;
-        let aggregatedInsidentil = 0;
-        let monthsWithPlan = 0;
 
-        rangeMonths.forEach(m => {
-          const comp = calculateScheduleCompliance(scheduleList, woList, m.month - 1, m.year);
-          if (comp.hasPlan) {
-            monthsWithPlan++;
-            aggregatedTotalPlan += comp.totalPlan;
-            aggregatedTepatWaktu += comp.tepatWaktuCount;
-            aggregatedTerlambat += comp.terlambatCount;
-            aggregatedInsidentil += comp.insidentilCount;
-          }
-        });
-
-        const hasAnyPlan = monthsWithPlan > 0;
-        const rateKepatuhan = aggregatedTotalPlan > 0 ? Math.round((aggregatedTepatWaktu / aggregatedTotalPlan) * 100) : 0;
-
-        const startBulanName = MONTHS_OPTIONS.find(m => m.value === startMonth)?.name || '';
-        const endBulanName = MONTHS_OPTIONS.find(m => m.value === endMonth)?.name || '';
-        const isSingleMonth = startMonth === endMonth && startYear === endYear;
-        const periodeLabel = isSingleMonth
-          ? `${startBulanName} ${startYear}`
-          : `${startBulanName} ${startYear} s/d ${endBulanName} ${endYear}`;
-
-        return (
-          <div className="mb-4 tactile-card rounded-lg p-4 border" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container-low)' }}>
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="flex items-start gap-3">
-                <div className="p-2 rounded-lg shrink-0 mt-0.5" style={{ backgroundColor: hasAnyPlan ? 'rgba(96,165,250,0.12)' : 'rgba(217,119,6,0.12)' }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: hasAnyPlan ? '#60a5fa' : 'var(--color-led-amber)' }}>
-                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-sm flex items-center gap-2" style={{ color: 'var(--color-on-surface)' }}>
-                    Insight Kepatuhan Perawatan & Dampak Material — Periode {periodeLabel}
-                  </h4>
-                  <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
-                    {!hasAnyPlan ? (
-                      <>Belum ada Rencana Perawatan yang diinput untuk periode <strong>{periodeLabel}</strong>.</>
-                    ) : (
-                      <>
-                        Pada periode ini terdapat <strong>{aggregatedTotalPlan} Plan Rencana</strong> dengan <strong>{aggregatedTepatWaktu} Tepat Waktu</strong>
-                        {aggregatedTerlambat > 0 && <>, <span style={{ color: 'var(--color-led-red)', fontWeight: 'bold' }}>{aggregatedTerlambat} Terlambat (Under-Plan)</span></>}
-                        {aggregatedInsidentil > 0 && <>, dan <span style={{ color: '#a855f7', fontWeight: 'bold' }}>{aggregatedInsidentil} Order Insidentil (Over-Plan)</span></>}.
-                        {aggregatedInsidentil > 0 ? ' Perawatan insidentil berpotensi menyebabkan lonjakan penyerapan material ekstra.' : aggregatedTerlambat > 0 ? ' Perawatan terlambat berpotensi menyebabkan akumulasi stok (under-absorption).' : ' Seluruh perawatan berjalan tepat waktu sesuai rencana.'}
-                      </>
-                    )}
-                  </p>
-                </div>
-              </div>
-              {hasAnyPlan && (
-                <div className="shrink-0 text-right">
-                  <span className="text-[10px] font-black uppercase block tracking-wider" style={{ color: 'var(--color-on-surface-variant)' }}>Kepatuhan Rata-Rata</span>
-                  <span className="text-2xl font-black" style={{ color: rateKepatuhan >= 80 ? 'var(--color-led-green)' : rateKepatuhan >= 50 ? 'var(--color-led-amber)' : 'var(--color-led-red)' }}>
-                    {rateKepatuhan}%
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Grid Layout for Charts on Large Screens */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-1">
@@ -1666,6 +1600,86 @@ export default function AnomalyStockPage() {
         </div>
 
       </div>
+
+      {/* Dynamic Root Cause Insight Banner (Di Posisi Paling Bawah) */}
+      {(() => {
+        let aggregatedTotalPlan = 0;
+        let aggregatedTepatWaktu = 0;
+        let aggregatedTerlambat = 0;
+        let aggregatedInsidentil = 0;
+        let monthsWithPlan = 0;
+
+        rangeMonths.forEach(m => {
+          const comp = calculateScheduleCompliance(scheduleList, woList, m.month - 1, m.year);
+          if (comp.hasPlan) {
+            monthsWithPlan++;
+            aggregatedTotalPlan += comp.totalPlan;
+            aggregatedTepatWaktu += comp.tepatWaktuCount;
+            aggregatedTerlambat += comp.terlambatCount;
+            aggregatedInsidentil += comp.insidentilCount;
+          }
+        });
+
+        const hasAnyPlan = monthsWithPlan > 0;
+        const rateKepatuhan = aggregatedTotalPlan > 0 ? Math.round((aggregatedTepatWaktu / aggregatedTotalPlan) * 100) : 0;
+
+        const startBulanName = MONTHS_OPTIONS.find(m => m.value === startMonth)?.name || '';
+        const endBulanName = MONTHS_OPTIONS.find(m => m.value === endMonth)?.name || '';
+        const isSingleMonth = startMonth === endMonth && startYear === endYear;
+        const periodeLabel = isSingleMonth
+          ? `${startBulanName} ${startYear}`
+          : `${startBulanName} ${startYear} s/d ${endBulanName} ${endYear}`;
+
+        return (
+          <div className="mt-6 tactile-card rounded-lg p-4 border" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-surface-container-low)' }}>
+            <button
+              onClick={() => setShowAnomalyInsight(prev => !prev)}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full text-left cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-lg shrink-0" style={{ backgroundColor: hasAnyPlan ? 'rgba(96,165,250,0.12)' : 'rgba(217,119,6,0.12)' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: hasAnyPlan ? '#60a5fa' : 'var(--color-led-amber)' }}>
+                    <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-sm flex items-center gap-2" style={{ color: 'var(--color-on-surface)' }}>
+                    Insight Kepatuhan Perawatan & Dampak Material — Periode {periodeLabel}
+                  </h4>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 self-end sm:self-center">
+                {hasAnyPlan && (
+                  <div className="shrink-0 text-right">
+                    <span className="text-[10px] font-black uppercase block tracking-wider" style={{ color: 'var(--color-on-surface-variant)' }}>Kepatuhan Rata-Rata</span>
+                    <span className="text-xl font-black" style={{ color: rateKepatuhan >= 80 ? 'var(--color-led-green)' : rateKepatuhan >= 50 ? 'var(--color-led-amber)' : 'var(--color-led-red)' }}>
+                      {rateKepatuhan}%
+                    </span>
+                  </div>
+                )}
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded border" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
+                  {showAnomalyInsight ? 'Sembunyikan ▲' : 'Tampilkan ▼'}
+                </span>
+              </div>
+            </button>
+
+            {showAnomalyInsight && (
+              <div className="mt-3 pt-3 border-t text-xs leading-relaxed" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
+                {!hasAnyPlan ? (
+                  <>Belum ada Rencana Perawatan yang diinput untuk periode <strong>{periodeLabel}</strong>.</>
+                ) : (
+                  <>
+                    Pada periode ini terdapat <strong>{aggregatedTotalPlan} Plan Rencana</strong> dengan <strong>{aggregatedTepatWaktu} Tepat Waktu</strong>
+                    {aggregatedTerlambat > 0 && <>, <span style={{ color: 'var(--color-led-red)', fontWeight: 'bold' }}>{aggregatedTerlambat} Terlambat (Under-Plan)</span></>}
+                    {aggregatedInsidentil > 0 && <>, dan <span style={{ color: '#a855f7', fontWeight: 'bold' }}>{aggregatedInsidentil} Order Insidentil (Over-Plan)</span></>}.
+                    {aggregatedInsidentil > 0 ? ' Perawatan insidentil berpotensi menyebabkan lonjakan penyerapan material ekstra.' : aggregatedTerlambat > 0 ? ' Perawatan terlambat berpotensi menyebabkan akumulasi stok (under-absorption).' : ' Seluruh perawatan berjalan tepat waktu sesuai rencana.'}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {/* Modal Riwayat Transaksi */}
       {selectedTxMonth && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
