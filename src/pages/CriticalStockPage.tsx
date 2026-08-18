@@ -43,14 +43,16 @@ const exportCols = [
   { key: 'plan_habis_label', header: 'Habis (Plan)' },
   // Tanpa PO
   { key: 'koreksi_habis_no_po_label', header: 'Habis (Tanpa PO)' },
-  { key: 'gap_no_po', header: 'Gap Tanpa PO (Bulan)' },
-  { key: 'status_no_po', header: 'Status Tanpa PO' },
+  { key: 'gap_no_po', header: 'Gap Plan Tanpa PO (Bulan)' },
+  { key: 'status_no_po', header: 'Status Plan Tanpa PO' },
+  { key: 'gap_to_po', header: 'Gap Ke PO (Bulan)' },
+  { key: 'status_po', header: 'Status Alert PO' },
   // Dengan PO
   { key: 'po_kirim_label', header: 'Rencana Kirim PO' },
   { key: 'jumlah_dipesan_label', header: 'Qty PO' },
   { key: 'koreksi_habis_with_po_label', header: 'Habis (Dengan PO)' },
-  { key: 'gap_with_po', header: 'Gap Dengan PO (Bulan)' },
-  { key: 'status_with_po', header: 'Status Dengan PO' },
+  { key: 'gap_with_po', header: 'Gap Plan Dengan PO (Bulan)' },
+  { key: 'status_with_po', header: 'Status Plan Dengan PO' },
   { key: 'gudang_label', header: 'Gudang/Depo' },
 ];
 
