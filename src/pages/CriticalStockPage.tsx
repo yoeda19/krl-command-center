@@ -261,8 +261,11 @@ function calculateDynamicMetrics(
       }
     }
   } else {
-    planStockNoPO = initialStock;
-    for (let i = 0; i < rangeMonths.length; i++) {
+    // Jika tidak ada riwayat GR lampau, hitung maju dari sisa stok fisik Hari Ini
+    planStockNoPO = item.current_stock;
+    const todayIdx = rangeMonths.findIndex(m => m.year === todayYear && m.month === todayMonth);
+    const startIdx = todayIdx >= 0 ? todayIdx : 0;
+    for (let i = startIdx; i < rangeMonths.length; i++) {
       planStockNoPO -= plans[i];
       if (planStockNoPO <= 0) {
         planExhaustionIndexNoPO = i;
@@ -356,8 +359,11 @@ function calculateDynamicMetrics(
       }
     }
   } else {
-    planStockWithPO = initialStock;
-    for (let i = 0; i < rangeMonths.length; i++) {
+    // Jika tidak ada riwayat GR lampau, hitung maju dari sisa stok fisik Hari Ini + PO masa depan
+    planStockWithPO = item.current_stock;
+    const todayIdx = rangeMonths.findIndex(m => m.year === todayYear && m.month === todayMonth);
+    const startIdx = todayIdx >= 0 ? todayIdx : 0;
+    for (let i = startIdx; i < rangeMonths.length; i++) {
       const m = rangeMonths[i];
       if (item.active_pos && item.active_pos.length > 0) {
         item.active_pos.forEach(po => {
