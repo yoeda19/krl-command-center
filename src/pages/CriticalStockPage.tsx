@@ -164,13 +164,24 @@ function calculateDynamicMetrics(
 
   // Helper to project future exhaustion if not depleted within filter range
   const projectExhaustion = (remainingStock: number, lastMonth: { year: number; month: number }, isCorrectedMode: boolean = false) => {
-    const mult = isCorrectedMode ? runRateMultiplier : 1;
-    const avgConsumption = plans.length > 0 ? ((plans.reduce((s, p) => s + p, 0) / plans.length) * mult) : ((item.plan_bulanan || 0) * mult);
-    if (avgConsumption <= 0 || remainingStock <= 0) {
-      return '-'; // Tidak ada konsumsi rencana atau stok kosong
+    const mult = isCorrectedMode ? (runRateMultiplier || 1) : 1;
+    const sumP = plans.filter(p => p > 0).reduce((s, p) => s + p, 0);
+    const countP = plans.filter(p => p > 0).length;
+    let avgConsumption = countP > 0 ? (sumP / countP) * mult : (item.plan_bulanan || item.cr_actual || 0) * mult;
+    if (avgConsumption <= 0) {
+      avgConsumption = item.current_stock > 0 ? item.current_stock / 12 : 10;
+    }
+    if (avgConsumption <= 0 || remainingStock <= 0 || !isFinite(avgConsumption)) {
+      return '-';
     }
     const remainingMonths = Math.ceil(remainingStock / avgConsumption);
+    if (!isFinite(remainingMonths) || isNaN(remainingMonths)) {
+      return '-';
+    }
     const targetDate = new Date(lastMonth.year, lastMonth.month - 1 + remainingMonths, 1);
+    if (isNaN(targetDate.getTime())) {
+      return '-';
+    }
     const BULAN_NAMES = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
     return `${BULAN_NAMES[targetDate.getMonth()]} '${String(targetDate.getFullYear()).slice(2)}`;
   };
@@ -281,13 +292,15 @@ function calculateDynamicMetrics(
           item.active_pos.forEach(po => {
             if (po.tanggal_rencana_pengiriman) {
               const d = new Date(po.tanggal_rencana_pengiriman);
-              if (d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
+              const isFuturePO = d.getFullYear() > todayYear || (d.getFullYear() === todayYear && (d.getMonth() + 1) >= todayMonth);
+              if (isFuturePO && d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
                 planStockWithPO += po.jumlah_dipesan;
               }
             }
           });
         } else if (m.year === poYear && m.month === poMonth) {
-          planStockWithPO += (item.jumlah_dipesan || 0);
+          const isFuturePO = poYear > todayYear || (poYear === todayYear && poMonth >= todayMonth);
+          if (isFuturePO) planStockWithPO += (item.jumlah_dipesan || 0);
         }
 
         planStockWithPO -= plans[i];
@@ -320,13 +333,15 @@ function calculateDynamicMetrics(
             item.active_pos.forEach(po => {
               if (po.tanggal_rencana_pengiriman) {
                 const d = new Date(po.tanggal_rencana_pengiriman);
-                if (d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
+                const isFuturePO = d.getFullYear() > todayYear || (d.getFullYear() === todayYear && (d.getMonth() + 1) >= todayMonth);
+                if (isFuturePO && d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
                   planStockWithPO += po.jumlah_dipesan;
                 }
               }
             });
           } else if (m.year === poYear && m.month === poMonth) {
-            planStockWithPO += (item.jumlah_dipesan || 0);
+            const isFuturePO = poYear > todayYear || (poYear === todayYear && poMonth >= todayMonth);
+            if (isFuturePO) planStockWithPO += (item.jumlah_dipesan || 0);
           }
 
           planStockWithPO -= plans[i];
@@ -348,13 +363,15 @@ function calculateDynamicMetrics(
         item.active_pos.forEach(po => {
           if (po.tanggal_rencana_pengiriman) {
             const d = new Date(po.tanggal_rencana_pengiriman);
-            if (d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
+            const isFuturePO = d.getFullYear() > todayYear || (d.getFullYear() === todayYear && (d.getMonth() + 1) >= todayMonth);
+            if (isFuturePO && d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
               planStockWithPO += po.jumlah_dipesan;
             }
           }
         });
       } else if (m.year === poYear && m.month === poMonth) {
-        planStockWithPO += (item.jumlah_dipesan || 0);
+        const isFuturePO = poYear > todayYear || (poYear === todayYear && poMonth >= todayMonth);
+        if (isFuturePO) planStockWithPO += (item.jumlah_dipesan || 0);
       }
 
       planStockWithPO -= plans[i];
@@ -416,13 +433,15 @@ function calculateDynamicMetrics(
       item.active_pos.forEach(po => {
         if (po.tanggal_rencana_pengiriman) {
           const d = new Date(po.tanggal_rencana_pengiriman);
-          if (d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
+          const isFuturePO = d.getFullYear() > todayYear || (d.getFullYear() === todayYear && (d.getMonth() + 1) >= todayMonth);
+          if (isFuturePO && d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
             correctedStockWithPO += po.jumlah_dipesan;
           }
         }
       });
     } else if (m.year === poYear && m.month === poMonth) {
-      correctedStockWithPO += (item.jumlah_dipesan || 0);
+      const isFuturePO = poYear > todayYear || (poYear === todayYear && poMonth >= todayMonth);
+      if (isFuturePO) correctedStockWithPO += (item.jumlah_dipesan || 0);
     }
     // Bulan lalu dikurangi realisasi aktual
     if (m.year < todayYear || (m.year === todayYear && m.month < todayMonth)) {
@@ -477,12 +496,28 @@ function calculateDynamicMetrics(
   const statusPlanNoPO = getStatusPlan(gapNoPO, item.current_stock);
   const statusPlanWithPO = getStatusPlan(gapWithPO, item.current_stock);
 
-  // 6. Calculate Gap to PO (Bulan Habis Tanpa PO - Bulan Kedatangan PO)
+  // 6. Calculate Gap to PO (Hanya membandingkan terhadap PO Masa Depan yang Aktif >= Hari Ini)
   let gapToPO: number | null = null;
-  if (item.tanggal_rencana_pengiriman) {
-    let rawExhaustDate = new Date();
+  let activeFuturePO: Date | null = null;
+
+  if (item.active_pos && item.active_pos.length > 0) {
+    const todayDate = new Date(todayYear, todayMonth - 1, 1);
+    const futurePOs = item.active_pos
+      .filter(p => p.tanggal_rencana_pengiriman && new Date(p.tanggal_rencana_pengiriman) >= todayDate)
+      .sort((a, b) => new Date(a.tanggal_rencana_pengiriman!).getTime() - new Date(b.tanggal_rencana_pengiriman!).getTime());
+    if (futurePOs.length > 0) {
+      activeFuturePO = new Date(futurePOs[0].tanggal_rencana_pengiriman!);
+    }
+  } else if (item.tanggal_rencana_pengiriman) {
+    const d = new Date(item.tanggal_rencana_pengiriman);
+    if (d.getFullYear() > todayYear || (d.getFullYear() === todayYear && (d.getMonth() + 1) >= todayMonth)) {
+      activeFuturePO = d;
+    }
+  }
+
+  if (activeFuturePO) {
+    let rawExhaustDate = new Date(todayYear, todayMonth - 1, 1);
     if (correctedExhaustionLabelNoPO && correctedExhaustionLabelNoPO !== '-') {
-      // Format: "Feb '27" -> parse "Feb" dan "2027"
       const parts = correctedExhaustionLabelNoPO.split(' ');
       if (parts.length === 2) {
         const BULAN_NAMES = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
@@ -493,30 +528,20 @@ function calculateDynamicMetrics(
         }
       }
     }
-
-    const poDateObj = new Date(item.tanggal_rencana_pengiriman);
-    
-    // Hitung selisih bulan absolut: (Tahun Habis - Tahun PO) * 12 + (Bulan Habis - Bulan PO)
-    const diffMonths = (rawExhaustDate.getFullYear() - poDateObj.getFullYear()) * 12 + (rawExhaustDate.getMonth() - poDateObj.getMonth());
-    gapToPO = diffMonths;
+    gapToPO = (rawExhaustDate.getFullYear() - activeFuturePO.getFullYear()) * 12 + (rawExhaustDate.getMonth() - activeFuturePO.getMonth());
   }
 
   // 7. Calculate Status PO (Mitigation / Availability status based on gapToPO)
   let statusPO: 'AMAN' | 'WASPADA' | 'KRITIS' | 'BELUM PO' = 'BELUM PO';
-  if (!item.tanggal_rencana_pengiriman) {
+  if (!activeFuturePO) {
     statusPO = 'BELUM PO';
-  } else if (item.current_stock <= 0) {
-    statusPO = 'KRITIS';
   } else if (gapToPO !== null) {
-    if (gapToPO >= 0) {
-      statusPO = 'AMAN';
+    if (gapToPO <= 2) {
+      statusPO = 'KRITIS'; // Alert High (<= +2 bulan dan semua nilai minus)
+    } else if (gapToPO === 3) {
+      statusPO = 'WASPADA'; // Alert Med (+3 bulan)
     } else {
-      const absGap = Math.abs(gapToPO);
-      if (absGap <= 2) {
-        statusPO = 'WASPADA';
-      } else {
-        statusPO = 'KRITIS';
-      }
+      statusPO = 'AMAN'; // Alert Low (>= +4 bulan)
     }
   }
 
@@ -876,7 +901,7 @@ export default function CriticalStockPage() {
 
     const gapVal = typeof (d as any).gap_to_po === 'number' ? (d as any).gap_to_po : (typeof (d as any).gap_defisit === 'number' ? (d as any).gap_defisit : 0);
 
-    if (gapVal <= thresholdConfig.limitKritis) return 'KRITIS'; // Alert High (<= 2 bulan)
+    if (gapVal <= thresholdConfig.limitKritis) return 'KRITIS'; // Alert High (<= 2 bulan, termasuk nilai minus)
     if (gapVal <= thresholdConfig.limitWaspada) return 'WASPADA'; // Alert Med (3 bulan)
     return 'AMAN'; // Alert Low (>= 4 bulan)
   };
@@ -914,7 +939,27 @@ export default function CriticalStockPage() {
     (!selectedMaterial && searchText && (d.nomor_material === searchText || d.nama_material.toLowerCase().includes(searchText.toLowerCase())))
   ) || aggregatedData.find(d => d.nomor_material === '6005530') || aggregatedData[0];
 
-
+  // Ambil PO masa depan yang aktif (>= Hari Ini)
+  const activeFuturePOItem = (() => {
+    if (!referenceItem) return null;
+    const todayDate = new Date(currentTodayYear, currentTodayMonth - 1, 1);
+    if (referenceItem.active_pos && referenceItem.active_pos.length > 0) {
+      const futureList = referenceItem.active_pos
+        .filter(p => p.tanggal_rencana_pengiriman && new Date(p.tanggal_rencana_pengiriman) >= todayDate)
+        .sort((a, b) => new Date(a.tanggal_rencana_pengiriman!).getTime() - new Date(b.tanggal_rencana_pengiriman!).getTime());
+      if (futureList.length > 0) return futureList[0];
+    } else if (referenceItem.tanggal_rencana_pengiriman) {
+      const d = new Date(referenceItem.tanggal_rencana_pengiriman);
+      if (d.getFullYear() > currentTodayYear || (d.getFullYear() === currentTodayYear && (d.getMonth() + 1) >= currentTodayMonth)) {
+        return {
+          po_number: (referenceItem as any).po_number || null,
+          jumlah_dipesan: referenceItem.jumlah_dipesan,
+          tanggal_rencana_pengiriman: referenceItem.tanggal_rencana_pengiriman
+        };
+      }
+    }
+    return null;
+  })();
 
   const chartData = (() => {
     if (isRangeInvalid || !referenceItem) {
@@ -951,12 +996,12 @@ export default function CriticalStockPage() {
 
       let poYear = 0;
       let poMonth = 0;
-      if (referenceItem.tanggal_rencana_pengiriman) {
-        const d = new Date(referenceItem.tanggal_rencana_pengiriman);
+      if (activeFuturePOItem?.tanggal_rencana_pengiriman) {
+        const d = new Date(activeFuturePOItem.tanggal_rencana_pengiriman);
         poYear = d.getFullYear();
         poMonth = d.getMonth() + 1;
       }
-      const poQty = referenceItem.jumlah_dipesan || 0;
+      const poQty = activeFuturePOItem?.jumlah_dipesan || 0;
 
       // Simulasi proyeksi saldo berkesinambungan dari hari ini (Juli 2026) hingga akhir rentang filter
       const lastMonth = rangeMonths[rangeMonths.length - 1];
@@ -1016,13 +1061,15 @@ export default function CriticalStockPage() {
               referenceItem.active_pos.forEach(po => {
                 if (po.tanggal_rencana_pengiriman) {
                   const d = new Date(po.tanggal_rencana_pengiriman);
-                  if (d.getFullYear() === sm.year && (d.getMonth() + 1) === sm.month) {
+                  const isFuturePO = d.getFullYear() > currentTodayYear || (d.getFullYear() === currentTodayYear && (d.getMonth() + 1) >= currentTodayMonth);
+                  if (isFuturePO && d.getFullYear() === sm.year && (d.getMonth() + 1) === sm.month) {
                     poQtyToAdd += po.jumlah_dipesan;
                   }
                 }
               });
             } else if (sm.year === poYear && sm.month === poMonth) {
-              poQtyToAdd = poQty;
+              const isFuturePO = poYear > currentTodayYear || (poYear === currentTodayYear && poMonth >= currentTodayMonth);
+              if (isFuturePO) poQtyToAdd = poQty;
             }
           }
 
@@ -1158,19 +1205,21 @@ export default function CriticalStockPage() {
     }
 
     rangeMonths.forEach((m, idx) => {
-      // Tambahkan kuantiti PO jika opsi Dengan PO diaktifkan
+      // Jika opsi Dengan PO aktif, tambahkan kuantiti PO masa depan pada bulan kedatangannya
       if (showChartWithPO) {
         if (referenceItem.active_pos && referenceItem.active_pos.length > 0) {
           referenceItem.active_pos.forEach(po => {
             if (po.tanggal_rencana_pengiriman) {
               const d = new Date(po.tanggal_rencana_pengiriman);
-              if (d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
+              const isFuturePO = d.getFullYear() > currentTodayYear || (d.getFullYear() === currentTodayYear && (d.getMonth() + 1) >= currentTodayMonth);
+              if (isFuturePO && d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
                 remainingStock += po.jumlah_dipesan;
               }
             }
           });
         } else if (m.year === poYear && m.month === poMonth) {
-          remainingStock += (referenceItem.jumlah_dipesan || 0);
+          const isFuturePO = poYear > currentTodayYear || (poYear === currentTodayYear && poMonth >= currentTodayMonth);
+          if (isFuturePO) remainingStock += (referenceItem.jumlah_dipesan || 0);
         }
       }
 
@@ -1219,9 +1268,9 @@ export default function CriticalStockPage() {
       }
     });
 
-    // Cari index kedatangan PO di rangeMonths
+    // Cari index kedatangan PO masa depan di rangeMonths
     let poIdx = -1;
-    if (referenceItem.tanggal_rencana_pengiriman) {
+    if (activeFuturePOItem?.tanggal_rencana_pengiriman) {
       poIdx = rangeMonths.findIndex(m => m.year === poYear && m.month === poMonth);
     }
 
@@ -1235,13 +1284,19 @@ export default function CriticalStockPage() {
     return targetLabel && targetLabel !== '-' && targetLabel !== 'Aman' ? targetLabel : null;
   })() : null;
 
-  const poLabel = chartData.poIdx >= 0 ? chartData.labels[chartData.poIdx] : null;
+  const poLabel = (showChartWithPO && chartData.poIdx >= 0) ? chartData.labels[chartData.poIdx] : null;
 
-  const exhaustLabel = referenceItem ? (() => {
-    const { correctedExhaustionLabelNoPO, correctedExhaustionLabelWithPO } = calculateDynamicMetrics(referenceItem, rangeMonths, endYear, endMonth, calcMode, runRateLookback);
-    const targetLabel = showChartWithPO ? correctedExhaustionLabelWithPO : correctedExhaustionLabelNoPO;
-    return targetLabel && targetLabel !== '-' && chartData.labels.includes(targetLabel) ? targetLabel : null;
+  const exhaustLabelNoPO = referenceItem ? (() => {
+    const { correctedExhaustionLabelNoPO } = calculateDynamicMetrics(referenceItem, rangeMonths, endYear, endMonth, calcMode, runRateLookback);
+    return correctedExhaustionLabelNoPO && correctedExhaustionLabelNoPO !== '-' && chartData.labels.includes(correctedExhaustionLabelNoPO) ? correctedExhaustionLabelNoPO : null;
   })() : null;
+
+  const exhaustLabelWithPO = referenceItem ? (() => {
+    const { correctedExhaustionLabelWithPO } = calculateDynamicMetrics(referenceItem, rangeMonths, endYear, endMonth, calcMode, runRateLookback);
+    return correctedExhaustionLabelWithPO && correctedExhaustionLabelWithPO !== '-' && chartData.labels.includes(correctedExhaustionLabelWithPO) ? correctedExhaustionLabelWithPO : null;
+  })() : null;
+
+  const exhaustLabel = exhaustLabelNoPO;
 
   // Insight data untuk kartu info mode Riwayat
   const riwayatInsight = (() => {
@@ -1296,12 +1351,12 @@ export default function CriticalStockPage() {
   })();
 
   const gapMonths = (() => {
-    if (!referenceItem) return 0;
+    if (!referenceItem) return null;
     if (!showChartWithPO || !poLabel) {
-      return (referenceItem as any).gap_no_po ?? 0;
+      return null;
     }
     const ss = referenceItem.safety_stock ?? 0;
-    const todayLabelIdx = chartData.labels.findIndex(l => l.includes("Jul '26"));
+    const todayLabelIdx = chartData.labels.findIndex(l => l.includes(`${['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'][currentTodayMonth - 1]} '${String(currentTodayYear).slice(2)}`));
     const startSearchIdx = todayLabelIdx >= 0 ? todayLabelIdx : 0;
     let rawBreachIdx = chartData.corrected.findIndex((val, idx) => {
       return idx >= startSearchIdx && val !== null && val <= ss;
@@ -1312,14 +1367,14 @@ export default function CriticalStockPage() {
     }
     const currentBreachLabel = safetyBreachIdx >= 0 ? chartData.labels[safetyBreachIdx] : null;
     const targetExhaustLabel = chartViewMode === 'SALDO' ? (currentBreachLabel ?? exhaustLabel) : exhaustLabel;
-    if (!targetExhaustLabel) return (referenceItem as any).gap_to_po ?? 0;
+    if (!targetExhaustLabel) return (referenceItem as any).gap_to_po ?? null;
     
     const idxEx = chartData.labels.indexOf(targetExhaustLabel);
     const idxPo = chartData.labels.indexOf(poLabel);
     if (idxEx >= 0 && idxPo >= 0) {
       return idxEx - idxPo;
     }
-    return (referenceItem as any).gap_to_po ?? 0;
+    return (referenceItem as any).gap_to_po ?? null;
   })();
 
   const dynamicStatus = (() => {
@@ -1668,9 +1723,21 @@ export default function CriticalStockPage() {
                       </div>
 
                       {/* Info Gap & Fast Moving */}
-                      {gapMonths !== null && (
-                        <span className="ml-1 font-bold text-[10px] px-1.5 py-0.5 rounded border" style={{ backgroundColor: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: '#ef4444' }}>
-                          {chartViewMode === 'SALDO' ? `Gap Aman: ${Math.abs(gapMonths)} Bln` : `Defisit: ${Math.abs(gapMonths)} Bln`}
+                      {gapMonths !== null ? (
+                        <span className="ml-1 font-bold text-[10px] px-1.5 py-0.5 rounded border" style={{
+                          backgroundColor: gapMonths >= 0 ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)',
+                          borderColor: gapMonths >= 0 ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)',
+                          color: gapMonths >= 0 ? '#10b981' : '#ef4444'
+                        }}>
+                          {gapMonths >= 0 ? `Gap: +${Math.abs(gapMonths)} Bln` : `Gap: -${Math.abs(gapMonths)} Bln`}
+                        </span>
+                      ) : (
+                        <span className="ml-1 font-bold text-[10px] px-1.5 py-0.5 rounded border" style={{
+                          backgroundColor: 'rgba(239,68,68,0.1)',
+                          borderColor: 'rgba(239,68,68,0.3)',
+                          color: '#ef4444'
+                        }}>
+                          Belum Ada PO
                         </span>
                       )}
                     </div>
@@ -1764,9 +1831,15 @@ export default function CriticalStockPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {gapMonths !== null && (
+                    {gapMonths !== null ? (
                       <span className="font-semibold text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>
-                        Gap: <b style={{ color: gapMonths < 0 ? '#ef4444' : 'var(--color-on-surface)' }}>{gapMonths} Bulan</b>
+                        Gap: <b style={{ color: gapMonths >= 0 ? '#10b981' : '#ef4444' }}>
+                          {gapMonths >= 0 ? `+${gapMonths} Bulan` : `${gapMonths} Bulan`}
+                        </b>
+                      </span>
+                    ) : (
+                      <span className="font-semibold text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>
+                        Status: <b style={{ color: '#ef4444' }}>Belum Ada PO</b>
                       </span>
                     )}
 
@@ -2232,14 +2305,15 @@ export default function CriticalStockPage() {
                             ? referenceItem.active_pos
                             : (poLabel ? [{ po_number: null, jumlah_dipesan: referenceItem.jumlah_dipesan || 0, tanggal_rencana_pengiriman: referenceItem.tanggal_rencana_pengiriman || null }] : []);
 
-                          const poByMonthMap = new Map<string, { label: string; qty: number }>();
+                          const poByMonthMap = new Map<string, { label: string; qty: number; isFuture: boolean }>();
                           activePOsToRender.forEach(po => {
                             if (!po.tanggal_rencana_pengiriman) return;
                             const dPO = new Date(po.tanggal_rencana_pengiriman);
+                            const isFuture = dPO.getFullYear() > currentTodayYear || (dPO.getFullYear() === currentTodayYear && (dPO.getMonth() + 1) >= currentTodayMonth);
                             const pLabel = `${BULAN_SHORT[dPO.getMonth()]} '${String(dPO.getFullYear()).slice(2)}`;
                             if (chartData.labels.includes(pLabel)) {
                               if (!poByMonthMap.has(pLabel)) {
-                                poByMonthMap.set(pLabel, { label: pLabel, qty: 0 });
+                                poByMonthMap.set(pLabel, { label: pLabel, qty: 0, isFuture });
                               }
                               poByMonthMap.get(pLabel)!.qty += Number(po.jumlah_dipesan) || 0;
                             }
@@ -2247,14 +2321,18 @@ export default function CriticalStockPage() {
 
                           Array.from(poByMonthMap.values()).forEach((poGroup, poIdx) => {
                             const pLabel = poGroup.label;
+                            const isFuturePO = poGroup.isFuture;
+                            const poTitle = isFuturePO ? 'Rencana GR' : 'PO Terlambat';
+                            const poBorderColor = isFuturePO ? '#10b981' : '#f59e0b';
+                            const poTitleColor = isFuturePO ? (isDark ? '#34d399' : '#047857') : (isDark ? '#fbbf24' : '#d97706');
                             const yPopupPO = yMax * (poIdx % 2 === 0 ? 0.82 : 0.68);
                             markLineData.push([
                               {
                                 coord: [pLabel, 0],
                                 lineStyle: {
-                                  color: '#10b981',
+                                  color: poBorderColor,
                                   width: 2,
-                                  type: 'solid'
+                                  type: isFuturePO ? 'solid' : 'dashed'
                                 },
                                 label: { show: false }
                               },
@@ -2269,18 +2347,18 @@ export default function CriticalStockPage() {
                                 symbolOffset: [0, 0],
                                 itemStyle: {
                                   color: isDark ? '#0f172a' : '#ffffff',
-                                  borderColor: '#10b981',
+                                  borderColor: poBorderColor,
                                   borderWidth: 1.5,
                                 },
                                 label: {
                                   show: true,
                                   position: 'inside',
                                   formatter: [
-                                    `{title|Rencana GR}`,
+                                    `{title|${poTitle}}`,
                                     `{date|${pLabel} (+${poGroup.qty.toLocaleString('id-ID')})}`,
                                   ].join('\n'),
                                   rich: {
-                                    title: { color: isDark ? '#34d399' : '#047857', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
+                                    title: { color: poTitleColor, fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
                                     date: { color: isDark ? '#ffffff' : '#0f172a', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                   },
                                   align: 'center',
@@ -2292,7 +2370,7 @@ export default function CriticalStockPage() {
                                 symbol: 'circle',
                                 symbolSize: 12,
                                 itemStyle: {
-                                  color: '#10b981',
+                                  color: poBorderColor,
                                   borderColor: '#ffffff',
                                   borderWidth: 2,
                                 },
@@ -2382,11 +2460,15 @@ export default function CriticalStockPage() {
                           const idxStart = chartData.labels.indexOf(safetyBreachLabel);
                           const idxEnd = chartData.labels.indexOf(poLabel);
                           const displayGap = (idxStart >= 0 && idxEnd >= 0) ? Math.abs(idxEnd - idxStart) : Math.abs(gapMonths ?? 2);
+                          const isBufferSafe = (gapMonths !== null && gapMonths >= 0) || (idxStart > idxEnd);
+                          const gapLabelText = isBufferSafe ? `Gap +${displayGap} Bln` : `Gap -${displayGap} Bln`;
+                          const gapColor = isBufferSafe ? '#10b981' : '#ef4444';
+
                           markLineData.push([
                             {
                               coord: [safetyBreachLabel, yGap],
                               lineStyle: {
-                                color: '#ef4444',
+                                color: gapColor,
                                 width: 2,
                                 type: 'solid',
                               },
@@ -2395,9 +2477,9 @@ export default function CriticalStockPage() {
                               label: {
                                 show: true,
                                 position: 'middle',
-                                formatter: `Gap Aman ${displayGap} Bln`,
+                                formatter: gapLabelText,
                                 color: '#ffffff',
-                                backgroundColor: '#ef4444',
+                                backgroundColor: gapColor,
                                 fontWeight: 'bold',
                                 fontSize: 8.5,
                                 fontFamily: 'inherit',
@@ -2419,14 +2501,15 @@ export default function CriticalStockPage() {
                             ? referenceItem.active_pos
                             : (poLabel ? [{ po_number: null, jumlah_dipesan: referenceItem.jumlah_dipesan || 0, tanggal_rencana_pengiriman: referenceItem.tanggal_rencana_pengiriman || null }] : []);
 
-                          const poByMonthMap = new Map<string, { label: string; qty: number }>();
+                          const poByMonthMap = new Map<string, { label: string; qty: number; isFuture: boolean }>();
                           activePOsToRender.forEach(po => {
                             if (!po.tanggal_rencana_pengiriman) return;
                             const dPO = new Date(po.tanggal_rencana_pengiriman);
+                            const isFuture = dPO.getFullYear() > currentTodayYear || (dPO.getFullYear() === currentTodayYear && (dPO.getMonth() + 1) >= currentTodayMonth);
                             const pLabel = `${BULAN_SHORT[dPO.getMonth()]} '${String(dPO.getFullYear()).slice(2)}`;
                             if (chartData.labels.includes(pLabel)) {
                               if (!poByMonthMap.has(pLabel)) {
-                                poByMonthMap.set(pLabel, { label: pLabel, qty: 0 });
+                                poByMonthMap.set(pLabel, { label: pLabel, qty: 0, isFuture });
                               }
                               poByMonthMap.get(pLabel)!.qty += Number(po.jumlah_dipesan) || 0;
                             }
@@ -2434,14 +2517,18 @@ export default function CriticalStockPage() {
 
                           Array.from(poByMonthMap.values()).forEach((poGroup, poIdx) => {
                             const pLabel = poGroup.label;
+                            const isFuturePO = poGroup.isFuture;
+                            const poTitle = isFuturePO ? 'Rencana GR' : 'PO Terlambat';
+                            const poBorderColor = isFuturePO ? '#10b981' : '#f59e0b';
+                            const poTitleColor = isFuturePO ? (isDark ? '#34d399' : '#047857') : (isDark ? '#fbbf24' : '#d97706');
                             const yPopupPO = yMax * (poIdx % 2 === 0 ? 0.82 : 0.68);
                             markLineData.push([
                               {
                                 coord: [pLabel, 0],
                                 lineStyle: {
-                                  color: '#10b981',
+                                  color: poBorderColor,
                                   width: 2,
-                                  type: 'solid'
+                                  type: isFuturePO ? 'solid' : 'dashed'
                                 },
                                 label: { show: false }
                               },
@@ -2456,18 +2543,18 @@ export default function CriticalStockPage() {
                                 symbolOffset: [0, 0],
                                 itemStyle: {
                                   color: isDark ? '#0f172a' : '#ffffff',
-                                  borderColor: '#10b981',
+                                  borderColor: poBorderColor,
                                   borderWidth: 1.5,
                                 },
                                 label: {
                                   show: true,
                                   position: 'inside',
                                   formatter: [
-                                    `{title|Rencana GR}`,
+                                    `{title|${poTitle}}`,
                                     `{date|${pLabel} (+${poGroup.qty.toLocaleString('id-ID')})}`,
                                   ].join('\n'),
                                   rich: {
-                                    title: { color: isDark ? '#34d399' : '#047857', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
+                                    title: { color: poTitleColor, fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
                                     date: { color: isDark ? '#ffffff' : '#0f172a', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                   },
                                   align: 'center',
@@ -2479,7 +2566,7 @@ export default function CriticalStockPage() {
                                 symbol: 'circle',
                                 symbolSize: 12,
                                 itemStyle: {
-                                  color: '#10b981',
+                                  color: poBorderColor,
                                   borderColor: '#ffffff',
                                   borderWidth: 2,
                                 },
@@ -2651,11 +2738,12 @@ export default function CriticalStockPage() {
                           );
                         }
 
-                        if (exhaustLabel && visibleLines.breach) {
+                        // 10a. Stok Habis Sebelum GR (Fisik Saat Ini)
+                        if (exhaustLabelNoPO && visibleLines.breach) {
                           const yPopupEx = yMax * 0.60;
                           markLineData.push([
                             {
-                              coord: [exhaustLabel, 0],
+                              coord: [exhaustLabelNoPO, 0],
                               lineStyle: {
                                 color: '#e11d48',
                                 width: 2,
@@ -2663,14 +2751,14 @@ export default function CriticalStockPage() {
                               },
                               label: { show: false }
                             },
-                            { coord: [exhaustLabel, yMax] }
+                            { coord: [exhaustLabelNoPO, yMax] }
                           ]);
                           markPointData.push(
                             {
-                              name: 'Stok Habis Label',
-                              coord: [exhaustLabel, yPopupEx],
+                              name: 'Stok Habis Fisik Label',
+                              coord: [exhaustLabelNoPO, yPopupEx],
                               symbol: 'rect',
-                              symbolSize: [88, 32],
+                              symbolSize: [94, 32],
                               symbolOffset: [0, 0],
                               itemStyle: {
                                 color: isDark ? '#0f172a' : '#ffffff',
@@ -2681,8 +2769,8 @@ export default function CriticalStockPage() {
                                 show: true,
                                 position: 'inside',
                                 formatter: [
-                                  `{title|Stok Habis}`,
-                                  `{date|${exhaustLabel}}`,
+                                  `{title|Stok Habis (Fisik)}`,
+                                  `{date|${exhaustLabelNoPO}}`,
                                 ].join('\n'),
                                 rich: {
                                   title: { color: isDark ? '#fb7185' : '#be123c', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
@@ -2692,8 +2780,8 @@ export default function CriticalStockPage() {
                               }
                             },
                             {
-                              name: 'Stok Habis Dot',
-                              coord: [exhaustLabel, 0],
+                              name: 'Stok Habis Fisik Dot',
+                              coord: [exhaustLabelNoPO, 0],
                               symbol: 'circle',
                               symbolSize: 12,
                               itemStyle: {
@@ -2706,16 +2794,76 @@ export default function CriticalStockPage() {
                           );
                         }
 
-                        if (visibleLines.gr && exhaustLabel && poLabel && showChartWithPO && chartData.labels.includes(exhaustLabel) && chartData.labels.includes(poLabel)) {
-                          const yGap = yMax * 0.44;
-                          const idxStart = chartData.labels.indexOf(exhaustLabel);
-                          const idxEnd = chartData.labels.indexOf(poLabel);
-                          const displayGap = (idxStart >= 0 && idxEnd >= 0) ? Math.abs(idxEnd - idxStart) : Math.abs(gapMonths ?? 1);
+                        // 10b. Stok Habis Setelah GR (Dengan Tambahan PO)
+                        if (showChartWithPO && visibleLines.gr && visibleLines.breach && exhaustLabelWithPO && exhaustLabelWithPO !== exhaustLabelNoPO) {
+                          const yPopupExPO = yMax * 0.76;
                           markLineData.push([
                             {
-                              coord: [exhaustLabel, yGap],
+                              coord: [exhaustLabelWithPO, 0],
                               lineStyle: {
-                                color: '#ef4444',
+                                color: '#f43f5e',
+                                width: 2,
+                                type: 'dashed'
+                              },
+                              label: { show: false }
+                            },
+                            { coord: [exhaustLabelWithPO, yMax] }
+                          ]);
+                          markPointData.push(
+                            {
+                              name: 'Stok Habis Setelah GR Label',
+                              coord: [exhaustLabelWithPO, yPopupExPO],
+                              symbol: 'rect',
+                              symbolSize: [98, 32],
+                              symbolOffset: [0, 0],
+                              itemStyle: {
+                                color: isDark ? '#0f172a' : '#ffffff',
+                                borderColor: '#f43f5e',
+                                borderWidth: 1.5,
+                              },
+                              label: {
+                                show: true,
+                                position: 'inside',
+                                formatter: [
+                                  `{title|Stok Habis (+PO)}`,
+                                  `{date|${exhaustLabelWithPO}}`,
+                                ].join('\n'),
+                                rich: {
+                                  title: { color: isDark ? '#fda4af' : '#e11d48', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
+                                  date: { color: isDark ? '#ffffff' : '#0f172a', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                },
+                                align: 'center',
+                              }
+                            },
+                            {
+                              name: 'Stok Habis Setelah GR Dot',
+                              coord: [exhaustLabelWithPO, 0],
+                              symbol: 'circle',
+                              symbolSize: 12,
+                              itemStyle: {
+                                color: '#f43f5e',
+                                borderColor: '#ffffff',
+                                borderWidth: 2,
+                              },
+                              label: { show: false }
+                            }
+                          );
+                        }
+
+                        if (visibleLines.gr && exhaustLabelNoPO && poLabel && showChartWithPO && chartData.labels.includes(exhaustLabelNoPO) && chartData.labels.includes(poLabel)) {
+                          const yGap = yMax * 0.44;
+                          const idxStart = chartData.labels.indexOf(exhaustLabelNoPO);
+                          const idxEnd = chartData.labels.indexOf(poLabel);
+                          const displayGap = (idxStart >= 0 && idxEnd >= 0) ? Math.abs(idxEnd - idxStart) : Math.abs(gapMonths ?? 1);
+                          const isBufferSafe = (gapMonths !== null && gapMonths >= 0) || (idxStart > idxEnd);
+                          const gapLabelText = isBufferSafe ? `Gap +${displayGap} Bln` : `Gap -${displayGap} Bln`;
+                          const gapColor = isBufferSafe ? '#10b981' : '#ef4444';
+
+                          markLineData.push([
+                            {
+                              coord: [exhaustLabelNoPO, yGap],
+                              lineStyle: {
+                                color: gapColor,
                                 width: 2,
                                 type: 'solid',
                               },
@@ -2724,9 +2872,9 @@ export default function CriticalStockPage() {
                               label: {
                                 show: true,
                                 position: 'middle',
-                                formatter: `Defisit ${displayGap} Bln`,
+                                formatter: gapLabelText,
                                 color: '#ffffff',
-                                backgroundColor: '#ef4444',
+                                backgroundColor: gapColor,
                                 fontWeight: 'bold',
                                 fontSize: 8.5,
                                 fontFamily: 'inherit',
