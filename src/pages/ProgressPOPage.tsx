@@ -28,7 +28,7 @@ function validateAndGetSafeUrl(url: string | null | undefined): string | null {
   return `https://${trimmed.replace(/^[\/\\]+/, '')}`;
 }
 
-const statusOptions: Array<'Semua' | ProcurementStatus> = ['Semua', 'Dalam Pengadaan', 'Proses Evaluasi', 'Proses PR & Approval', 'Proses PO', 'Goods Inspection', 'Goods Receipt (GR)'];
+const statusOptions: Array<'Semua' | ProcurementStatus> = ['Semua', 'Dalam Pengadaan', 'Proses Evaluasi', 'Proses PR & Approval', 'Proses PO', 'Partially GR', 'Goods Inspection', 'Goods Receipt (GR)'];
 const risikoOptions: Array<'Semua' | RisikoLevel> = ['Semua', 'Rendah', 'Sedang', 'Tinggi'];
 
 const statusCfg: Record<string, { bg: string; text: string; border: string }> = {
@@ -36,6 +36,7 @@ const statusCfg: Record<string, { bg: string; text: string; border: string }> = 
   'Proses Evaluasi':       { bg: 'rgba(139,92,246,0.12)', text: '#a78bfa',                  border: 'rgba(139,92,246,0.3)' },
   'Proses PR & Approval':  { bg: 'rgba(37,99,235,0.12)',  text: '#60a5fa',                  border: 'rgba(59,130,246,0.3)' },
   'Proses PO':             { bg: 'rgba(6,182,212,0.12)',  text: '#22d3ee',                  border: 'rgba(6,182,212,0.3)' },
+  'Partially GR':          { bg: 'rgba(249,115,22,0.15)', text: '#f97316',                  border: 'rgba(249,115,22,0.35)' },
   'Goods Inspection':      { bg: 'rgba(234,179,8,0.12)',  text: '#facc15',                  border: 'rgba(234,179,8,0.3)' },
   'Goods Receipt (GR)':    { bg: 'rgba(22,163,74,0.12)',  text: 'var(--color-led-green)',   border: 'rgba(22,163,74,0.3)' },
   // Legacy fallbacks
@@ -91,8 +92,8 @@ function CheckIcon() {
 }
 
 function PipelineCard({ item, onSelect }: { item: ProcurementItem; onSelect: (item: ProcurementItem) => void }) {
-  const cfg = statusCfg[item.status];
-  const rCfg = riskCfg[item.risiko_keterlambatan];
+  const cfg = statusCfg[item.status] || { bg: 'rgba(107,114,128,0.12)', text: '#9ca3af', border: 'rgba(107,114,128,0.3)' };
+  const rCfg = riskCfg[item.risiko_keterlambatan] || { bg: 'rgba(22,163,74,0.1)', text: 'var(--color-led-green)' };
 
   const grDate = item.tanggal_gr || item.tanggal_penerimaan_barang;
   const actualLt = grDate && item.tanggal_po
@@ -155,14 +156,14 @@ function PipelineCard({ item, onSelect }: { item: ProcurementItem; onSelect: (it
               Terlambat {actualLt! - item.plan_lead_time} hari
             </span>
           )}
-          {(item.publish_nod || item.tanggal_nod) && (
-            <button
-              onClick={() => onSelect(item)}
-              className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 border border-blue-600/20 transition-all cursor-pointer whitespace-nowrap"
-            >
-              ANALISIS
-            </button>
-          )}
+          <button
+            onClick={() => onSelect(item)}
+            className="px-2.5 py-1 rounded text-[10px] font-extrabold bg-blue-600/15 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 shadow-sm"
+            title="Buka Grafik & Analisis Lead Time Pengadaan"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            GRAFIK
+          </button>
         </div>
       </div>
 
@@ -331,8 +332,8 @@ export default function ProgressPOPage() {
 
   return (
     <PageWrapper fullWidth>
-      {/* Status Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2.5">
+      {/* Status Summary Cards (7 Kolom dalam 1 Baris) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5">
         {statusOptions.slice(1).map(s => {
           const count = procureList.filter(d => d.status === s).length;
           const cfg = statusCfg[s as ProcurementStatus] || { bg: 'rgba(107,114,128,0.12)', text: '#9ca3af', border: 'rgba(107,114,128,0.3)' };
@@ -661,14 +662,14 @@ export default function ProgressPOPage() {
                               return '—';
                             })()}
                           </span>
-                          {(row.publish_nod || row.tanggal_nod) && (
-                            <button
-                              onClick={() => setSelectedPO(row)}
-                              className="px-2 py-0.5 rounded text-[9px] font-extrabold bg-blue-600/10 text-blue-400 hover:bg-blue-600/20 border border-blue-600/20 transition-all cursor-pointer whitespace-nowrap"
-                            >
-                              ANALISIS
-                            </button>
-                          )}
+                          <button
+                            onClick={() => setSelectedPO(row)}
+                            className="px-2.5 py-1 rounded text-[10px] font-extrabold bg-blue-600/15 text-blue-400 hover:bg-blue-600/30 border border-blue-500/30 transition-all cursor-pointer whitespace-nowrap flex items-center gap-1 shadow-sm mt-1"
+                            title="Buka Grafik & Analisis Lead Time Pengadaan"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                            GRAFIK
+                          </button>
                         </div>
                       </td>
                       

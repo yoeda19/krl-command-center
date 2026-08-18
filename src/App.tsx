@@ -76,7 +76,14 @@ function ProtectedLayout({ theme, onThemeToggle, collapsed, onToggle }: Protecte
           <Route path="/progress-po"   element={<ProgressPOPage />} />
           <Route path="/slow-moving"   element={<StockAgingPage />} />
           <Route path="/work-order"    element={<WorkOrderPage />} />
-          <Route path="/composition"   element={<TrainCompositionPage />} />
+          <Route 
+            path="/composition"   
+            element={
+              userRole?.toLowerCase() === 'viewer'
+                ? <Navigate to="/critical-stock" replace />
+                : <TrainCompositionPage />
+            } 
+          />
           <Route 
             path="/admin-panel"   
             element={

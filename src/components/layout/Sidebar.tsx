@@ -74,11 +74,11 @@ const Icons = {
 };
 
 const navItems = [
-  { path: '/critical-stock', icon: Icons.criticalStock, label: 'Availability Stok', alertColor: 'red' },
-  { path: '/anomaly-stock', icon: Icons.anomalyStock,  label: 'Anomali Stok' },
-  { path: '/slow-moving',   icon: Icons.slowMoving,    label: 'Analisa Usia Stok' },
-  { path: '/progress-po',   icon: Icons.progressPO,    label: 'Progres PO & Transit' },
-  { path: '/work-order',    icon: Icons.workOrder,     label: 'Perawatan KRL' },
+  { path: '/critical-stock', icon: Icons.criticalStock, label: 'Safety Stock Alert', alertColor: 'red' },
+  { path: '/anomaly-stock', icon: Icons.anomalyStock,  label: 'Anomaly Stock' },
+  { path: '/slow-moving',   icon: Icons.slowMoving,    label: 'Slow-Moving & Dead Stock' },
+  { path: '/progress-po',   icon: Icons.progressPO,    label: 'Stock In Transit & On PO' },
+  { path: '/work-order',    icon: Icons.workOrder,     label: 'Maintenance Order Integration' },
   { path: '/composition',   icon: Icons.train,         label: 'Komposisi Rangkaian' },
   { path: '/admin-panel',   icon: Icons.adminPanel,    label: 'Panel Admin' },
   { path: '/audit-log',     icon: Icons.auditLog,      label: 'Log Audit' },
@@ -108,7 +108,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
   }, []);
 
   const visibleNavItems = navItems.filter(item => {
-    if (isViewer && (item.path === '/admin-panel' || item.path === '/audit-log')) {
+    if (isViewer && (item.path === '/admin-panel' || item.path === '/audit-log' || item.path === '/composition')) {
       return false;
     }
     return true;
@@ -144,15 +144,15 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
             border: '1px solid var(--color-steel-border)',
           }}
         >
-          <img src="/logo.svg" alt="PRISMA Logo" className="w-full h-full object-cover" />
+          <img src="/logo.svg" alt="DRIM Logo" className="w-full h-full object-cover" />
         </div>
         {!collapsed && (
           <div className="overflow-hidden whitespace-nowrap">
             <p className="font-bold text-sm leading-tight" style={{ color: 'var(--color-on-surface)' }}>
-              PRISMA
+              DRIM
             </p>
-            <p className="text-[9px] font-bold tracking-[0.15em] uppercase" style={{ color: 'var(--color-on-surface-variant)' }}>
-              Material Analysis
+            <p className="text-[9px] font-bold tracking-[0.1em]" style={{ color: 'var(--color-on-surface-variant)' }}>
+              Rollingstock Inventory
             </p>
           </div>
         )}
@@ -195,8 +195,8 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
         </ul>
       </div>
 
-      {/* ── Status Sync Database SAP ── */}
-      {!collapsed && (
+      {/* ── Status Sync Database ── */}
+      {!collapsed && !isViewer && (
         <div className="mx-2 mb-2 p-2 rounded-lg border text-[10px] space-y-1.5 shadow-sm" style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)' }}>
           <div className="flex justify-between items-center font-bold border-b pb-1" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
             <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider">

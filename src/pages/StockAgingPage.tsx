@@ -54,7 +54,8 @@ export default function StockAgingPage() {
   const [searchParams] = useSearchParams();
   const materialParam = searchParams.get('material');
 
-  const { slowMovingData, setSlowMovingData, isDataLoaded, setIsDataLoaded } = useAppStore();
+  const { slowMovingData, setSlowMovingData, isDataLoaded, setIsDataLoaded, userRole } = useAppStore();
+  const isViewer = userRole?.toLowerCase() === 'viewer';
   const [slowList, setSlowList] = useState<SlowMovingItem[]>(slowMovingData);
   const [restockList, setRestockList] = useState<RestockItem[]>([]);
   const [criticalList, setCriticalList] = useState<CriticalStockItem[]>([]);
@@ -190,57 +191,42 @@ export default function StockAgingPage() {
 
   const displayHeatmapList = isHeatmapFullScreen ? filtered : filtered.slice(0, 10);
 
-  const heatmapData = (() => {
-    const data: any[] = [];
-    displayHeatmapList.forEach((material, yIndex) => {
-      warehousesList.forEach((wh, xIndex) => {
-        let stockVal = 0;
-        let planVal = 0;
-        let cellColor = '';
+  const getCellDetails = (material: SlowMovingItem, wh: string) => {
+    let stockVal = 0;
+    let planVal = 0;
+    let cellColor = '';
 
-        if (wh === 'TOTAL') {
-          stockVal = material.current_stock;
-          planVal = criticalList
-            .filter(c => c.nomor_material === material.nomor_material)
-            .reduce((sum, c) => sum + c.plan_bulanan, 0);
-          
-          cellColor = isDark ? 'rgba(79, 156, 249, 0.95)' : 'rgba(29, 78, 216, 0.95)'; // Primary Blue
-        } else {
-          stockVal = material.stocks?.[wh] || 0;
-          
-          // Find corresponding critical item to get plan_bulanan
-          const mappedGudangCode = (() => {
-            if (wh === 'Gudang Pusat') return 'C013';
-            if (wh === 'Depo Depok') return 'C007';
-            if (wh === 'Depo Bukit Duri') return 'C006';
-            if (wh === 'Overhaul Manggarai') return 'C009';
-            if (wh === 'Depo Bogor') return 'C008';
-            if (wh === 'Depo Manggarai') return 'C020';
-            return '';
-          })();
-          
-          const critItem = criticalList.find(c => c.nomor_material === material.nomor_material && c.gudang === mappedGudangCode);
-          planVal = critItem ? critItem.plan_bulanan : 0;
-          
-          if (stockVal === 0) {
-            cellColor = 'rgba(239, 68, 68, 0.95)'; // Merah
-          } else if (stockVal >= planVal) {
-            cellColor = 'rgba(22, 163, 74, 0.95)'; // Hijau
-          } else {
-            cellColor = 'rgba(245, 158, 11, 0.8)'; // Orange
-          }
-        }
-
-        data.push({
-          value: [xIndex, yIndex, stockVal, planVal],
-          itemStyle: {
-            color: cellColor
-          }
-        });
-      });
-    });
-    return data;
-  })();
+    if (wh === 'TOTAL') {
+      stockVal = material.current_stock;
+      planVal = criticalList
+        .filter(c => c.nomor_material === material.nomor_material)
+        .reduce((sum, c) => sum + c.plan_bulanan, 0);
+      cellColor = isDark ? 'rgba(79, 156, 249, 0.95)' : 'rgba(29, 78, 216, 0.95)'; // Primary Blue
+    } else {
+      stockVal = material.stocks?.[wh] || 0;
+      const mappedGudangCode = (() => {
+        if (wh === 'Gudang Pusat') return 'C013';
+        if (wh === 'Depo Depok') return 'C007';
+        if (wh === 'Depo Bukit Duri') return 'C006';
+        if (wh === 'Overhaul Manggarai') return 'C009';
+        if (wh === 'Depo Bogor') return 'C008';
+        if (wh === 'Depo Manggarai') return 'C020';
+        return '';
+      })();
+      
+      const critItem = criticalList.find(c => c.nomor_material === material.nomor_material && c.gudang === mappedGudangCode);
+      planVal = critItem ? critItem.plan_bulanan : 0;
+      
+      if (stockVal === 0) {
+        cellColor = 'rgba(239, 68, 68, 0.95)'; // Merah
+      } else if (stockVal >= planVal) {
+        cellColor = 'rgba(22, 163, 74, 0.95)'; // Hijau
+      } else {
+        cellColor = 'rgba(245, 158, 11, 0.8)'; // Orange
+      }
+    }
+    return { stockVal, planVal, cellColor };
+  };
 
 
 
@@ -268,7 +254,7 @@ export default function StockAgingPage() {
   return (
     <PageWrapper fullWidth>
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className={`grid grid-cols-2 md:grid-cols-3 ${isViewer ? 'lg:grid-cols-5' : 'lg:grid-cols-6'} gap-3`}>
         {funnelData.map(cat => {
           const c = catCfg[cat.category_name];
           return (
@@ -282,14 +268,16 @@ export default function StockAgingPage() {
             </div>
           );
         })}
-        <div className="tactile-card rounded-lg p-3.5 min-w-0 flex flex-col justify-between" style={{ borderLeft: '4px solid #ef4444' }}>
-          <div>
-            <p className="text-[10px] font-black tracking-wider uppercase mb-1 truncate" style={{ color: '#ef4444' }}>Est. Holding Cost</p>
-            <p className="text-xs xl:text-sm font-extrabold tracking-tight" title={formatRupiah(totalHoldingCost)} style={{ color: '#ef4444' }}>{formatRupiah(totalHoldingCost)}</p>
-            <p className="text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--color-on-surface-variant)' }}>beban modal pengendapan</p>
+        {!isViewer && (
+          <div className="tactile-card rounded-lg p-3.5 min-w-0 flex flex-col justify-between" style={{ borderLeft: '4px solid #ef4444' }}>
+            <div>
+              <p className="text-[10px] font-black tracking-wider uppercase mb-1 truncate" style={{ color: '#ef4444' }}>Est. Holding Cost</p>
+              <p className="text-xs xl:text-sm font-extrabold tracking-tight" title={formatRupiah(totalHoldingCost)} style={{ color: '#ef4444' }}>{formatRupiah(totalHoldingCost)}</p>
+              <p className="text-[11px] mt-0.5 leading-snug" style={{ color: 'var(--color-on-surface-variant)' }}>beban modal pengendapan</p>
+            </div>
+            <p className="text-[10px] font-bold mt-2 text-red-500">Rate {thresholdConfig.holdingCostPct}% p.a.</p>
           </div>
-          <p className="text-[10px] font-bold mt-2 text-red-500">Rate {thresholdConfig.holdingCostPct}% p.a.</p>
-        </div>
+        )}
       </div>
 
       {/* ECharts — Funnel + Bar Charts */}
@@ -350,64 +338,95 @@ export default function StockAgingPage() {
             <h3 className="font-bold text-base" style={{ color: 'var(--color-on-surface)' }}>Nilai Aset</h3>
             <p className="text-xs mt-0.5" style={{ color: 'var(--color-on-surface-variant)' }}>Total: <strong>{formatRupiah(totalNilai)}</strong></p>
           </div>
-          <ReactECharts
-            option={{
-              backgroundColor: 'transparent',
-              tooltip: {
-                show: true,
-                trigger: 'axis',
-                confine: true,
-                formatter: (params: any[]) =>
-                  params.map(p => `${p.name}: <b>${formatRupiah(p.value)}</b>`).join('<br/>'),
-              },
-              grid: { left: 10, right: 20, top: 15, bottom: 15, containLabel: true },
-              xAxis: {
-                type: 'value',
-                axisLabel: {
-                  color: textStyleColor, fontSize: 9,
-                  formatter: (v: number) => {
-                    if (v >= 1e9) return `${(v / 1e9).toFixed(v % 1e9 === 0 ? 0 : 1)} M`;
-                    if (v >= 1e6) return `${(v / 1e6).toFixed(0)} Jt`;
-                    if (v >= 1e3) return `${(v / 1e3).toFixed(0)} Rb`;
-                    return String(v);
+          {(() => {
+            const sortedByAsset = [...filtered].sort((a, b) => b.nilai_aset - a.nilai_aset);
+            return (
+              <ReactECharts
+                option={{
+                  backgroundColor: 'transparent',
+                  tooltip: {
+                    show: true,
+                    trigger: 'axis',
+                    confine: true,
+                    formatter: (params: any[]) =>
+                      params.map(p => `${p.name}: <b>${formatRupiah(p.value)}</b>`).join('<br/>'),
                   },
-                },
-                splitLine: { lineStyle: { color: isDark ? '#374151' : '#e2e8f0', type: 'dashed' } },
-              },
-              yAxis: {
-                type: 'category',
-                data: filtered.map(d => d.nama_material),
-                axisLabel: { 
-                  color: textStyleColor, 
-                  fontSize: 8, 
-                  interval: 0,
-                  formatter: (v: string) => {
-                    const max = window.innerWidth <= 768 ? 14 : 24;
-                    return v.length > max ? v.slice(0, max) + '...' : v;
-                  }
-                },
-                axisLine: { lineStyle: { color: '#374151' } },
-              },
-              series: [{
-                type: 'bar',
-                barMaxHeight: 20,
-                data: filtered.map(d => ({
-                  value: d.nilai_aset,
-                  itemStyle: {
-                    color: catCfg[d.kategori].text,
-                    borderRadius: [0, 4, 4, 0],
+                  grid: { left: 10, right: 30, top: 15, bottom: 15, containLabel: true },
+                  xAxis: {
+                    type: 'value',
+                    axisLabel: {
+                      color: textStyleColor, fontSize: 9,
+                      formatter: (v: number) => {
+                        if (v >= 1e9) return `${(v / 1e9).toFixed(v % 1e9 === 0 ? 0 : 1)} M`;
+                        if (v >= 1e6) return `${(v / 1e6).toFixed(0)} Jt`;
+                        if (v >= 1e3) return `${(v / 1e3).toFixed(0)} Rb`;
+                        return String(v);
+                      },
+                    },
+                    splitLine: { lineStyle: { color: isDark ? '#374151' : '#e2e8f0', type: 'dashed' } },
                   },
-                  emphasis: {
-                    itemStyle: {
-                      color: catCfg[d.kategori].text
+                  yAxis: {
+                    type: 'category',
+                    inverse: true,
+                    data: sortedByAsset.map(d => d.nama_material),
+                    axisLabel: { 
+                      color: textStyleColor, 
+                      fontSize: 9,
+                      fontWeight: 500,
+                      interval: 0,
+                      formatter: (v: string) => {
+                        const max = window.innerWidth <= 768 ? 14 : 22;
+                        return v.length > max ? v.slice(0, max) + '...' : v;
+                      }
+                    },
+                    axisLine: { lineStyle: { color: '#374151' } },
+                  },
+                  dataZoom: [
+                    {
+                      type: 'slider',
+                      yAxisIndex: 0,
+                      width: 12,
+                      right: 6,
+                      startValue: 0,
+                      endValue: Math.min(sortedByAsset.length - 1, 6),
+                      zoomLock: false,
+                      brushSelect: false,
+                      handleSize: 10,
+                      showDetail: false,
+                      fillerColor: isDark ? 'rgba(79, 156, 249, 0.3)' : 'rgba(29, 78, 216, 0.2)',
+                      borderColor: isDark ? '#374151' : '#cbd5e1',
+                    },
+                    {
+                      type: 'inside',
+                      yAxisIndex: 0,
+                      zoomOnMouseWheel: false,
+                      moveOnMouseWheel: true,
+                      moveOnMouseMove: true,
                     }
-                  }
-                })),
-              }],
-            }}
-            style={{ height: '28vh', minHeight: '260px', maxHeight: '550px' }}
-            opts={{ renderer: 'svg' }}
-          />
+                  ],
+                  series: [{
+                    type: 'bar',
+                    barMaxWidth: 18,
+                    data: sortedByAsset.map(d => ({
+                      value: d.nilai_aset,
+                      itemStyle: {
+                        color: catCfg[d.kategori].text,
+                        borderRadius: [0, 4, 4, 0],
+                      },
+                      emphasis: {
+                        itemStyle: {
+                          color: catCfg[d.kategori].text
+                        }
+                      }
+                    })),
+                  }],
+                }}
+                notMerge={true}
+                style={{ height: '28vh', minHeight: '260px', maxHeight: '550px' }}
+                opts={{ renderer: 'svg' }}
+              />
+            );
+          })()}
         </div>
       </div>
 
@@ -477,95 +496,70 @@ export default function StockAgingPage() {
         </div>
         <div className="p-4 flex-1 overflow-y-auto" style={{ backgroundColor: 'var(--color-background)' }}>
           {displayHeatmapList.length === 0 ? (
-            <div className="text-center py-8 text-xs text-gray-500">Tidak ada data untuk heatmap.</div>
+            <div className="text-center py-8 text-xs text-gray-500">Tidak ada data untuk sebaran stok.</div>
           ) : (
-            <div className="overflow-x-auto w-full">
-              <ReactECharts
-                option={{
-                  backgroundColor: 'transparent',
-                  tooltip: {
-                    show: window.innerWidth > 768,
-                    confine: true,
-                    formatter: (p: any) => {
-                      const xName = warehousesList[p.data.value[0]];
-                      const materialItem = displayHeatmapList[p.data.value[1]];
-                      const yName = materialItem ? `${materialItem.nomor_material} - ${materialItem.nama_material}` : '';
-                      const stock = p.data.value[2];
-                      const plan = p.data.value[3];
-                      return `<b>${yName}</b><br/>Gudang: ${xName}<br/>Stok: <b>${stock}</b><br/>Plan Target: <b>${plan}</b>`;
-                    }
-                  },
-                  grid: {
-                    top: 30,
-                    bottom: 30,
-                    left: 160,
-                    right: 20,
-                    containLabel: true
-                  },
-                  xAxis: {
-                    type: 'category',
-                    data: warehousesList,
-                    splitArea: { show: true },
-                    axisLabel: {
-                      color: textStyleColor,
-                      fontSize: window.innerWidth <= 768 ? 6.5 : 10,
-                      fontWeight: 'bold',
-                      rotate: 0,
-                      interval: 0,
-                      formatter: (val: string) => val === 'Overhaul Manggarai' ? 'OHM' : val
-                    },
-                    axisLine: { lineStyle: { color: '#374151' } }
-                  },
-                  yAxis: {
-                    type: 'category',
-                    data: displayHeatmapList.map(d => d.nama_material),
-                    splitArea: { show: true },
-                    axisLabel: {
-                      color: textStyleColor,
-                      fontSize: 9,
-                      fontWeight: 'bold'
-                    },
-                    axisLine: { lineStyle: { color: '#374151' } }
-                  },
-                  visualMap: {
-                    show: false
-                  },
-                  series: [{
-                    name: 'Stok',
-                    type: 'heatmap',
-                    data: heatmapData,
-                    itemStyle: {
-                      borderColor: isDark ? '#374151' : '#cbd5e1',
-                      borderWidth: 2
-                    },
-                    label: {
-                      show: true,
-                      formatter: (p: any) => {
-                        const val = p.data.value[2];
-                        return val !== undefined && val !== null ? String(val) : '0';
-                      },
-                      color: '#fff',
-                      fontSize: 10,
-                      fontWeight: 'bold',
-                      textBorderColor: '#000',
-                      textBorderWidth: 2
-                    },
-                    emphasis: {
-                      itemStyle: {
-                        shadowBlur: 10,
-                        shadowColor: 'rgba(0, 0, 0, 0.5)'
-                      }
-                    }
-                  }]
-                }}
-                notMerge={true}
-                style={{
-                  height: Math.max(300, displayHeatmapList.length * heatmapCellHeight + 80),
-                  minWidth: window.innerWidth <= 768 ? '850px' : '100%'
-                }}
-                opts={{ renderer: 'svg' }}
-              />
-            </div>
+            <TableScrollWrapper maxHeight={isHeatmapFullScreen ? 'calc(100vh - 180px)' : '480px'}>
+              <table className="w-full text-left border-collapse data-table min-w-[850px]">
+                <thead>
+                  <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
+                    <th
+                      className="sticky left-0 top-0 z-30 px-3 py-2.5 text-[11px] font-black uppercase text-left whitespace-nowrap border-b border-r"
+                      style={{ color: 'var(--color-on-primary-container)', backgroundColor: 'var(--color-primary-container)', borderColor: 'var(--color-steel-border)' }}
+                    >
+                      Deskripsi Material
+                    </th>
+                    {warehousesList.map(wh => (
+                      <th
+                        key={wh}
+                        className="sticky top-0 z-20 px-3 py-2.5 text-[11px] font-black uppercase text-center whitespace-nowrap border-b border-r"
+                        style={{
+                          color: wh === 'TOTAL' ? (isDark ? '#60a5fa' : '#1e40af') : 'var(--color-on-primary-container)',
+                          backgroundColor: 'var(--color-primary-container)',
+                          borderColor: 'var(--color-steel-border)'
+                        }}
+                      >
+                        {wh}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayHeatmapList.map((material, idx) => (
+                    <tr key={material.nomor_material || idx} style={{ height: `${heatmapCellHeight}px` }}>
+                      <td
+                        className="sticky left-0 z-10 px-3 py-2 text-xs font-bold whitespace-nowrap border-b border-r truncate max-w-[240px]"
+                        style={{
+                          backgroundColor: idx % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)',
+                          borderColor: 'var(--color-steel-border)',
+                          color: 'var(--color-on-surface)'
+                        }}
+                        title={`${material.nomor_material} - ${material.nama_material}`}
+                      >
+                        <span className="text-[10px] font-mono text-gray-400 block">{material.nomor_material}</span>
+                        {material.nama_material}
+                      </td>
+                      {warehousesList.map(wh => {
+                        const { stockVal, planVal, cellColor } = getCellDetails(material, wh);
+                        return (
+                          <td
+                            key={wh}
+                            className="px-2 py-1.5 text-center text-xs font-black text-white border transition-all hover:scale-105 cursor-pointer"
+                            style={{
+                              backgroundColor: cellColor,
+                              borderColor: isDark ? '#374151' : '#cbd5e1',
+                              textShadow: '0px 1px 2px rgba(0,0,0,0.8)'
+                            }}
+                            title={`${material.nomor_material} - ${material.nama_material}\nGudang: ${wh}\nStok: ${stockVal}\nPlan Target: ${planVal}`}
+                          >
+                            {stockVal}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableScrollWrapper>
           )}
           {filtered.length > 0 && (
             <div className="flex flex-wrap justify-center gap-6 mt-4 pt-4 border-t border-gray-800 border-dashed text-xs">

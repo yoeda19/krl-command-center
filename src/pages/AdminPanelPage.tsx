@@ -21,7 +21,7 @@ import { getThresholdConfig, saveThresholdConfig, resetThresholdConfig } from '.
 import type { ThresholdConfig } from '../utils/thresholdSettings';
 import { DEFAULT_GLOSSARY_TERMS } from '../utils/defaultGlossary';
 import type {
-  AdminParameter, MonthlyPlan, ProcurementItem, ProcurementStatus, RisikoLevel,
+  AdminParameter, MonthlyPlan, ProcurementItem, ProcurementStatus, RisikoLevel, ProcurementTermin,
   MaintenanceSchedule, WorkOrder, JenisKereta, SeriKereta, PropulsiType, TipePerawatan, PelaksanaanStatus, PemenuhStatus,
   MaintenanceBomConfig, CriticalStockItem
 } from '../types';
@@ -34,6 +34,7 @@ const PROCUREMENT_STATUSES: ProcurementStatus[] = [
   'Proses Evaluasi',
   'Proses PR & Approval',
   'Proses PO',
+  'Partially GR',
   'Goods Inspection',
   'Goods Receipt (GR)',
 ];
@@ -44,6 +45,7 @@ const statusCfg: Record<string, { color: string }> = {
   'Proses Evaluasi':      { color: '#a78bfa' },
   'Proses PR & Approval': { color: '#60a5fa' },
   'Proses PO':            { color: '#22d3ee' },
+  'Partially GR':         { color: '#f97316' },
   'Goods Inspection':     { color: '#facc15' },
   'Goods Receipt (GR)':   { color: 'var(--color-led-green)' },
   // Legacy fallbacks
@@ -469,7 +471,7 @@ export default function AdminPanelPage() {
     }
 
     // Check overlaps of series per tipe_perawatan
-    const ALL_TYPES = ['P1', 'P3', 'P6', 'P12', 'P24', 'P48', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'];
+    const ALL_TYPES = ['P1-1', 'P1-2', 'P1-3', 'P1-4', 'P1-5', 'P1', 'P3', 'P6', 'P12', 'P24', 'P48', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'];
     for (const type of ALL_TYPES) {
       const seriesSeen = new Set<string>();
       let hasUniversalRule = false;
@@ -851,7 +853,7 @@ export default function AdminPanelPage() {
       const email = localStorage.getItem('krl_admin_email') || 'dev@prisma.co.id';
       const name = localStorage.getItem('krl_admin_name') || 'Dev Admin';
       if (editingPO) {
-        // Auto status update logic berdasarkan milestone yang sudah diisi:
+        // Auto status update logic berdasarkan milestone dan termin yang sudah diisi:
         const updatedPO = { ...editingPO };
         
         // Sync legacy fields
@@ -862,14 +864,41 @@ export default function AdminPanelPage() {
         updatedPO.tanggal_penerimaan_barang = updatedPO.gr_release_date || null;
         updatedPO.tanggal_tiba_depo = updatedPO.gr_release_date || null;
 
-        if (updatedPO.tanggal_gr && updatedPO.gr_release_date) {
+        if (updatedPO.termin_list && updatedPO.termin_list.length > 0) {
+          const totalDipesan = Number(updatedPO.jumlah_dipesan) || 0;
+          const totalGR = updatedPO.termin_list.filter(t => t.status === 'Diterima').reduce((s, t) => s + (t.qty || 0), 0);
+          updatedPO.total_gr_qty = totalGR;
+          updatedPO.remaining_po_qty = Math.max(0, totalDipesan - totalGR);
+          updatedPO.keterangan = JSON.stringify(updatedPO.termin_list);
+
+          if (totalDipesan > 0 && totalGR >= totalDipesan) {
+            updatedPO.status = 'Goods Receipt (GR)';
+          } else if (totalDipesan > 0 && totalGR > 0) {
+            updatedPO.status = 'Partially GR';
+          } else if (updatedPO.goods_inspection_status) {
+            updatedPO.status = 'Goods Inspection';
+          } else if (updatedPO.po_release_date || updatedPO.tanggal_po) {
+            updatedPO.status = 'Proses PO';
+          }
+        } else if (updatedPO.tanggal_gr && updatedPO.gr_release_date) {
+          updatedPO.total_gr_qty = Number(updatedPO.jumlah_dipesan) || 0;
+          updatedPO.remaining_po_qty = 0;
           updatedPO.status = 'Goods Receipt (GR)';
         } else if (updatedPO.goods_inspection_status) {
+          updatedPO.total_gr_qty = 0;
+          updatedPO.remaining_po_qty = Number(updatedPO.jumlah_dipesan) || 0;
           updatedPO.status = 'Goods Inspection';
         } else if (updatedPO.po_release_date || updatedPO.tanggal_po) {
+          updatedPO.total_gr_qty = 0;
+          updatedPO.remaining_po_qty = Number(updatedPO.jumlah_dipesan) || 0;
           updatedPO.status = 'Proses PO';
         } else if (updatedPO.pr_release_date || updatedPO.tanggal_pr) {
+          updatedPO.total_gr_qty = 0;
+          updatedPO.remaining_po_qty = Number(updatedPO.jumlah_dipesan) || 0;
           updatedPO.status = 'Proses PR & Approval';
+        } else {
+          updatedPO.total_gr_qty = 0;
+          updatedPO.remaining_po_qty = Number(updatedPO.jumlah_dipesan) || 0;
         }
 
         const originalItem = procureList.find(p => p.id === updatedPO.id);
@@ -910,10 +939,28 @@ export default function AdminPanelPage() {
         if (!finalNewPO.nomor_material || !finalNewPO.vendor) {
           showError('Kode material dan vendor wajib diisi.'); return;
         }
-        // Auto status update logic:
-        if (finalNewPO.tanggal_gr && finalNewPO.gr_release_date) {
+
+        if (finalNewPO.termin_list && finalNewPO.termin_list.length > 0) {
+          const totalDipesan = Number(finalNewPO.jumlah_dipesan) || 0;
+          const totalGR = finalNewPO.termin_list.filter(t => t.status === 'Diterima').reduce((s, t) => s + (t.qty || 0), 0);
+          finalNewPO.total_gr_qty = totalGR;
+          finalNewPO.remaining_po_qty = Math.max(0, totalDipesan - totalGR);
+          finalNewPO.keterangan = JSON.stringify(finalNewPO.termin_list);
+
+          if (totalDipesan > 0 && totalGR >= totalDipesan) {
+            finalNewPO.status = 'Goods Receipt (GR)';
+          } else if (totalDipesan > 0 && totalGR > 0) {
+            finalNewPO.status = 'Partially GR';
+          } else {
+            finalNewPO.status = finalNewPO.status || 'Dalam Pengadaan';
+          }
+        } else if (finalNewPO.tanggal_gr && finalNewPO.gr_release_date) {
+          finalNewPO.total_gr_qty = Number(finalNewPO.jumlah_dipesan) || 0;
+          finalNewPO.remaining_po_qty = 0;
           finalNewPO.status = 'Goods Receipt (GR)';
         } else {
+          finalNewPO.total_gr_qty = 0;
+          finalNewPO.remaining_po_qty = Number(finalNewPO.jumlah_dipesan) || 0;
           finalNewPO.status = finalNewPO.status || 'Dalam Pengadaan';
         }
 
@@ -1417,6 +1464,173 @@ export default function AdminPanelPage() {
               </div>
             </div>
 
+            {/* Dynamic Multi-Termin GR Table */}
+            <div className="p-4 rounded-lg border space-y-3" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+              <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                <div>
+                  <span className="text-xs font-bold block" style={{ color: 'var(--color-on-surface)' }}>Penerimaan Bertahap (Termin GR)</span>
+                  <span className="text-[11px]" style={{ color: 'var(--color-on-surface-variant)' }}>Kelola tahapan pengiriman bertahap (Partially GR) dan tanggal estimasi barang tiba</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const currentTerms = poData.termin_list || [];
+                    const nextTermNo = currentTerms.length + 1;
+                    const remainingToFill = Math.max(0, (poData.jumlah_dipesan || 0) - currentTerms.reduce((s, t) => s + (t.qty || 0), 0));
+                    const updatedTerms: ProcurementTermin[] = [
+                      ...currentTerms,
+                      {
+                        termin_ke: nextTermNo,
+                        tanggal: new Date().toISOString().split('T')[0],
+                        qty: remainingToFill > 0 ? remainingToFill : (poData.jumlah_dipesan || 0),
+                        nomor_gr: '',
+                        status: 'Rencana Tiba',
+                        keterangan: ''
+                      }
+                    ];
+                    updatePOField('termin_list', updatedTerms);
+                  }}
+                  className="px-3 py-1.5 rounded text-xs font-bold skeuomorphic-btn flex items-center gap-1.5 self-start sm:self-auto"
+                >
+                  + Tambah Termin Pengiriman
+                </button>
+              </div>
+
+              {(poData.termin_list && poData.termin_list.length > 0) ? (
+                <div className="space-y-3 mt-2">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs min-w-[650px]">
+                      <thead>
+                        <tr className="border-b" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
+                          <th className="py-2 px-2 font-bold w-16 text-center">Termin</th>
+                          <th className="py-2 px-2 font-bold">Tanggal (GR / Rencana Tiba)</th>
+                          <th className="py-2 px-2 font-bold w-32">Jumlah (Qty)</th>
+                          <th className="py-2 px-2 font-bold">No. Dokumen GR</th>
+                          <th className="py-2 px-2 font-bold w-36">Status Termin</th>
+                          <th className="py-2 px-2 font-bold w-12 text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {poData.termin_list.map((term, idx) => (
+                          <tr key={idx} className="border-b last:border-0" style={{ borderColor: 'rgba(255,255,255,0.05)' }}>
+                            <td className="py-2 px-2 font-bold text-center" style={{ color: 'var(--color-secondary)' }}>
+                              #{term.termin_ke || (idx + 1)}
+                            </td>
+                            <td className="py-2 px-2">
+                              <input
+                                type="date"
+                                value={term.tanggal || ''}
+                                onChange={e => {
+                                  const updated = [...poData.termin_list!];
+                                  updated[idx] = { ...updated[idx], tanggal: e.target.value };
+                                  updatePOField('termin_list', updated);
+                                }}
+                                className="w-full rounded p-1.5 text-xs border"
+                                style={inputStyle}
+                              />
+                            </td>
+                            <td className="py-2 px-2">
+                              <input
+                                type="number"
+                                min="0"
+                                value={term.qty || 0}
+                                onChange={e => {
+                                  const updated = [...poData.termin_list!];
+                                  updated[idx] = { ...updated[idx], qty: Math.max(0, Number(e.target.value) || 0) };
+                                  updatePOField('termin_list', updated);
+                                }}
+                                className="w-full rounded p-1.5 text-xs border font-bold"
+                                style={inputStyle}
+                              />
+                            </td>
+                            <td className="py-2 px-2">
+                              <input
+                                type="text"
+                                placeholder="No. Dokumen GR..."
+                                value={term.nomor_gr || ''}
+                                onChange={e => {
+                                  const updated = [...poData.termin_list!];
+                                  updated[idx] = { ...updated[idx], nomor_gr: e.target.value };
+                                  updatePOField('termin_list', updated);
+                                }}
+                                className="w-full rounded p-1.5 text-xs border font-mono"
+                                style={inputStyle}
+                              />
+                            </td>
+                            <td className="py-2 px-2">
+                              <select
+                                value={term.status}
+                                onChange={e => {
+                                  const updated = [...poData.termin_list!];
+                                  updated[idx] = { ...updated[idx], status: e.target.value as 'Diterima' | 'Rencana Tiba' };
+                                  updatePOField('termin_list', updated);
+                                }}
+                                className="w-full rounded p-1.5 text-xs border font-bold"
+                                style={{
+                                  ...inputStyle,
+                                  color: term.status === 'Diterima' ? 'var(--color-led-green)' : 'var(--color-led-amber)'
+                                }}
+                              >
+                                <option value="Diterima">Diterima</option>
+                                <option value="Rencana Tiba">Rencana Tiba</option>
+                              </select>
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = poData.termin_list!.filter((_, i) => i !== idx);
+                                  updatePOField('termin_list', updated);
+                                }}
+                                className="text-red-500 hover:text-red-400 font-bold p-1 transition-all"
+                                title="Hapus Termin"
+                              >
+                                🗑️
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Summary Bar */}
+                  {(() => {
+                    const totalDipesan = Number(poData.jumlah_dipesan) || 0;
+                    const totalReceived = poData.termin_list.filter(t => t.status === 'Diterima').reduce((s, t) => s + (t.qty || 0), 0);
+                    const totalPending = poData.termin_list.filter(t => t.status === 'Rencana Tiba').reduce((s, t) => s + (t.qty || 0), 0);
+
+                    return (
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 pt-2 border-t text-xs" style={{ borderColor: 'var(--color-steel-border)' }}>
+                        <div className="p-2 rounded border" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
+                          <span className="text-[10px] block opacity-75">Total Pesanan (PO):</span>
+                          <span className="font-bold">{totalDipesan.toLocaleString('id-ID')} {poData.satuan || 'PCS'}</span>
+                        </div>
+                        <div className="p-2 rounded border" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'rgba(22,163,74,0.3)' }}>
+                          <span className="text-[10px] block opacity-75">Sudah Diterima (GR):</span>
+                          <span className="font-bold" style={{ color: 'var(--color-led-green)' }}>{totalReceived.toLocaleString('id-ID')} {poData.satuan || 'PCS'}</span>
+                        </div>
+                        <div className="p-2 rounded border" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'rgba(249,115,22,0.3)' }}>
+                          <span className="text-[10px] block opacity-75">Sisa Belum Tiba:</span>
+                          <span className="font-bold" style={{ color: '#f97316' }}>{Math.max(0, totalDipesan - totalReceived).toLocaleString('id-ID')} {poData.satuan || 'PCS'}</span>
+                        </div>
+                        <div className="p-2 rounded border" style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}>
+                          <span className="text-[10px] block opacity-75">Status Realisasi:</span>
+                          <span className="font-bold" style={{ color: totalReceived >= totalDipesan && totalDipesan > 0 ? 'var(--color-led-green)' : (totalReceived > 0 ? '#f97316' : 'var(--color-led-amber)') }}>
+                            {totalReceived >= totalDipesan && totalDipesan > 0 ? '100% Selesai' : (totalReceived > 0 ? `Partially GR (${Math.round((totalReceived/totalDipesan)*100)}%)` : 'Belum Ada GR')}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="p-3 text-center rounded border border-dashed text-xs" style={{ borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface-variant)' }}>
+                  Belum ada pembagian termin. Jika pengiriman dilakukan sekaligus (1x GR), cukup isi tanggal pada kolom di atas.
+                </div>
+              )}
+            </div>
+
             <div className="pt-1">
               <Field label="Sisa Stok Sebelum GR">
                 <input type="number" value={poData.sisa_stok || 0} onChange={e => updatePOField('sisa_stok', +e.target.value)} className={inputCls} style={inputStyle} />
@@ -1855,7 +2069,7 @@ export default function AdminPanelPage() {
               <table className="w-full text-left border-collapse min-w-[1200px] data-table">
                 <thead>
                   <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
-                    {['Kode','Uraian','Vendor','Nomor NOD','Nomor PR','Nomor PO','Tgl PO','Nomor GR','Tgl GR','Status','Risiko','Aksi'].map(h => (
+                    {['Kode','Uraian','Vendor','Nomor PO','PO Qty','Total GR','Sisa PO','Nomor PR','Tgl PO','Tgl Rencana/GR','Status','Risiko','Aksi'].map(h => (
                       <th key={h} className="px-3 py-3 text-[10px] font-black tracking-widest uppercase whitespace-nowrap"
                         style={{ color: 'var(--color-on-primary-container)' }}>{h}</th>
                     ))}
@@ -1863,19 +2077,28 @@ export default function AdminPanelPage() {
                 </thead>
                 <tbody>
                   {procureList.map((row, i) => {
-                    const sc = statusCfg[row.status];
+                    const sc = statusCfg[row.status] || { color: 'var(--color-on-surface)' };
                     const nil = <span style={{ color: 'var(--color-on-surface-variant)', opacity: 0.35 }}>—</span>;
+                    const totalDipesan = Number(row.jumlah_dipesan) || 0;
+                    const totalGR = row.total_gr_qty ?? (row.status === 'Goods Receipt (GR)' ? totalDipesan : 0);
+                    const remainingPO = row.remaining_po_qty ?? Math.max(0, totalDipesan - totalGR);
+
                     return (
                       <tr key={row.id} style={{ backgroundColor: i % 2 === 0 ? 'var(--color-surface-dim)' : 'var(--color-background)' }}>
                         <td className="px-3 py-3 text-xs font-bold whitespace-nowrap" style={{ color: 'var(--color-on-surface)' }}>{row.nomor_material}</td>
                         <td className="px-3 py-3 text-xs whitespace-nowrap min-w-[200px]" style={{ color: 'var(--color-on-surface-variant)' }}>{row.uraian_material}</td>
                         <td className="px-3 py-3 text-xs whitespace-nowrap" style={{ color: 'var(--color-on-surface-variant)' }}>{row.vendor}</td>
-                        <td className="px-3 py-3 text-xs font-mono whitespace-nowrap" style={{ color: sc.color }}>{row.nomor_nod || nil}</td>
-                        <td className="px-3 py-3 text-xs font-mono whitespace-nowrap" style={{ color: sc.color }}>{row.nomor_pr || nil}</td>
                         <td className="px-3 py-3 text-xs font-mono font-bold whitespace-nowrap" style={{ color: sc.color }}>{row.nomor_po || nil}</td>
+                        <td className="px-3 py-3 text-xs font-mono font-bold whitespace-nowrap text-right">{totalDipesan > 0 ? totalDipesan.toLocaleString('id-ID') : nil}</td>
+                        <td className="px-3 py-3 text-xs font-mono font-bold whitespace-nowrap text-right" style={{ color: 'var(--color-led-green)' }}>
+                          {totalGR > 0 ? totalGR.toLocaleString('id-ID') : nil}
+                        </td>
+                        <td className="px-3 py-3 text-xs font-mono font-bold whitespace-nowrap text-right" style={{ color: remainingPO > 0 ? '#f97316' : 'var(--color-on-surface-variant)' }}>
+                          {remainingPO > 0 ? remainingPO.toLocaleString('id-ID') : (totalDipesan > 0 ? '0' : nil)}
+                        </td>
+                        <td className="px-3 py-3 text-xs font-mono whitespace-nowrap" style={{ color: sc.color }}>{row.nomor_pr || nil}</td>
                         <td className="px-3 py-3 text-xs whitespace-nowrap">{row.tanggal_po ? formatTanggal(row.tanggal_po) : nil}</td>
-                        <td className="px-3 py-3 text-xs font-mono whitespace-nowrap" style={{ color: 'var(--color-led-green)' }}>{row.nomor_gr || nil}</td>
-                        <td className="px-3 py-3 text-xs whitespace-nowrap">{(row.tanggal_gr || row.tanggal_penerimaan_barang) ? formatTanggal((row.tanggal_gr || row.tanggal_penerimaan_barang)!) : nil}</td>
+                        <td className="px-3 py-3 text-xs whitespace-nowrap">{(row.tanggal_rencana_pengiriman || row.tanggal_gr || row.gr_release_date) ? formatTanggal((row.tanggal_rencana_pengiriman || row.tanggal_gr || row.gr_release_date)!) : nil}</td>
                         <td className="px-3 py-3 whitespace-nowrap">
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
                             style={{ backgroundColor: `${sc.color}20`, color: sc.color }}>{row.status}</span>
@@ -1899,7 +2122,7 @@ export default function AdminPanelPage() {
                     );
                   })}
                   {procureList.length === 0 && (
-                    <tr><td colSpan={12} className="px-4 py-8 text-center text-sm" style={{ color: 'var(--color-on-surface-variant)' }}>Belum ada data pengadaan.</td></tr>
+                    <tr><td colSpan={13} className="px-4 py-8 text-center text-sm" style={{ color: 'var(--color-on-surface-variant)' }}>Belum ada data pengadaan.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -1992,7 +2215,7 @@ export default function AdminPanelPage() {
                       else setNewSchedule(prev => ({ ...prev, tipe_perawatan: e.target.value as TipePerawatan }));
                     }}
                     className={inputCls} style={inputStyle}>
-                    {['P1', 'P3', 'P6', 'P12', 'P24', 'P48', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'].map(t => <option key={t}>{t}</option>)}
+                    {['P1-1', 'P1-2', 'P1-3', 'P1-4', 'P1-5', 'P1', 'P3', 'P6', 'P12', 'P24', 'P48', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'].map(t => <option key={t}>{t}</option>)}
                   </select>
                 </Field>
                 <Field label="Tanggal Rencana">
@@ -2010,7 +2233,7 @@ export default function AdminPanelPage() {
                       else setNewSchedule(prev => ({ ...prev, status_pelaksanaan: e.target.value as PelaksanaanStatus }));
                     }}
                     className={inputCls} style={inputStyle}>
-                    {['Rencana', 'Sedang Dirawat', 'Selesai'].map(s => <option key={s}>{s}</option>)}
+                    {['Rencana', 'Proses Perawatan', 'Selesai'].map(s => <option key={s}>{s}</option>)}
                   </select>
                 </Field>
                 <Field label="Lokasi Dipo *">
@@ -2033,7 +2256,7 @@ export default function AdminPanelPage() {
           )}
 
           <div className="tactile-card rounded-lg overflow-hidden">
-            <TableScrollWrapper maxHeight="550px">
+            <TableScrollWrapper maxHeight="450px">
               <table className="w-full text-left border-collapse data-table">
                 <thead>
                   <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
@@ -2484,7 +2707,7 @@ export default function AdminPanelPage() {
         const uniqueMaterialCodes = Array.from(new Set(bomList.map(b => b.nomor_material)));
         const availableMaterials = masterMaterials.filter(m => !uniqueMaterialCodes.includes(m.nomor_material));
 
-        const ALL_MAINTENANCE_TYPES = ['P1', 'P3', 'P6', 'P12', 'P24', 'P48', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'];
+        const ALL_MAINTENANCE_TYPES = ['P1-1', 'P1-2', 'P1-3', 'P1-4', 'P1-5', 'P1', 'P3', 'P6', 'P12', 'P24', 'P48', 'PB Ganti Keping', 'PB Bubut Roda', 'GCU', 'PB PLH'];
         const SERIES_OPTIONS = ['JR205', 'CLI125', 'CLI225', 'Metro', 'KFW', 'EA203'];
         const PROPULSION_OPTIONS = ['VVVF', 'Rheostatic'];
 

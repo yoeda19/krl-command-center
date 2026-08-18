@@ -54,202 +54,214 @@ export default function GlossaryPage() {
       kategori: 'Pengadaan',
       istilah: 'Multi-PO (Multi Purchase Order)',
       definisi: 'Dukungan pengelolaan dan akumulasi beberapa dokumen pesanan pengadaan (Purchase Order) yang berjalan secara simultan untuk satu material dengan tanggal pengiriman (GR) parsial bertahap.',
-      konteks: 'Tabel & Grafik Stok Kritis (Multi-Stage Line Jump)'
+      konteks: 'Safety Stock Alert (Grafik Proyeksi)'
     },
     {
       kategori: 'Status & Indikator',
       istilah: 'Defisit Stok',
       definisi: 'Durasi jarak waktu (bulan) dari saat persediaan stok fisik mencapai 0 unit hingga barang dari PO pengadaan pertama tiba di gudang.',
-      konteks: 'Mode Konsumsi pada Grafik Stok Kritis'
+      konteks: 'Safety Stock Alert (Mode Konsumsi)'
     },
     {
       kategori: 'Status & Indikator',
       istilah: 'Gap Aman (Safety Stock Gap)',
       definisi: 'Durasi jarak waktu (bulan) sejak persediaan stok menembus batas Stok Pengaman (Safety Stock) hingga barang dari PO pengadaan pertama tiba di gudang.',
-      konteks: 'Mode Saldo Stok pada Grafik Stok Kritis'
+      konteks: 'Safety Stock Alert (Mode Saldo Stok)'
     },
     {
       kategori: 'Istilah Bisnis',
       istilah: 'Anomali Stok (Instability)',
       definisi: 'Kondisi ketidaksesuaian pola konsumsi material terhadap jadwal perawatan (over-absorption / under-absorption) akibat lonjakan pemakaian insidentil atau keterlambatan pelaksanaan perawatan.',
-      konteks: 'Grafik & Tabel Anomali Stok'
+      konteks: 'Anomaly Stock (Grafik & Tabel)'
     },
     {
       kategori: 'Istilah Bisnis',
       istilah: 'Over-absorption',
       definisi: 'Kondisi lonjakan penyerapan material yang melebihi batas standar BOM (Bill of Materials) akibat kerusakan insidentil komponen.',
-      konteks: 'Analisis Keborosan Material'
+      konteks: 'Anomaly Stock (Analisis Keborosan)'
     },
     {
       kategori: 'Istilah Bisnis',
       istilah: 'Under-absorption',
       definisi: 'Kondisi penyerapan material yang lebih rendah dari target rencana karena perawatan terlambat atau belum terealisasi.',
-      konteks: 'Analisis Akumulasi Stok'
+      konteks: 'Anomaly Stock (Analisis Penyerapan)'
     },
     {
       kategori: 'Logistik & Perawatan',
       istilah: 'Refilled (Pengisian Stok)',
       definisi: 'Transaksi penerimaan kembali atau penambahan kuantitas pasokan fisik material ke gudang/dipo.',
-      konteks: 'Riwayat Transaksi Stok'
+      konteks: 'Safety Stock Alert & Slow-Moving'
     },
     {
       kategori: 'Logistik & Perawatan',
       istilah: 'Availability Stok',
       definisi: 'Persentase tingkat ketersediaan fisik stok material di gudang dibandingkan dengan batas stok ideal yang ditetapkan.',
-      konteks: 'Halaman Utama & Monitoring Stok'
+      konteks: 'Safety Stock Alert (KPI & Tabel)'
     },
     {
       kategori: 'Logistik & Perawatan',
       istilah: 'Holding Cost (Biaya Pengendapan)',
       definisi: `Estimasi biaya finansial yang timbul akibat penyimpanan atau pengendapan aset material di gudang (dikonfigurasi ${safeCfg.holdingCostPct}% per tahun di Panel Admin, dapat disesuaikan).`,
-      konteks: 'Analisa Usia Stok (Slow Moving)'
+      konteks: 'Slow-Moving & Dead Stock'
     },
     {
       kategori: 'Logistik & Perawatan',
       istilah: 'Safety Stock (Stok Pengaman)',
       definisi: 'Batas minimum persediaan stok fisik yang wajib ada di gudang untuk mencegah kekosongan stok (*stock-out*) saat terjadi lonjakan mendadak.',
-      konteks: 'Parameter Stok & Proyeksi'
+      konteks: 'Safety Stock Alert & Panel Admin'
     },
     {
       kategori: 'Logistik & Perawatan',
       istilah: 'ROP (Re-Order Point / Batas Order)',
       definisi: 'Titik ambang minimum saldo stok di mana proses pemesanan pengadaan baru (PR/PO) harus segera diterbitkan berdasarkan durasi waktu tenggang (*Lead Time*).',
-      konteks: 'Tabel Availability & Peringatan Order'
+      konteks: 'Safety Stock Alert & Panel Admin'
     },
     {
       kategori: 'Logistik & Perawatan',
       istilah: 'Stok Ideal',
       definisi: 'Target jumlah persediaan stok fisik maksimum yang paling efisien untuk disimpan di gudang tanpa memicu biaya pembengkakan pengendapan.',
-      konteks: 'Parameter Utama Material'
+      konteks: 'Safety Stock Alert & Panel Admin'
     },
     {
       kategori: 'Status & Indikator',
       istilah: 'Fast Moving',
       definisi: 'Kategori material dengan laju pemakaian/penyerapan sangat tinggi yang berpotensi kehabisan stok dalam waktu dekat jika tidak diisi kembali.',
-      konteks: 'Indikator Risiko Material'
+      konteks: 'Safety Stock Alert (Indikator Risiko)'
     },
     {
       kategori: 'Status & Indikator',
       istilah: 'Fresh Stock',
       definisi: `Material baru yang baru saja masuk gudang atau memiliki usia pengendapan kurang dari atau sama dengan ${safeCfg.limitSlowMoving} hari.`,
-      konteks: 'Kategori Usia Pengendapan'
+      konteks: 'Slow-Moving & Dead Stock'
     },
     {
       kategori: 'Status & Indikator',
       istilah: 'Slow Moving',
       definisi: `Material yang mengendap di gudang tanpa pergerakan transaksi selama ${safeCfg.limitSlowMoving + 1} hingga ${safeCfg.limitAtRisk} hari (ambang batas dapat diubah di Panel Admin).`,
-      konteks: 'Kategori Usia Pengendapan'
+      konteks: 'Slow-Moving & Dead Stock'
     },
     {
       kategori: 'Status & Indikator',
       istilah: 'At-Risk',
       definisi: `Material yang mengendap di gudang tanpa pergerakan selama ${safeCfg.limitAtRisk + 1} hingga ${safeCfg.limitDeadStock} hari yang memerlukan evaluasi pemanfaatan (ambang batas dapat diubah di Panel Admin).`,
-      konteks: 'Kategori Usia Pengendapan'
+      konteks: 'Slow-Moving & Dead Stock'
     },
     {
       kategori: 'Status & Indikator',
       istilah: 'Dead Stock',
       definisi: `Material mati / tidak bergerak sama sekali lebih dari ${safeCfg.limitDeadStock} hari yang berpotensi menimbulkan biaya pengendapan tinggi (ambang batas dapat diubah di Panel Admin).`,
-      konteks: 'Kategori Usia Pengendapan'
+      konteks: 'Slow-Moving & Dead Stock'
     },
     {
       kategori: 'Pengadaan',
       istilah: 'NOD (Nota Dinas)',
       definisi: 'Dokumen usulan kebutuhan awal pengadaan barang/jasa yang diterbitkan oleh unit kerja peminta.',
-      konteks: 'Progres PO & Tahapan Pengadaan'
+      konteks: 'Stock In Transit & On PO'
     },
     {
       kategori: 'Pengadaan',
       istilah: 'Spektek',
       definisi: 'Dokumen spesifikasi teknis rincian barang yang disusun untuk keperluan pengadaan.',
-      konteks: 'Tahap Penyusunan Pengadaan'
+      konteks: 'Stock In Transit & On PO'
     },
     {
       kategori: 'Pengadaan',
       istilah: 'CTPE & CTPP',
       definisi: 'Tim evaluasi teknis dan panitia pengadaan yang bertugas meninjau serta menyetujui dokumen teknis dan penawaran.',
-      konteks: 'Progres Verifikasi Pengadaan'
+      konteks: 'Stock In Transit & On PO'
     },
     {
       kategori: 'Pengadaan',
       istilah: 'PR (Permintaan Pembelian)',
       definisi: 'Dokumen permintaan pembelian resmi yang telah disetujui dalam Sistem pengadaan.',
-      konteks: 'Tahap Pembelian / Purchase Requisition'
+      konteks: 'Stock In Transit & On PO'
     },
     {
       kategori: 'Pengadaan',
       istilah: 'PO (Pesanan Pembelian)',
       definisi: 'Dokumen kontrak pesanan resmi yang diterbitkan kepada pihak penyedia/vendor.',
-      konteks: 'Tahap Pesanan / Purchase Order'
+      konteks: 'Stock In Transit & On PO'
     },
     {
       kategori: 'Logistik & Perawatan',
       istilah: 'GI (Goods Issue)',
       definisi: 'Transaksi pengeluaran atau pemakaian barang dari gudang untuk keperluan perawatan KRL.',
-      konteks: 'Riwayat Pemakaian Transaksi'
+      konteks: 'Maintenance Order Integration & Safety Stock Alert'
     },
     {
       kategori: 'Logistik & Perawatan',
       istilah: 'GR (Goods Receipt)',
       definisi: 'Transaksi penerimaan fisik barang di gudang dari penyedia setelah proses verifikasi kualitas.',
-      konteks: 'Riwayat Penerimaan Pengadaan'
+      konteks: 'Stock In Transit & On PO & Safety Stock Alert'
     },
     {
       kategori: 'Istilah Bisnis',
       istilah: 'Run Rate Multiplier',
       definisi: 'Faktor rasio perbandingan antara konsumsi pemakaian aktual historis (3/6/12 bulan) terhadap rencana target awal.',
-      konteks: 'Kalkulasi Proyeksi Riwayat'
+      konteks: 'Safety Stock Alert (Mode Riwayat)'
     }
   ];
 
   const defaultFormulas: FormulaItem[] = [
     {
       nama: '% Ketersediaan Stok',
-      komponen: 'Halaman Availability Stok',
+      komponen: 'Safety Stock Alert',
       rumus: '(Stok Saat Ini / Stok Ideal) × 100%',
       penjelasan: 'Menghitung tingkat kecukupan stok fisik gudang terhadap kapasitas ideal.'
     },
     {
       nama: 'Holding Cost (Biaya Pengendapan)',
-      komponen: 'Analisa Usia Stok (Slow Moving)',
+      komponen: 'Slow-Moving & Dead Stock',
       rumus: `Nilai Aset × ${safeCfg.holdingCostPct}% × (Usia Pengendapan Hari / 365)`,
       penjelasan: `Memperkirakan kerugian biaya pengendapan dari barang yang mengendap lama (faktor persentase ${safeCfg.holdingCostPct}% dapat diatur di Panel Admin).`
     },
     {
       nama: 'ROP (Re-Order Point / Batas Order)',
-      komponen: 'Monitoring Stok Kritis',
+      komponen: 'Safety Stock Alert',
       rumus: 'Safety Stock + (Rata-Rata Penyerapan Bulanan × (Lead Time Hari / 30))',
       penjelasan: 'Ambang batas di mana pesanan pengadaan baru harus sudah terbit agar barang tiba sebelum Safety Stock tersentuh.'
     },
     {
       nama: 'Estimasi Bulan Habis (Plan Standar)',
-      komponen: 'Grafik & Tabel Stok Kritis',
-      rumus: 'Bulan Saat Ini + (Stok Saat Ini / Plan Penyerapan Bulanan)',
-      penjelasan: 'Menentukan perkiraan bulan berapa stok fisik akan habis murni berdasarkan target rencana penyerapan.'
+      komponen: 'Safety Stock Alert',
+      rumus: 'Bulan GR Terakhir + (Qty GR Terakhir / Plan Penyerapan Bulanan)',
+      penjelasan: 'Menentukan perkiraan bulan berapa stok barang dari penerimaan (GR) terakhir akan habis murni berdasarkan target rencana penyerapan tahunan.'
     },
     {
       nama: 'Run Rate Multiplier (Rasio Keborosan)',
-      komponen: 'Mode Kalkulasi RIWAYAT',
+      komponen: 'Safety Stock Alert (Mode Riwayat)',
       rumus: 'Sum Pemakaian Aktual (N Bln) / Sum Rencana Target (N Bln)',
       penjelasan: 'Mengukur seberapa boros atau hemat konsumsi riil dibanding rencana awal. Nilai > 1.0 berarti lebih boros dari rencana.'
     },
     {
       nama: 'Plan Terkoreksi Bulanan',
-      komponen: 'Proyeksi Penyerapan Riwayat',
+      komponen: 'Safety Stock Alert (Mode Riwayat)',
       rumus: 'Plan Penyerapan Bulanan × Run Rate Multiplier',
       penjelasan: 'Menyesuaikan rencana penyerapan bulanan ke depan berdasarkan laju keborosan konsumsi nyata.'
     },
     {
       nama: 'Proyeksi Saldo Stok (Dengan Multi-PO)',
-      komponen: 'Grafik Saldo Stok Kritis',
+      komponen: 'Safety Stock Alert (Mode Saldo Stok)',
       rumus: 'Saldo(t) = Saldo(t-1) - Konsumsi(t) + Sum(Qty PO_i yang tiba pada bulan t)',
       penjelasan: 'Simulasi pergerakan saldo persediaan yang melompat naik secara dinamis pada setiap bulan kedatangan dari masing-masing PO aktif.'
     },
     {
       nama: 'Gap Ke PO (Defisit vs Gap Aman)',
-      komponen: 'Toolbar & Grafik Stok Kritis',
+      komponen: 'Safety Stock Alert (Toolbar & Grafik)',
       rumus: 'Mode Konsumsi = Bulan PO - Bulan Stok Habis (0 Unit) | Mode Saldo Stok = Bulan PO - Bulan Safety Stock Breach',
       penjelasan: 'Mengukur durasi risiko kekosongan barang total (Defisit) pada Mode Konsumsi atau durasi operasi di bawah batas pengaman (Gap Aman) pada Mode Saldo Stok.'
+    },
+    {
+      nama: 'Deviasi Konsumsi (Qty & %)',
+      komponen: 'Anomaly Stock',
+      rumus: 'Deviasi Qty = Aktual Rata-Rata - Plan Bulanan | Deviasi % = (Deviasi Qty / Plan Bulanan) × 100%',
+      penjelasan: 'Menghitung selisih deviasi kuantitas dan persentase penyerapan aktual terhadap rencana target.'
+    },
+    {
+      nama: 'Tingkat Kepatuhan Jadwal Perawatan',
+      komponen: 'Maintenance Order Integration',
+      rumus: '(Jumlah Perawatan Selesai / Total Target Rencana) × 100%',
+      penjelasan: 'Mengukur efektivitas dan kepatuhan pelaksanaan jadwal perawatan armada kereta terhadap rencana.'
     }
   ];
 
@@ -533,7 +545,7 @@ export default function GlossaryPage() {
         {activeTab === 'panduan' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             
-            {/* Card 1: Halaman Monitoring Stok (Critical Stock & Overview) */}
+            {/* Card 1: Safety Stock Alert */}
             <div 
               className="tactile-card rounded-xl p-5 border space-y-3"
               style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}
@@ -541,23 +553,23 @@ export default function GlossaryPage() {
               <div className="flex items-center gap-2 border-b pb-2.5" style={{ borderColor: 'var(--color-steel-border)' }}>
                 <span className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-400 font-extrabold text-xs flex items-center justify-center">1</span>
                 <h3 className="font-bold text-sm" style={{ color: 'var(--color-on-surface)' }}>
-                  Halaman Monitoring Stok Kritis
+                  Safety Stock Alert
                 </h3>
               </div>
               <div className="space-y-2 text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
-                <p><b>Fungsi Utama:</b> Menganalisis risiko ketersediaan fisik persediaan material terhadap rencana penyerapan perawatan hingga tahun 2030.</p>
+                <p><b>Fungsi Utama:</b> Menganalisis risiko ketersediaan stok fisik material terhadap rencana penyerapan perawatan hingga tahun 2030.</p>
                 <ul className="space-y-1.5 pl-2 border-l-2" style={{ borderColor: 'var(--color-steel-border)' }}>
-                  <li>• <b>KPI Header:</b> Memantau total item Stok Kritis, Waspada, % Availability Stok, dan Total Nilai Aset gudang.</li>
-                  <li>• <b>Toggle KONSUMSI vs SALDO STOK:</b> Mode Konsumsi menampilkan volume pemakaian bulanan, sedangkan Mode Saldo Stok mensimulasikan sisa fisik persediaan ke depan.</li>
-                  <li>• <b>Toggle STANDAR vs RIWAYAT:</b> Mode Standar menggunakan target rencana murni. Mode Riwayat mengalikan target dengan <i>Run Rate Multiplier</i> (keborosan konsumsi riil).</li>
-                  <li>• <b>Toggle DENGAN PO:</b> Memasukkan otomatis pasokan PO pengadaan yang dipesan ke grafik pada bulan estimasi kedatangan barang.</li>
-                  <li>• <b>Tabel Skenario &amp; PO:</b> Menampilkan sisa bulan habis stok, status risiko (KRITIS / WASPADA / AMAN), gap kedatangan PO, serta tombol simulasi order PO.</li>
-                  <li>• <b>Pop-up Detail Material:</b> Klik pada baris material untuk melihat riwayat transaksi (GI/GR), konsumsi per trainset kereta, dan rencana penyerapan s.d 2030.</li>
+                  <li>• <b>KPI Header:</b> Memantau total item Kritis, Waspada, % Ketersediaan Stok, dan Total Nilai Aset gudang.</li>
+                  <li>• <b>Toggle Konsumsi vs Saldo Stok:</b> Mode Konsumsi menampilkan volume pemakaian bulanan, Mode Saldo Stok mensimulasikan sisa fisik persediaan ke depan.</li>
+                  <li>• <b>Toggle Standar vs Riwayat:</b> Mode Standar menggunakan target rencana murni, Mode Riwayat mengalikan target dengan <i>Run Rate Multiplier</i> (laju keborosan riil).</li>
+                  <li>• <b>Toggle Dengan PO:</b> Memasukkan akumulasi pasokan PO pengadaan ke grafik pada estimasi bulan kedatangan barang.</li>
+                  <li>• <b>Tabel Skenario &amp; PO:</b> Menampilkan sisa bulan habis stok, status risiko (Kritis / Waspada / Aman), gap kedatangan PO, serta tombol simulasi order PO.</li>
+                  <li>• <b>Detail Material:</b> Klik baris material untuk melihat riwayat transaksi (GI/GR), konsumsi per trainset kereta, dan rencana penyerapan s.d 2030.</li>
                 </ul>
               </div>
             </div>
 
-            {/* Card 2: Halaman Analisis Usia Stok (Stock Aging) */}
+            {/* Card 2: Anomaly Stock */}
             <div 
               className="tactile-card rounded-xl p-5 border space-y-3"
               style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}
@@ -565,100 +577,166 @@ export default function GlossaryPage() {
               <div className="flex items-center gap-2 border-b pb-2.5" style={{ borderColor: 'var(--color-steel-border)' }}>
                 <span className="w-6 h-6 rounded-full bg-amber-500/20 text-amber-400 font-extrabold text-xs flex items-center justify-center">2</span>
                 <h3 className="font-bold text-sm" style={{ color: 'var(--color-on-surface)' }}>
-                  Halaman Analisis Usia Stok &amp; Holding Cost
+                  Anomaly Stock
+                </h3>
+              </div>
+              <div className="space-y-2 text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
+                <p><b>Fungsi Utama:</b> Mendeteksi ketidaksesuaian pola konsumsi aktual material terhadap target rencana penyerapan.</p>
+                <ul className="space-y-1.5 pl-2 border-l-2" style={{ borderColor: 'var(--color-steel-border)' }}>
+                  <li>• <b>Filter Periode:</b> Pemilihan rentang bulan dan tahun evaluasi pergerakan konsumsi material.</li>
+                  <li>• <b>Toleransi Deviasi:</b> Konfigurasi batas ambang deviasi (+/- %) untuk mengklasifikasikan status Normal vs Anomali.</li>
+                  <li>• <b>Grafik Deviasi:</b> Visualisasi garis (Line) dan batang (Bar) perbandingan target rencana versus realisasi aktual.</li>
+                  <li>• <b>Riwayat Transaksi Bulanan:</b> Pop-up rincian transaksi pemakaian dan verifikasi kesesuaian terhadap jadwal perawatan dan Work Order.</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Card 3: Slow-Moving & Dead Stock */}
+            <div 
+              className="tactile-card rounded-xl p-5 border space-y-3"
+              style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}
+            >
+              <div className="flex items-center gap-2 border-b pb-2.5" style={{ borderColor: 'var(--color-steel-border)' }}>
+                <span className="w-6 h-6 rounded-full bg-orange-500/20 text-orange-400 font-extrabold text-xs flex items-center justify-center">3</span>
+                <h3 className="font-bold text-sm" style={{ color: 'var(--color-on-surface)' }}>
+                  Slow-Moving &amp; Dead Stock
                 </h3>
               </div>
               <div className="space-y-2 text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
                 <p><b>Fungsi Utama:</b> Memantau pergerakan pengendapan barang di gudang dan mengestimasi biaya penyimpanan finansial.</p>
                 <ul className="space-y-1.5 pl-2 border-l-2" style={{ borderColor: 'var(--color-steel-border)' }}>
-                  <li>• <b>Kategori Usia:</b> Membagi persediaan ke dalam <i>Fresh Stock</i> (≤{safeCfg.limitSlowMoving}h), <i>Slow Moving</i> ({safeCfg.limitSlowMoving+1}-{safeCfg.limitAtRisk}h), <i>At-Risk</i> ({safeCfg.limitAtRisk+1}-{safeCfg.limitDeadStock}h), dan <i>Dead Stock</i> (&gt;{safeCfg.limitDeadStock}h).</li>
-                  <li>• <b>Heatmap Gudang:</b> Matriks warna untuk mengidentifikasi gudang atau dipo mana yang mengalami penumpukan barang mengendap.</li>
+                  <li>• <b>Kategori Usia:</b> Membagi persediaan ke dalam <i>Fresh Stock</i> (≤{safeCfg.limitSlowMoving}h), <i>Slow-Moving</i> ({safeCfg.limitSlowMoving+1}-{safeCfg.limitAtRisk}h), <i>At-Risk</i> ({safeCfg.limitAtRisk+1}-{safeCfg.limitDeadStock}h), dan <i>Dead Stock</i> (&gt;{safeCfg.limitDeadStock}h).</li>
+                  <li>• <b>Heatmap Gudang:</b> Matriks warna untuk mengidentifikasi gudang atau dipo dengan penumpukan barang mengendap.</li>
                   <li>• <b>Kalkulasi Holding Cost:</b> Memperkirakan kerugian biaya pengendapan dari nilai aset dikali persentase biaya simpan ({safeCfg.holdingCostPct}%/tahun).</li>
-                  <li>• <b>Rekomendasi Restock &amp; Pemindahan:</b> Memberikan saran pengalihan stok mati dari gudang lain sebelum menerbitkan pesanan PO pengadaan baru.</li>
+                  <li>• <b>Rekomendasi Pemindahan:</b> Saran relokasi stok mati antar gudang sebelum menerbitkan pesanan PO baru.</li>
                 </ul>
               </div>
             </div>
 
-            {/* Card 3: Halaman Manajemen Pengadaan (Progress PO) */}
+            {/* Card 4: Stock In Transit & On PO */}
             <div 
               className="tactile-card rounded-xl p-5 border space-y-3"
               style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}
             >
               <div className="flex items-center gap-2 border-b pb-2.5" style={{ borderColor: 'var(--color-steel-border)' }}>
-                <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-extrabold text-xs flex items-center justify-center">3</span>
+                <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-extrabold text-xs flex items-center justify-center">4</span>
                 <h3 className="font-bold text-sm" style={{ color: 'var(--color-on-surface)' }}>
-                  Halaman Manajemen Pengadaan (Progress PO)
+                  Stock In Transit &amp; On PO
                 </h3>
               </div>
               <div className="space-y-2 text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
                 <p><b>Fungsi Utama:</b> Melacak tahapan siklus pengadaan material dari nota dinas usulan hingga barang diterima di gudang.</p>
                 <ul className="space-y-1.5 pl-2 border-l-2" style={{ borderColor: 'var(--color-steel-border)' }}>
-                  <li>• <b>Pipeline Progress:</b> Memantau tahapan Nota Dinas (NOD), Spektek, Verifikasi CTPE/CTPP, Permintaan Pembelian (PR), dan Kontrak PO.</li>
-                  <li>• <b>Sticky Column &amp; Navigasi:</b> Kolom NO, Nomor Material, dan Nama Material terkunci di sisi kiri. Gunakan tombol panah `&lt;` dan `&gt;` untuk menggeser tabel.</li>
-                  <li>• <b>Estimasi Kedatangan Barang:</b> Tanggal kedatangan PO yang disetujui akan otomatis terintegrasi ke grafik proyeksi stok kritis.</li>
+                  <li>• <b>Pipeline Progres:</b> Memantau tahapan Nota Dinas (NOD), Spektek, Verifikasi CTPE/CTPP, Permintaan Pembelian (PR), dan Kontrak PO.</li>
+                  <li>• <b>Filter &amp; Tingkat Risiko:</b> Penyaringan data pengadaan berdasarkan status pemrosesan dan klasifikasi risiko waktu pengiriman.</li>
+                  <li>• <b>Navigasi Tabel:</b> Kolom kode dan uraian material terkunci (sticky) dengan kontrol tombol panah geser.</li>
+                  <li>• <b>Integrasi Pengiriman:</b> Tanggal kedatangan PO yang disetujui terhubung otomatis ke grafik proyeksi Safety Stock Alert.</li>
                 </ul>
               </div>
             </div>
 
-            {/* Card 4: Halaman Perawatan KRL (Maintenance Schedule) */}
+            {/* Card 5: Maintenance Order Integration */}
             <div 
               className="tactile-card rounded-xl p-5 border space-y-3"
               style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}
             >
               <div className="flex items-center gap-2 border-b pb-2.5" style={{ borderColor: 'var(--color-steel-border)' }}>
-                <span className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 font-extrabold text-xs flex items-center justify-center">4</span>
+                <span className="w-6 h-6 rounded-full bg-purple-500/20 text-purple-400 font-extrabold text-xs flex items-center justify-center">5</span>
                 <h3 className="font-bold text-sm" style={{ color: 'var(--color-on-surface)' }}>
-                  Halaman Perawatan KRL &amp; BOM Perbaikan
+                  Maintenance Order Integration
                 </h3>
               </div>
               <div className="space-y-2 text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
-                <p><b>Fungsi Utama:</b> Menyinkronkan jadwal pemeliharaan armada trainset KRL dengan standar kebutuhan suku cadang.</p>
+                <p><b>Fungsi Utama:</b> Menyinkronkan jadwal pemeliharaan armada kereta dengan reservasi dan pemenuhan suku cadang (Work Order).</p>
                 <ul className="space-y-1.5 pl-2 border-l-2" style={{ borderColor: 'var(--color-steel-border)' }}>
-                  <li>• <b>Jadwal Perawatan:</b> Menampilkan kalender pelaksanaan perawatan P1, P3, P6, P12, dan Overhaul (P48).</li>
-                  <li>• <b>BOM Standar:</b> Alokasi standar suku cadang yang wajib digunakan untuk setiap jenis kereta, seri kereta, dan tipe propulsi.</li>
-                  <li>• <b>Analisis Anomali Pemakaian:</b> Melacak pemakaian berlebih (*Over-absorption*) akibat perbaikan komponen insidentil di luar standar.</li>
+                  <li>• <b>Jadwal Perawatan:</b> Kalender pelaksanaan perawatan berkala P1, P3, P6, P12, P24, hingga P48 (Overhaul).</li>
+                  <li>• <b>Status Pelaksanaan:</b> Pemantauan status pengerjaan (Rencana, Proses Perawatan, Sedang Dirawat, Selesai).</li>
+                  <li>• <b>Pemenuhan Work Order:</b> Pelacakan status pemenuhan material reservasi (Outstanding vs Fulfilled).</li>
+                  <li>• <b>BOM Standar:</b> Alokasi standar suku cadang sesuai seri kereta dan jenis propulsi.</li>
                 </ul>
               </div>
             </div>
 
-            {/* Card 5: Halaman Panel Admin (Konfigurasi & Pengaturan) */}
+            {/* Card 6: Komposisi Rangkaian */}
             <div 
               className="tactile-card rounded-xl p-5 border space-y-3"
               style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}
             >
               <div className="flex items-center gap-2 border-b pb-2.5" style={{ borderColor: 'var(--color-steel-border)' }}>
-                <span className="w-6 h-6 rounded-full bg-rose-500/20 text-rose-400 font-extrabold text-xs flex items-center justify-center">5</span>
+                <span className="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-extrabold text-xs flex items-center justify-center">6</span>
                 <h3 className="font-bold text-sm" style={{ color: 'var(--color-on-surface)' }}>
-                  Halaman Panel Admin (Konfigurasi System)
+                  Komposisi Rangkaian
                 </h3>
               </div>
               <div className="space-y-2 text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
-                <p><b>Fungsi Utama:</b> Pengaturan parameter persediaan, master data, jadwal perawatan, dan kamus glosarium terpusat.</p>
+                <p><b>Fungsi Utama:</b> Menampilkan struktur hierarki peralatan armada kereta dan penempatan komponen per trainset.</p>
+                <ul className="space-y-1.5 pl-2 border-l-2" style={{ borderColor: 'var(--color-steel-border)' }}>
+                  <li>• <b>Filter Armada:</b> Penyaringan berdasarkan nomor rangkaian, seri kereta, jenis propulsi, dan dipo penugasan.</li>
+                  <li>• <b>Struktur Hierarki:</b> Penelusuran pohon aset dari level trainset, car (gerbong), bogie, hingga komponen peralatan.</li>
+                  <li>• <b>Formasi Kereta:</b> Visualisasi susunan car (SF) dan konfigurasi teknis unit kereta yang beroperasi.</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Card 7: Panel Admin */}
+            <div 
+              className="tactile-card rounded-xl p-5 border space-y-3"
+              style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}
+            >
+              <div className="flex items-center gap-2 border-b pb-2.5" style={{ borderColor: 'var(--color-steel-border)' }}>
+                <span className="w-6 h-6 rounded-full bg-rose-500/20 text-rose-400 font-extrabold text-xs flex items-center justify-center">7</span>
+                <h3 className="font-bold text-sm" style={{ color: 'var(--color-on-surface)' }}>
+                  Panel Admin
+                </h3>
+              </div>
+              <div className="space-y-2 text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
+                <p><b>Fungsi Utama:</b> Pengaturan konfigurasi parameter persediaan, master data, jadwal perawatan, dan kamus istilah terpusat.</p>
                 <ul className="space-y-1.5 pl-2 border-l-2" style={{ borderColor: 'var(--color-steel-border)' }}>
                   <li>• <b>Parameter Material:</b> Mengatur Stok Ideal, Safety Stock, Lead Time, serta target Rencana Penyerapan Bulanan s.d 2030.</li>
-                  <li>• <b>Ambang Batas Global:</b> Memperbarui nilai batas Slow Moving, At-Risk, Dead Stock, dan persentase Holding Cost per tahun.</li>
-                  <li>• <b>Kelola Glosarium &amp; Definisi:</b> Mengedit, menambah, atau menghapus definisi istilah bisnis melalui Data Tabel &amp; Pop-Up Modal.</li>
+                  <li>• <b>Ambang Batas Global:</b> Memperbarui batas Slow-Moving, At-Risk, Dead Stock, dan tarif Holding Cost per tahun.</li>
+                  <li>• <b>Kelola Glosarium &amp; Rumus:</b> Mengedit, menambah, dan menghapus definisi istilah bisnis serta formula kalkulasi.</li>
                 </ul>
               </div>
             </div>
 
-            {/* Card 6: Halaman Kamus & Glosarium */}
+            {/* Card 8: Log Audit */}
             <div 
               className="tactile-card rounded-xl p-5 border space-y-3"
               style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}
             >
               <div className="flex items-center gap-2 border-b pb-2.5" style={{ borderColor: 'var(--color-steel-border)' }}>
-                <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 font-extrabold text-xs flex items-center justify-center">6</span>
+                <span className="w-6 h-6 rounded-full bg-teal-500/20 text-teal-400 font-extrabold text-xs flex items-center justify-center">8</span>
                 <h3 className="font-bold text-sm" style={{ color: 'var(--color-on-surface)' }}>
-                  Halaman Kamus, Rumus &amp; Panduan Penggunaan
+                  Log Audit
                 </h3>
               </div>
               <div className="space-y-2 text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
-                <p><b>Fungsi Utama:</b> Pusat referensi ilmiah, formula matematika, dan dokumentasi operasional pengguna.</p>
+                <p><b>Fungsi Utama:</b> Merekam seluruh jejak aktivitas perubahan parameter dan konfigurasi sistem untuk transparansi tata kelola.</p>
                 <ul className="space-y-1.5 pl-2 border-l-2" style={{ borderColor: 'var(--color-steel-border)' }}>
-                  <li>• <b>Glosarium Istilah:</b> Pencarian istilah bisnis dan kata khusus yang terhubung langsung ke database.</li>
-                  <li>• <b>Rumus &amp; Perhitungan:</b> Rincian formula matematika yang digunakan pada setiap grafik dan kalkulasi tabel.</li>
-                  <li>• <b>Panduan Penggunaan:</b> Dokumentasi petunjuk penggunaan langkah-demi-langkah seluruh modul Command Center.</li>
+                  <li>• <b>Riwayat Perubahan:</b> Mencatat nilai parameter lama (Original Value) dan nilai baru (New Value).</li>
+                  <li>• <b>Informasi Administrator:</b> Identitas nama admin, email, tanggal/waktu perubahan, dan nama modul terkait.</li>
+                  <li>• <b>Pencarian &amp; Filter:</b> Pencarian cepat log riwayat berdasarkan admin, kode material, atau nama parameter.</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Card 9: Glosarium & Panduan */}
+            <div 
+              className="tactile-card rounded-xl p-5 border space-y-3 md:col-span-2"
+              style={{ backgroundColor: 'var(--color-surface-container)', borderColor: 'var(--color-steel-border)' }}
+            >
+              <div className="flex items-center gap-2 border-b pb-2.5" style={{ borderColor: 'var(--color-steel-border)' }}>
+                <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 font-extrabold text-xs flex items-center justify-center">9</span>
+                <h3 className="font-bold text-sm" style={{ color: 'var(--color-on-surface)' }}>
+                  Glosarium &amp; Panduan
+                </h3>
+              </div>
+              <div className="space-y-2 text-xs leading-relaxed" style={{ color: 'var(--color-on-surface-variant)' }}>
+                <p><b>Fungsi Utama:</b> Pusat referensi istilah bisnis perkeretaapian &amp; logistik, formula perhitungan matematika grafik, dan dokumentasi operasional pengguna.</p>
+                <ul className="space-y-1.5 pl-2 border-l-2" style={{ borderColor: 'var(--color-steel-border)' }}>
+                  <li>• <b>Glosarium Istilah:</b> Pencarian dan filter kategori istilah bisnis, status pengadaan, dan logistik perkeretaapian.</li>
+                  <li>• <b>Rumus &amp; Perhitungan:</b> Rincian formula matematika kalkulasi grafik dengan nilai parameter aktif real-time.</li>
+                  <li>• <b>Panduan Modul:</b> Dokumentasi petunjuk operasional lengkap untuk seluruh modul halaman aplikasi.</li>
                 </ul>
               </div>
             </div>

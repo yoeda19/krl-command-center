@@ -92,7 +92,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     <div className="min-h-screen flex flex-col lg:flex-row" style={{ backgroundColor: '#ffffff' }}>
       {/* Left panel — PRISMA Branding (White background - hidden on mobile) */}
       <div 
-        className="hidden lg:flex flex-1 flex flex-col justify-center p-8 lg:p-16 relative overflow-hidden bg-cover bg-center"
+        className="hidden lg:flex flex-1 flex-col justify-center p-8 lg:p-16 relative overflow-hidden bg-cover bg-center"
         style={{ backgroundImage: "url('/Picture1.jpg')" }}
       >
         {/* Semi-transparent white overlay to ensure text readability */}
@@ -110,15 +110,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         {/* Center Content */}
         <div className="relative z-20 py-12 max-w-xl mx-auto text-center flex flex-col items-center">
           <div className="flex flex-col items-center">
-            <img src="/logo.svg" alt="PRISMA Logo" className="w-[120px] h-[120px] mb-6 object-contain" />
+            <img src="/logo.svg" alt="DRIM Logo" className="w-[120px] h-[120px] mb-6 object-contain" />
             <h1 className="text-4xl font-extrabold tracking-tight text-slate-900 mb-4">
-              PRISMA
+              DRIM
             </h1>
             <p className="text-lg font-bold text-blue-600 mb-2 leading-snug">
-              Procurement & Railway Inventory Smart Monitoring Application
+              Dashboard Rollingstock Inventory & Monitoring
             </p>
             <p className="text-sm text-slate-500 leading-relaxed">
-              (Aplikasi Monitoring Cerdas Pengadaan & Inventaris Perkeretaapian)
+              KRL Parts Command Center
             </p>
           </div>
         </div>
@@ -136,10 +136,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </div>
           </div>
 
-          {/* Logo PRISMA & Teks (Hanya Mobile di Atas Form) */}
+          {/* Logo DRIM & Teks (Hanya Mobile di Atas Form) */}
           <div className="flex flex-col items-center gap-1 lg:hidden mb-4">
-            <img src="/logo.svg" alt="PRISMA Logo" className="h-12 w-12 object-contain" />
-            <span className="text-xl font-black text-white tracking-widest">PRISMA</span>
+            <img src="/logo.svg" alt="DRIM Logo" className="h-12 w-12 object-contain" />
+            <span className="text-xl font-black text-white tracking-widest">DRIM</span>
           </div>
 
           <form onSubmit={handleLoginSubmit} className="space-y-5">

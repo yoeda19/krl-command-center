@@ -163,9 +163,9 @@ function calculateDynamicMetrics(
   }
 
   // Helper to project future exhaustion if not depleted within filter range
-  const projectExhaustion = (remainingStock: number, lastMonth: { year: number; month: number }) => {
-    // Cari rata-rata konsumsi rencana bulanan
-    const avgConsumption = plans.length > 0 ? ((plans.reduce((s, p) => s + p, 0) / plans.length) * runRateMultiplier) : 0;
+  const projectExhaustion = (remainingStock: number, lastMonth: { year: number; month: number }, isCorrectedMode: boolean = false) => {
+    const mult = isCorrectedMode ? runRateMultiplier : 1;
+    const avgConsumption = plans.length > 0 ? ((plans.reduce((s, p) => s + p, 0) / plans.length) * mult) : ((item.plan_bulanan || 0) * mult);
     if (avgConsumption <= 0 || remainingStock <= 0) {
       return '-'; // Tidak ada konsumsi rencana atau stok kosong
     }
@@ -177,23 +177,201 @@ function calculateDynamicMetrics(
 
   const lastM = rangeMonths[rangeMonths.length - 1];
 
-  // 1. Find Plan Exhaustion
-  let planStock = initialStock;
-  let planExhaustionIndex = 99;
-  let planExhaustionLabel = '-';
+  // 1. Kelompokkan & jumlahkan seluruh riwayat GR per bulan agar kuantitas per bulan utuh (misal total Juli 2026 = 6.000)
+  const monthNamesGR = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+  const grByMonthMap = new Map<string, { year: number; month: number; label: string; qty: number }>();
   
-  for (let i = 0; i < rangeMonths.length; i++) {
-    const m = rangeMonths[i];
-    planStock -= plans[i];
-    if (planStock <= 0) {
-      planExhaustionIndex = i;
-      planExhaustionLabel = rangeMonths[i].label;
-      break;
+  if (item.gr_history && item.gr_history.length > 0) {
+    item.gr_history.forEach(gr => {
+      if (!gr.tanggal || !gr.qty) return;
+      const d = new Date(gr.tanggal);
+      const y = d.getFullYear();
+      const m = d.getMonth() + 1;
+      const key = `${y}-${m}`;
+      const label = `${monthNamesGR[m - 1]} '${String(y).slice(2)}`;
+      if (!grByMonthMap.has(key)) {
+        grByMonthMap.set(key, { year: y, month: m, label, qty: 0 });
+      }
+      grByMonthMap.get(key)!.qty += Math.abs(Number(gr.qty) || 0);
+    });
+  }
+
+  // Cari bulan GR terakhir berdasarkan urutan waktu
+  const sortedGRMonths = Array.from(grByMonthMap.values())
+    .sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month));
+  
+  const lastGRMonth = sortedGRMonths.length > 0 ? sortedGRMonths[0] : null;
+
+  // 1a. Find Plan Exhaustion WITHOUT PO (Berdasarkan Riwayat GR Terakhir dikurangi Plan Bulanan)
+  let planStockNoPO = 0;
+  let planExhaustionIndexNoPO = 99;
+  let planExhaustionLabelNoPO = '-';
+
+  if (lastGRMonth) {
+    const grIdx = rangeMonths.findIndex(m => m.year === lastGRMonth.year && m.month === lastGRMonth.month);
+    
+    if (grIdx >= 0) {
+      planStockNoPO = lastGRMonth.qty;
+      for (let i = grIdx; i < rangeMonths.length; i++) {
+        planStockNoPO -= plans[i];
+        if (planStockNoPO <= 0) {
+          planExhaustionIndexNoPO = i;
+          planExhaustionLabelNoPO = rangeMonths[i].label;
+          break;
+        }
+      }
+    } else {
+      const firstRangeDate = new Date(rangeMonths[0].year, rangeMonths[0].month - 1, 1);
+      const grDate = new Date(lastGRMonth.year, lastGRMonth.month - 1, 1);
+      if (grDate < firstRangeDate) {
+        let carryStock = lastGRMonth.qty;
+        let curY = lastGRMonth.year;
+        let curM = lastGRMonth.month;
+        while (curY < rangeMonths[0].year || (curY === rangeMonths[0].year && curM < rangeMonths[0].month)) {
+          const p = plansByMonth.get(`${curY}-${curM}`) || 0;
+          carryStock -= p;
+          curM++;
+          if (curM > 12) {
+            curM = 1;
+            curY++;
+          }
+        }
+        planStockNoPO = carryStock;
+        for (let i = 0; i < rangeMonths.length; i++) {
+          planStockNoPO -= plans[i];
+          if (planStockNoPO <= 0) {
+            planExhaustionIndexNoPO = i;
+            planExhaustionLabelNoPO = rangeMonths[i].label;
+            break;
+          }
+        }
+      } else {
+        planStockNoPO = lastGRMonth.qty;
+      }
+    }
+  } else {
+    planStockNoPO = initialStock;
+    for (let i = 0; i < rangeMonths.length; i++) {
+      planStockNoPO -= plans[i];
+      if (planStockNoPO <= 0) {
+        planExhaustionIndexNoPO = i;
+        planExhaustionLabelNoPO = rangeMonths[i].label;
+        break;
+      }
     }
   }
-  if (planExhaustionIndex === 99 && planStock > 0) {
-    planExhaustionLabel = projectExhaustion(planStock, lastM);
+
+  if (planExhaustionIndexNoPO === 99 && planStockNoPO > 0) {
+    planExhaustionLabelNoPO = projectExhaustion(planStockNoPO, lastM, false);
   }
+
+  // 1b. Find Plan Exhaustion WITH PO (Berdasarkan Riwayat GR Terakhir + Kedatangan PO berikutnya)
+  let planStockWithPO = 0;
+  let planExhaustionIndexWithPO = 99;
+  let planExhaustionLabelWithPO = '-';
+
+  if (lastGRMonth) {
+    const grIdx = rangeMonths.findIndex(m => m.year === lastGRMonth.year && m.month === lastGRMonth.month);
+    
+    if (grIdx >= 0) {
+      planStockWithPO = lastGRMonth.qty;
+      for (let i = grIdx; i < rangeMonths.length; i++) {
+        const m = rangeMonths[i];
+        if (item.active_pos && item.active_pos.length > 0) {
+          item.active_pos.forEach(po => {
+            if (po.tanggal_rencana_pengiriman) {
+              const d = new Date(po.tanggal_rencana_pengiriman);
+              if (d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
+                planStockWithPO += po.jumlah_dipesan;
+              }
+            }
+          });
+        } else if (m.year === poYear && m.month === poMonth) {
+          planStockWithPO += (item.jumlah_dipesan || 0);
+        }
+
+        planStockWithPO -= plans[i];
+        if (planStockWithPO <= 0) {
+          planExhaustionIndexWithPO = i;
+          planExhaustionLabelWithPO = rangeMonths[i].label;
+          break;
+        }
+      }
+    } else {
+      const firstRangeDate = new Date(rangeMonths[0].year, rangeMonths[0].month - 1, 1);
+      const grDate = new Date(lastGRMonth.year, lastGRMonth.month - 1, 1);
+      if (grDate < firstRangeDate) {
+        let carryStock = lastGRMonth.qty;
+        let curY = lastGRMonth.year;
+        let curM = lastGRMonth.month;
+        while (curY < rangeMonths[0].year || (curY === rangeMonths[0].year && curM < rangeMonths[0].month)) {
+          const p = plansByMonth.get(`${curY}-${curM}`) || 0;
+          carryStock -= p;
+          curM++;
+          if (curM > 12) {
+            curM = 1;
+            curY++;
+          }
+        }
+        planStockWithPO = carryStock;
+        for (let i = 0; i < rangeMonths.length; i++) {
+          const m = rangeMonths[i];
+          if (item.active_pos && item.active_pos.length > 0) {
+            item.active_pos.forEach(po => {
+              if (po.tanggal_rencana_pengiriman) {
+                const d = new Date(po.tanggal_rencana_pengiriman);
+                if (d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
+                  planStockWithPO += po.jumlah_dipesan;
+                }
+              }
+            });
+          } else if (m.year === poYear && m.month === poMonth) {
+            planStockWithPO += (item.jumlah_dipesan || 0);
+          }
+
+          planStockWithPO -= plans[i];
+          if (planStockWithPO <= 0) {
+            planExhaustionIndexWithPO = i;
+            planExhaustionLabelWithPO = rangeMonths[i].label;
+            break;
+          }
+        }
+      } else {
+        planStockWithPO = lastGRMonth.qty;
+      }
+    }
+  } else {
+    planStockWithPO = initialStock;
+    for (let i = 0; i < rangeMonths.length; i++) {
+      const m = rangeMonths[i];
+      if (item.active_pos && item.active_pos.length > 0) {
+        item.active_pos.forEach(po => {
+          if (po.tanggal_rencana_pengiriman) {
+            const d = new Date(po.tanggal_rencana_pengiriman);
+            if (d.getFullYear() === m.year && (d.getMonth() + 1) === m.month) {
+              planStockWithPO += po.jumlah_dipesan;
+            }
+          }
+        });
+      } else if (m.year === poYear && m.month === poMonth) {
+        planStockWithPO += (item.jumlah_dipesan || 0);
+      }
+
+      planStockWithPO -= plans[i];
+      if (planStockWithPO <= 0) {
+        planExhaustionIndexWithPO = i;
+        planExhaustionLabelWithPO = rangeMonths[i].label;
+        break;
+      }
+    }
+  }
+
+  if (planExhaustionIndexWithPO === 99 && planStockWithPO > 0) {
+    planExhaustionLabelWithPO = projectExhaustion(planStockWithPO, lastM, false);
+  }
+
+  const planExhaustionIndex = planExhaustionIndexNoPO;
+  const planExhaustionLabel = planExhaustionLabelNoPO;
 
   // 2. Find Corrected Plan Exhaustion WITHOUT PO
   let correctedStockNoPO = initialStock;
@@ -208,9 +386,13 @@ function calculateDynamicMetrics(
     } else if (m.year === todayYear && m.month === todayMonth) {
       const actVal = actuals[i] ?? 0;
       const adjustedPlan = Math.round(plans[i] * runRateMultiplier);
-      correctedStockNoPO -= Math.max(0, adjustedPlan - actVal);
+      if (actVal > 0) {
+        correctedStockNoPO -= actVal;
+      } else if (correctedStockNoPO > 0) {
+        correctedStockNoPO -= Math.min(correctedStockNoPO, adjustedPlan);
+      }
     } else {
-      // Bulan berjalan (Juli 2026) dan masa depan dikurangi rencana
+      // Bulan masa depan dikurangi rencana terkoreksi
       correctedStockNoPO -= Math.round(plans[i] * runRateMultiplier);
     }
     if (correctedStockNoPO <= 0) {
@@ -248,9 +430,13 @@ function calculateDynamicMetrics(
     } else if (m.year === todayYear && m.month === todayMonth) {
       const actVal = actuals[i] ?? 0;
       const adjustedPlan = Math.round(plans[i] * runRateMultiplier);
-      correctedStockWithPO -= Math.max(0, adjustedPlan - actVal);
+      if (actVal > 0) {
+        correctedStockWithPO -= actVal;
+      } else if (correctedStockWithPO > 0) {
+        correctedStockWithPO -= Math.min(correctedStockWithPO, adjustedPlan);
+      }
     } else {
-      // Bulan berjalan dan masa depan dikurangi rencana
+      // Bulan masa depan dikurangi rencana terkoreksi
       correctedStockWithPO -= Math.round(plans[i] * runRateMultiplier);
     }
     if (correctedStockWithPO <= 0) {
@@ -338,6 +524,8 @@ function calculateDynamicMetrics(
 
   return {
     planExhaustionLabel,
+    planExhaustionLabelNoPO,
+    planExhaustionLabelWithPO,
     correctedExhaustionLabelNoPO,
     correctedExhaustionLabelWithPO,
     gapNoPO,
@@ -362,16 +550,32 @@ export default function CriticalStockPage() {
   const [filterStatus, setFilterStatus] = useState<string[]>([]);
   const [searchText, setSearchText] = useState(materialParam || '');
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(materialParam);
-  const [showChartWithPO, setShowChartWithPO] = useState(false);
-  const [calcMode, setCalcMode] = useState<'STANDAR' | 'RIWAYAT'>('STANDAR');
+  const [showChartWithPO, setShowChartWithPO] = useState(true);
+  const [calcMode, setCalcMode] = useState<'STANDAR' | 'RIWAYAT'>('RIWAYAT');
   const [isChartFullScreen, setIsChartFullScreen] = useState(false);
-  const [showInsight, setShowInsight] = useState(true);
+  const [showInsight, setShowInsight] = useState(false);
   const [showCalculationHelp, setShowCalculationHelp] = useState(false);
-  const [runRateLookback, setRunRateLookback] = useState<number>(6);
+  const [runRateLookback, setRunRateLookback] = useState<number>(12);
   const [chartViewMode, setChartViewMode] = useState<'KONSUMSI' | 'SALDO'>('KONSUMSI');
   const [isThresholdModalOpen, setIsThresholdModalOpen] = useState(false);
   const [thresholdConfig, setThresholdConfig] = useState(() => getThresholdConfig());
   const [kpiPerspective, setKpiPerspective] = useState<'GAP' | 'FISIK'>('GAP');
+  const [showLineMenu, setShowLineMenu] = useState(false);
+  const [visibleLines, setVisibleLines] = useState({
+    plan: true,
+    actual: true,
+    corrected: true,
+    correctedNonSaldo: true,
+    safetyStock: true,
+    rop: true,
+    breach: true,
+    gr: true,
+    today: true,
+  });
+
+  const toggleLineVisibility = (key: keyof typeof visibleLines) => {
+    setVisibleLines(prev => ({ ...prev, [key]: !prev[key] }));
+  };
 
   const [totalTrains, setTotalTrains] = useState(0);
   const [inMaintenanceCount, setInMaintenanceCount] = useState(0);
@@ -432,7 +636,7 @@ export default function CriticalStockPage() {
           ]);
           setMetrics(fMetrics);
           setTotalTrains(trainData.length);
-          setInMaintenanceCount(schedData.filter(s => s.status_pelaksanaan === 'Sedang Dirawat').length);
+          setInMaintenanceCount(schedData.filter(s => s.status_pelaksanaan === 'Proses Perawatan' || s.status_pelaksanaan === 'Sedang Dirawat').length);
           setProcurements(pData);
         } catch (e) {
           console.error('Error background loading:', e);
@@ -454,7 +658,7 @@ export default function CriticalStockPage() {
         setIsDataLoaded(true);
         setMetrics(fMetrics);
         setTotalTrains(trainData.length);
-        setInMaintenanceCount(schedData.filter(s => s.status_pelaksanaan === 'Sedang Dirawat').length);
+        setInMaintenanceCount(schedData.filter(s => s.status_pelaksanaan === 'Proses Perawatan' || s.status_pelaksanaan === 'Sedang Dirawat').length);
         setProcurements(pData);
       } catch (err) {
         console.error('Error loading critical stock data:', err);
@@ -487,7 +691,7 @@ export default function CriticalStockPage() {
         curMonth = 1;
         curYear++;
       }
-      if (months.length > 50) break;
+      if (months.length > 120) break;
     }
     return months;
   })();
@@ -513,7 +717,7 @@ export default function CriticalStockPage() {
     return months;
   })();
 
-  const isRangeInvalid = rangeMonths.length === 0 || rangeMonths.length > 36 || (startYear * 12 + startMonth > endYear * 12 + endMonth);
+  const isRangeInvalid = rangeMonths.length === 0 || (startYear * 12 + startMonth > endYear * 12 + endMonth);
 
   const aggregatedData = (() => {
     const rawFiltered = filterDepo !== 'Semua Depo'
@@ -532,7 +736,8 @@ export default function CriticalStockPage() {
           safety_stock: 0,
           rop: 0,
           all_history: [],
-          all_plans: []
+          all_plans: [],
+          gr_history: []
         };
       }
       groups[row.nomor_material].current_stock += row.current_stock;
@@ -543,6 +748,10 @@ export default function CriticalStockPage() {
       
       if (row.all_history && Array.isArray(row.all_history)) {
         groups[row.nomor_material].all_history!.push(...row.all_history);
+      }
+      
+      if (row.gr_history && Array.isArray(row.gr_history)) {
+        groups[row.nomor_material].gr_history!.push(...row.gr_history);
       }
       
       if (row.all_plans && Array.isArray(row.all_plans)) {
@@ -646,9 +855,9 @@ export default function CriticalStockPage() {
     });
   })();
 
-  const getFisikStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'BELUM PO' | 'AMAN' => {
+  const getFisikStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'AMAN' => {
     const sPo = (d as any).status_po;
-    if (sPo === 'BELUM PO') return 'BELUM PO';
+    if (sPo === 'BELUM PO') return 'KRITIS';
 
     const ssMo = thresholdConfig.safetyStockMonths ?? 1.0;
     const ropMo = thresholdConfig.ropMonths ?? 2.0;
@@ -661,9 +870,9 @@ export default function CriticalStockPage() {
     return 'AMAN';
   };
 
-  const getGapStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'BELUM PO' | 'AMAN' => {
+  const getGapStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'AMAN' => {
     const sPo = (d as any).status_po;
-    if (sPo === 'BELUM PO') return 'BELUM PO';
+    if (sPo === 'BELUM PO') return 'KRITIS';
 
     const gapVal = typeof (d as any).gap_to_po === 'number' ? (d as any).gap_to_po : (typeof (d as any).gap_defisit === 'number' ? (d as any).gap_defisit : 0);
 
@@ -672,13 +881,20 @@ export default function CriticalStockPage() {
     return 'AMAN'; // Alert Low (>= 4 bulan)
   };
 
-  const getMaterialItemStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'BELUM PO' | 'AMAN' => {
+  const getMaterialItemStatus = (d: CriticalStockItem): 'KRITIS' | 'WASPADA' | 'AMAN' => {
     return kpiPerspective === 'FISIK' ? getFisikStatus(d) : getGapStatus(d);
   };
 
   const filteredData: CriticalStockItem[] = aggregatedData.filter(row => {
     const itemStatus = getMaterialItemStatus(row);
-    const matchStatus = filterStatus.length === 0 || filterStatus.includes(itemStatus);
+    const isBelumPo = (row as any).status_po === 'BELUM PO';
+    let matchStatus = true;
+    if (filterStatus.length > 0) {
+      matchStatus = filterStatus.some(s => {
+        if (s === 'BELUM PO') return isBelumPo;
+        return itemStatus === s;
+      });
+    }
     const matchSearch = row.nama_material.toLowerCase().includes(searchText.toLowerCase()) ||
                         row.nomor_material.toLowerCase().includes(searchText.toLowerCase());
     return matchStatus && matchSearch;
@@ -702,7 +918,7 @@ export default function CriticalStockPage() {
 
   const chartData = (() => {
     if (isRangeInvalid || !referenceItem) {
-      return { labels: [], plans: [], actuals: [], corrected: [] };
+      return { labels: [], plans: [], actuals: [], corrected: [], correctedNonSaldo: [], poIdx: -1, ropExhaustIdx: -1 };
     }
 
     if (chartViewMode === 'SALDO') {
@@ -958,31 +1174,35 @@ export default function CriticalStockPage() {
         }
       }
 
-      // Past month (< July 2026)
+      // Past month (< Hari Ini)
       if (m.year < currentTodayYear || (m.year === currentTodayYear && m.month < currentTodayMonth)) {
         const actVal = actuals[idx] ?? 0;
         remainingStock -= actVal;
-        corrected.push(actVal);
+        corrected.push(null);
         correctedNonSaldo.push(null);
       } else if (m.year === currentTodayYear && m.month === currentTodayMonth) {
-        // Current month (July 2026): deduct plan - actuals (e.g. 200 - 8 = 192)
+        // Current month (Hari Ini): titik sambung mulus yang taat pada sisa saldo fisik
         const actVal = actuals[idx] ?? 0;
         const adjustedPlan = Math.round(plans[idx] * runRateMultiplier);
-        const correctedPlanVal = Math.max(0, adjustedPlan - actVal);
         
-        correctedNonSaldo.push(calcMode === 'RIWAYAT' ? correctedPlanVal : null);
-
-        if (remainingStock <= 0) {
-          corrected.push(0);
-        } else if (remainingStock < correctedPlanVal) {
-          corrected.push(remainingStock);
+        let startVal = 0;
+        if (actVal > 0) {
+          startVal = actVal;
+          remainingStock -= actVal;
+        } else if (remainingStock <= 0) {
+          startVal = 0;
+        } else if (remainingStock < adjustedPlan) {
+          startVal = remainingStock;
           remainingStock = 0;
         } else {
-          corrected.push(correctedPlanVal);
-          remainingStock -= correctedPlanVal;
+          startVal = adjustedPlan;
+          remainingStock -= adjustedPlan;
         }
+        
+        corrected.push(startVal);
+        correctedNonSaldo.push(calcMode === 'RIWAYAT' ? (actVal > 0 ? actVal : adjustedPlan) : null);
       } else {
-        // Future month (> July 2026)
+        // Future month (> Hari Ini)
         const adjustedPlan = Math.round(plans[idx] * runRateMultiplier);
         
         correctedNonSaldo.push(calcMode === 'RIWAYAT' ? adjustedPlan : null);
@@ -1010,20 +1230,18 @@ export default function CriticalStockPage() {
 
   // Ambil data dinamis hasil kalkulasi frontend
   const planExhaustLabel = referenceItem ? (() => {
-    const { planExhaustionLabel } = calculateDynamicMetrics(referenceItem, rangeMonths, endYear, endMonth, calcMode, runRateLookback);
-    return planExhaustionLabel !== 'Aman' ? planExhaustionLabel : null;
+    const { planExhaustionLabelNoPO, planExhaustionLabelWithPO } = calculateDynamicMetrics(referenceItem, rangeMonths, endYear, endMonth, calcMode, runRateLookback);
+    const targetLabel = showChartWithPO ? planExhaustionLabelWithPO : planExhaustionLabelNoPO;
+    return targetLabel && targetLabel !== '-' && targetLabel !== 'Aman' ? targetLabel : null;
   })() : null;
 
   const poLabel = chartData.poIdx >= 0 ? chartData.labels[chartData.poIdx] : null;
 
-  const correctedExhaustionLabelNoPO = referenceItem ? (() => {
-    const { correctedExhaustionLabelNoPO } = calculateDynamicMetrics(referenceItem, rangeMonths, endYear, endMonth, calcMode, runRateLookback);
-    return correctedExhaustionLabelNoPO !== '-' ? correctedExhaustionLabelNoPO : null;
+  const exhaustLabel = referenceItem ? (() => {
+    const { correctedExhaustionLabelNoPO, correctedExhaustionLabelWithPO } = calculateDynamicMetrics(referenceItem, rangeMonths, endYear, endMonth, calcMode, runRateLookback);
+    const targetLabel = showChartWithPO ? correctedExhaustionLabelWithPO : correctedExhaustionLabelNoPO;
+    return targetLabel && targetLabel !== '-' && chartData.labels.includes(targetLabel) ? targetLabel : null;
   })() : null;
-
-  const exhaustLabel = correctedExhaustionLabelNoPO && chartData.labels.includes(correctedExhaustionLabelNoPO)
-    ? correctedExhaustionLabelNoPO
-    : null;
 
   // Insight data untuk kartu info mode Riwayat
   const riwayatInsight = (() => {
@@ -1056,18 +1274,22 @@ export default function CriticalStockPage() {
           return s + Math.round((p ? p.plan_qty : 0) * multiplier);
         }, 0) / futureMonths.length
       : 0;
-    const nonSaldoMax = Math.max(...(chartData.correctedNonSaldo.filter((v): v is number => v !== null)));
+    const nonSaldoArr = chartData?.correctedNonSaldo || [];
+    const nonSaldoFiltered = nonSaldoArr.filter((v): v is number => v !== null);
+    const nonSaldoMax = nonSaldoFiltered.length > 0 ? Math.max(...nonSaldoFiltered) : 0;
     
     // Generate label range bulan dynamic (misalnya "Feb-Jul '26" atau "Nov '25 - Jul '26")
-    const startMObj = lookbackMonthsList[lookbackMonthsList.length - 1];
-    const endMObj = lookbackMonthsList[0];
+    const startMObj = lookbackMonthsList.length > 0 ? lookbackMonthsList[lookbackMonthsList.length - 1] : { year: currentTodayYear, month: currentTodayMonth };
+    const endMObj = lookbackMonthsList.length > 0 ? lookbackMonthsList[0] : { year: currentTodayYear, month: currentTodayMonth };
     const BULAN_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
     
     let rangeLabel = "";
-    if (startMObj.year === endMObj.year) {
-      rangeLabel = `${BULAN_SHORT[startMObj.month - 1]}-${BULAN_SHORT[endMObj.month - 1]} '${String(startMObj.year).slice(2)}`;
-    } else {
-      rangeLabel = `${BULAN_SHORT[startMObj.month - 1]} '${String(startMObj.year).slice(2)} - ${BULAN_SHORT[endMObj.month - 1]} '${String(endMObj.year).slice(2)}`;
+    if (startMObj && endMObj && startMObj.month && endMObj.month) {
+      if (startMObj.year === endMObj.year) {
+        rangeLabel = `${BULAN_SHORT[startMObj.month - 1] || ''}-${BULAN_SHORT[endMObj.month - 1] || ''} '${String(startMObj.year).slice(2)}`;
+      } else {
+        rangeLabel = `${BULAN_SHORT[startMObj.month - 1] || ''} '${String(startMObj.year).slice(2)} - ${BULAN_SHORT[endMObj.month - 1] || ''} '${String(endMObj.year).slice(2)}`;
+      }
     }
 
     return { sumAct, sumPlan, multiplier, avgCorrected, nonSaldoMax, exhaustLabel, rangeLabel };
@@ -1119,7 +1341,7 @@ export default function CriticalStockPage() {
   // Dynamic status-based KPI calculations based on Safety Stock, ROP, and PO Status
   const countKritis  = aggregatedData.filter(d => getMaterialItemStatus(d) === 'KRITIS').length;
   const countWaspada = aggregatedData.filter(d => getMaterialItemStatus(d) === 'WASPADA').length;
-  const countReorder = aggregatedData.filter(d => getMaterialItemStatus(d) === 'BELUM PO').length;
+  const countReorder = aggregatedData.filter(d => (d as any).status_po === 'BELUM PO').length;
   const countAman    = aggregatedData.filter(d => getMaterialItemStatus(d) === 'AMAN').length;
 
   // Heatmap dinamis: hitung avg pct_ketersediaan per depo dari criticalData
@@ -1199,26 +1421,33 @@ export default function CriticalStockPage() {
         <div className="xl:col-span-2 space-y-6">
           {/* ECharts — Area Chart Proyeksi Penyerapan */}
           <div
-            className={`tactile-card rounded-lg overflow-hidden ${isChartFullScreen ? 'fixed inset-0 z-50 p-3 flex flex-col justify-between mobile-landscape-fullscreen' : ''}`}
+            className={`tactile-card ${isChartFullScreen ? 'fixed inset-0 z-[999] p-3 flex flex-col justify-between mobile-landscape-fullscreen rounded-none' : 'rounded-lg relative overflow-hidden'}`}
             style={isChartFullScreen ? {
               backgroundColor: 'var(--color-background)',
               borderColor: 'var(--color-steel-border)',
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
               width: '100vw',
               height: '100vh',
-              overflowY: 'auto'
+              zIndex: 9999,
+              overflow: 'hidden',
+              margin: 0
             } : {
               backgroundColor: 'var(--color-background-metallic)',
               borderColor: 'var(--color-steel-border)'
             }}
           >
-            <div className="p-3 px-4 gap-2 border-b flex flex-col relative" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
+            <div className={`p-3 px-4 gap-2 border-b flex flex-col relative z-30 ${isChartFullScreen ? '' : 'rounded-t-lg'}`} style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }}>
               {/* Row 1: Title, Subtitle, and Control Buttons */}
               <div className="flex flex-wrap justify-between items-center gap-2 pr-10">
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold" style={{ color: 'var(--color-on-surface)' }}>Penyerapan Stok Kritis</h3>
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--color-on-surface)' }}>Availability Stok</h3>
                 </div>
 
-                <div className="flex flex-nowrap items-center gap-1.5 w-full pr-8 overflow-hidden">
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 w-full pr-8">
                   {/* 1. Dropdown Kalkulasi: Standar vs Riwayat */}
                   <select
                     value={calcMode}
@@ -1266,6 +1495,117 @@ export default function CriticalStockPage() {
                     ))}
                   </select>
 
+                  {/* 5. Dropdown Pilihan Garis (Show/Hide Lines) */}
+                  <div className="relative shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowLineMenu(v => !v)}
+                      className="flex items-center gap-1.5 rounded px-2 py-1 border text-[11px] font-bold transition-all hover:opacity-85 shadow-sm"
+                      style={{
+                        backgroundColor: showLineMenu ? 'var(--color-primary)' : 'var(--color-surface-container-high)',
+                        borderColor: 'var(--color-steel-border)',
+                        color: showLineMenu ? '#ffffff' : 'var(--color-on-surface)'
+                      }}
+                      title="Pilih Garis / Elemen Grafik yang Ingin Ditampilkan"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/>
+                        <circle cx="4" cy="12" r="2"/><circle cx="12" cy="10" r="2"/><circle cx="20" cy="14" r="2"/>
+                      </svg>
+                      <span className="hidden sm:inline">Garis</span>
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform duration-150 ${showLineMenu ? 'rotate-180' : ''}`}>
+                        <polyline points="6 9 12 15 18 9"/>
+                      </svg>
+                    </button>
+
+                    {showLineMenu && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowLineMenu(false)} />
+                        <div
+                          className="absolute right-0 mt-1.5 w-56 rounded-xl p-3 z-50 shadow-2xl border flex flex-col gap-2 animate-fade-in"
+                          style={{
+                            backgroundColor: 'var(--color-surface-container)',
+                            borderColor: 'var(--color-steel-border)',
+                            boxShadow: '0 10px 28px rgba(0,0,0,0.22)'
+                          }}
+                        >
+                          <div className="flex items-center justify-between pb-1.5 border-b" style={{ borderColor: 'var(--color-steel-border)' }}>
+                            <span className="text-[11px] font-black uppercase tracking-wider" style={{ color: 'var(--color-on-surface)' }}>Tampilkan Garis</span>
+                            <button
+                              type="button"
+                              onClick={() => setVisibleLines({ plan: true, actual: true, corrected: true, correctedNonSaldo: true, safetyStock: true, rop: true, breach: true, gr: true, today: true })}
+                              className="text-[10px] font-bold text-blue-500 hover:underline"
+                            >
+                              Semua
+                            </button>
+                          </div>
+
+                          <div className="space-y-1.5 text-[11px] font-semibold" style={{ color: 'var(--color-on-surface)' }}>
+                            <label className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                              <input type="checkbox" checked={visibleLines.plan} onChange={() => toggleLineVisibility('plan')} className="rounded accent-purple-600" />
+                              <span className="w-2.5 h-0.5 bg-purple-500 rounded-full inline-block" />
+                              <span>Plan Rencana</span>
+                            </label>
+
+                            <label className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                              <input type="checkbox" checked={visibleLines.actual} onChange={() => toggleLineVisibility('actual')} className="rounded accent-blue-600" />
+                              <span className="w-2.5 h-0.5 bg-blue-500 rounded-full inline-block" />
+                              <span>Saldo / Realisasi Aktual</span>
+                            </label>
+
+                            <label className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                              <input type="checkbox" checked={visibleLines.corrected} onChange={() => toggleLineVisibility('corrected')} className="rounded accent-amber-500" />
+                              <span className="w-2.5 h-0.5 bg-amber-500 rounded-full inline-block" />
+                              <span>Plan Terkoreksi</span>
+                            </label>
+
+                            {chartViewMode === 'KONSUMSI' && (
+                              <label className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                                <input type="checkbox" checked={visibleLines.correctedNonSaldo} onChange={() => toggleLineVisibility('correctedNonSaldo')} className="rounded accent-rose-500" />
+                                <span className="w-2.5 h-0.5 bg-rose-500 rounded-full inline-block" />
+                                <span>Plan Terkoreksi (Non-Saldo)</span>
+                              </label>
+                            )}
+
+                            {chartViewMode === 'SALDO' && (
+                              <>
+                                <label className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                                  <input type="checkbox" checked={visibleLines.safetyStock} onChange={() => toggleLineVisibility('safetyStock')} className="rounded accent-red-600" />
+                                  <span className="w-2.5 h-0.5 bg-red-500 rounded-full inline-block" />
+                                  <span>Safety Stock</span>
+                                </label>
+
+                                <label className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                                  <input type="checkbox" checked={visibleLines.rop} onChange={() => toggleLineVisibility('rop')} className="rounded accent-blue-600" />
+                                  <span className="w-0.5 h-2.5 bg-blue-600 inline-block" />
+                                  <span>Batas Order (ROP)</span>
+                                </label>
+                              </>
+                            )}
+
+                            <label className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                              <input type="checkbox" checked={visibleLines.breach} onChange={() => toggleLineVisibility('breach')} className="rounded accent-rose-600" />
+                              <span className="w-0.5 h-2.5 bg-rose-600 inline-block" />
+                              <span>Stok Habis / Breach</span>
+                            </label>
+
+                            <label className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                              <input type="checkbox" checked={visibleLines.gr} onChange={() => toggleLineVisibility('gr')} className="rounded accent-emerald-600" />
+                              <span className="w-0.5 h-2.5 bg-emerald-600 inline-block" />
+                              <span>Kedatangan (GR / PO)</span>
+                            </label>
+
+                            <label className="flex items-center gap-2 cursor-pointer hover:opacity-80">
+                              <input type="checkbox" checked={visibleLines.today} onChange={() => toggleLineVisibility('today')} className="rounded accent-slate-500" />
+                              <span className="w-0.5 h-2.5 bg-slate-400 inline-block" />
+                              <span>Garis Hari Ini</span>
+                            </label>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
                   {/* 5. Date Picker & Analisis (Ditempatkan di Baris 1 HANYA Saat Fullscreen) */}
                   {isChartFullScreen && (
                     <div className="flex items-center gap-1 text-[11px] shrink-0 ml-1">
@@ -1312,6 +1652,20 @@ export default function CriticalStockPage() {
                           <option key={y} value={y}>{y}</option>
                         ))}
                       </select>
+
+                      <div className="flex items-center gap-1 border-l pl-2 ml-1" style={{ borderColor: 'var(--color-steel-border)' }}>
+                        <span className="font-semibold text-[10px]" style={{ color: 'var(--color-on-surface-variant)' }}>Analisis:</span>
+                        <select
+                          value={runRateLookback}
+                          onChange={e => setRunRateLookback(Number(e.target.value))}
+                          className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
+                          style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                            <option key={n} value={n}>{n} Bln Terakhir</option>
+                          ))}
+                        </select>
+                      </div>
 
                       {/* Info Gap & Fast Moving */}
                       {gapMonths !== null && (
@@ -1402,9 +1756,9 @@ export default function CriticalStockPage() {
                         className="rounded px-1.5 py-0.5 border font-semibold text-[11px]"
                         style={{ backgroundColor: 'var(--color-surface-container-high)', borderColor: 'var(--color-steel-border)', color: 'var(--color-on-surface)' }}
                       >
-                        <option value={3}>3 Bln Terakhir</option>
-                        <option value={6}>6 Bln Terakhir</option>
-                        <option value={12}>12 Bln Terakhir</option>
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                          <option key={n} value={n}>{n} Bln Terakhir</option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -1498,220 +1852,139 @@ export default function CriticalStockPage() {
               </div>
             )}
 
-            <ReactECharts
-              option={{
-                backgroundColor: 'transparent',
-                animation: true,
-                animationDuration: 900,
-                animationEasing: 'cubicInOut',
-                animationDelay: 0,
-                tooltip: {
-                  show: window.innerWidth > 768,
-                  trigger: 'axis',
-                  axisPointer: {
-                    type: 'cross',
-                    crossStyle: { color: ct.axisLine },
-                    lineStyle: { color: ct.axisLine, type: 'dashed', width: 1 },
-                  },
-                  backgroundColor: ct.tooltipBg,
-                  borderColor: ct.tooltipBorder,
-                  borderWidth: 1,
-                  padding: [12, 16],
-                  textStyle: { color: ct.tooltipText, fontSize: 12, fontFamily: 'inherit' },
-                  extraCssText: 'box-shadow: 0 8px 32px rgba(0,0,0,0.18); border-radius: 10px;',
-                  formatter: (params: any[]) => {
-                    const label = params[0]?.axisValue || '';
-                    const rows = params
-                      .filter((p: any) => p.value !== null && p.value !== undefined)
-                      .map((p: any) => {
-                        const val = typeof p.value === 'number'
-                          ? p.value.toLocaleString('id-ID') + ' unit'
-                          : '—';
-                        const dot = `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${p.color};margin-right:8px;flex-shrink:0;box-shadow:0 0 0 2px rgba(255,255,255,0.3)"></span>`;
-                        return `<div style="display:flex;align-items:center;justify-content:space-between;gap:18px;padding:3px 0">${dot}<span style="color:${ct.tooltipSub};font-size:11px">${p.seriesName}</span><b style="color:${ct.tooltipText};font-size:12px;font-variant-numeric:tabular-nums">${val}</b></div>`;
-                      }).join('');
-                    return `<div style="font-size:10px;font-weight:800;color:${ct.tooltipSub};margin-bottom:8px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid ${ct.tooltipBorder};padding-bottom:6px">${label}</div>${rows}`;
-                  },
-                },
-                legend: {
-                  data: chartViewMode === 'SALDO'
-                    ? ['Proyeksi Saldo (Rencana)', 'Saldo Aktual', 'Proyeksi Saldo (Terkoreksi)']
-                    : ['Rencana Awal', 'Realisasi Aktual', 'Plan Terkoreksi', 'Plan Terkoreksi (Non-Saldo)'],
-                  bottom: 4,
-                  itemWidth: 20,
-                  itemHeight: 6,
-                  itemGap: 12,
-                  icon: 'roundRect',
-                  textStyle: { color: ct.legendText, fontSize: 10.5, fontWeight: '700', fontFamily: 'inherit' },
-                  inactiveColor: isDark ? '#334155' : '#d1d5db',
-                },
-                grid: { left: 14, right: 18, top: 18, bottom: window.innerWidth <= 768 ? 68 : 48, containLabel: true },
-                xAxis: {
-                  type: 'category',
-                  data: chartData.labels,
-                  boundaryGap: false,
-                  axisLabel: {
-                    color: ct.axisLabel,
-                    fontSize: 10,
-                    fontWeight: '600',
-                    fontFamily: 'inherit',
-                    interval: Math.max(0, Math.floor(chartData.labels.length / 13) - 1),
-                    margin: 10,
-                    rotate: window.innerWidth <= 768 ? 30 : 0,
-                  },
-                  axisLine: { lineStyle: { color: ct.axisLine, width: 1 } },
-                  axisTick: { show: false },
-                  splitLine: { show: true, lineStyle: { color: ct.gridLine, type: 'dashed', width: 1 } },
-                },
-                yAxis: {
-                  type: 'value',
-                  name: 'Penyerapan (Unit)',
-                  nameLocation: 'end',
-                  nameTextStyle: { color: ct.axisLabel, fontSize: 9, fontWeight: '700', fontFamily: 'inherit', padding: [0, 0, 4, 0] },
-                  axisLabel: {
-                    color: ct.axisLabel,
-                    fontSize: 10,
-                    fontFamily: 'inherit',
-                    formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : String(v),
-                  },
-                  axisLine: { show: false },
-                  axisTick: { show: false },
-                  splitLine: { lineStyle: { color: ct.gridLine, type: 'dashed', width: 1 } },
-                  min: 0,
-                },
+            {(() => {
+              const allVals = [
+                ...chartData.plans,
+                ...chartData.actuals.filter((v): v is number => v !== null),
+                ...chartData.corrected,
+              ].filter((v): v is number => typeof v === 'number' && v > 0);
+              const rawDataPeak = allVals.length > 0 ? Math.max(...allVals) : 100;
+              const planVal = chartData.plans.find(p => p > 0) || (rawDataPeak * 0.7);
+              // Target: Plan line sits comfortably in the middle (~50% height), with balanced headroom for badges
+              const yAxisMax = Math.ceil((Math.max(rawDataPeak * 1.35, planVal * 1.95)) / 100) * 100;
+
+              return (
+                <ReactECharts
+                  option={{
+                    backgroundColor: 'transparent',
+                    animation: true,
+                    animationDuration: 900,
+                    animationEasing: 'cubicInOut',
+                    animationDelay: 0,
+                    tooltip: {
+                      show: window.innerWidth > 768,
+                      trigger: 'axis',
+                      axisPointer: {
+                        type: 'cross',
+                        crossStyle: { color: ct.axisLine },
+                        lineStyle: { color: ct.axisLine, type: 'dashed', width: 1 },
+                      },
+                      backgroundColor: ct.tooltipBg,
+                      borderColor: ct.tooltipBorder,
+                      borderWidth: 1,
+                      padding: [12, 16],
+                      textStyle: { color: ct.tooltipText, fontSize: 12, fontFamily: 'inherit' },
+                      extraCssText: 'box-shadow: 0 8px 32px rgba(0,0,0,0.18); border-radius: 10px;',
+                      formatter: (params: any[]) => {
+                        const label = params[0]?.axisValue || '';
+                        const rows = params
+                          .filter((p: any) => p.value !== null && p.value !== undefined)
+                          .map((p: any) => {
+                            const val = typeof p.value === 'number'
+                              ? p.value.toLocaleString('id-ID') + ' unit'
+                              : '—';
+                            const dot = `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${p.color};margin-right:8px;flex-shrink:0;box-shadow:0 0 0 2px rgba(255,255,255,0.3)"></span>`;
+                            return `<div style="display:flex;align-items:center;justify-content:space-between;gap:18px;padding:3px 0">${dot}<span style="color:${ct.tooltipSub};font-size:11px">${p.seriesName}</span><b style="color:${ct.tooltipText};font-size:12px;font-variant-numeric:tabular-nums">${val}</b></div>`;
+                          }).join('');
+                        return `<div style="font-size:10px;font-weight:800;color:${ct.tooltipSub};margin-bottom:8px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid ${ct.tooltipBorder};padding-bottom:6px">${label}</div>${rows}`;
+                      },
+                    },
+                    legend: {
+                      data: chartViewMode === 'SALDO'
+                        ? ['Proyeksi Saldo (Rencana)', 'Saldo Aktual', 'Proyeksi Saldo (Terkoreksi)']
+                        : ['Rencana Awal', 'Realisasi Aktual', 'Plan Terkoreksi', 'Plan Terkoreksi (Non-Saldo)'],
+                      bottom: 4,
+                      itemWidth: 20,
+                      itemHeight: 6,
+                      itemGap: 12,
+                      icon: 'roundRect',
+                      textStyle: { color: ct.legendText, fontSize: 10.5, fontWeight: '700', fontFamily: 'inherit' },
+                      inactiveColor: isDark ? '#334155' : '#d1d5db',
+                    },
+                    grid: { left: 14, right: 18, top: 18, bottom: window.innerWidth <= 768 ? 68 : 48, containLabel: true },
+                    xAxis: {
+                      type: 'category',
+                      data: chartData.labels,
+                      boundaryGap: false,
+                      axisLabel: {
+                        color: ct.axisLabel,
+                        fontSize: 10,
+                        fontWeight: '600',
+                        fontFamily: 'inherit',
+                        interval: Math.max(0, Math.floor(chartData.labels.length / 13) - 1),
+                        margin: 10,
+                        rotate: window.innerWidth <= 768 ? 30 : 0,
+                      },
+                      axisLine: { lineStyle: { color: ct.axisLine, width: 1 } },
+                      axisTick: { show: false },
+                      splitLine: { show: true, lineStyle: { color: ct.gridLine, type: 'dashed', width: 1 } },
+                    },
+                    yAxis: {
+                      type: 'value',
+                      name: chartViewMode === 'SALDO' ? 'Saldo (Unit)' : 'Penyerapan (Unit)',
+                      nameLocation: 'end',
+                      nameTextStyle: { color: ct.axisLabel, fontSize: 9, fontWeight: '700', fontFamily: 'inherit', padding: [0, 0, 4, 0] },
+                      axisLabel: {
+                        color: ct.axisLabel,
+                        fontSize: 10,
+                        fontFamily: 'inherit',
+                        formatter: (v: number) => v >= 1000 ? `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}k` : String(v),
+                      },
+                      axisLine: { show: false },
+                      axisTick: { show: false },
+                      splitLine: { lineStyle: { color: ct.gridLine, type: 'dashed', width: 1 } },
+                      min: 0,
+                      max: yAxisMax,
+                    },
                 series: [
                   // 1. Rencana Awal — violet dashed, referensi plan
                   {
                     name: chartViewMode === 'SALDO' ? 'Proyeksi Saldo (Rencana)' : 'Rencana Awal',
                     type: 'line',
-                    smooth: true,
-                    smoothMonotone: 'x',
-                    symbol: 'none',
+                    smooth: false,
+                    showSymbol: visibleLines.plan,
+                    symbol: 'circle',
+                    symbolSize: 6,
                     lineStyle: {
                       color: '#8b5cf6',
-                      width: 2,
+                      width: 2.5,
                       type: 'dashed',
-                      shadowColor: 'rgba(139,92,246,0.2)',
-                      shadowBlur: 6,
-                      shadowOffsetY: 2,
+                      opacity: visibleLines.plan ? 1 : 0,
                     },
-                    areaStyle: {
-                      color: {
-                        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-                        colorStops: [
-                          { offset: 0, color: 'rgba(139,92,246,0.14)' },
-                          { offset: 1, color: 'rgba(139,92,246,0.01)' },
-                        ],
-                      },
-                    },
-                    emphasis: { disabled: true },
                     itemStyle: {
                       color: '#8b5cf6',
+                      borderColor: '#ffffff',
+                      borderWidth: 2,
                     },
-                    z: 1,
-                    data: chartData.plans,
-                    // Garis vertikal ungu + popup card permanen di titik habis plan awal
-                    ...(planExhaustLabel ? (() => {
-                      const allVals = [
-                        ...chartData.plans,
-                        ...chartData.actuals.filter((v): v is number => v !== null),
-                        ...chartData.corrected,
-                      ].filter((v): v is number => typeof v === 'number' && v > 0);
-                      const yMax = allVals.length > 0 ? Math.max(...allVals) : 100;
-                      const yPopup = yMax * 0.90; // posisi popup tinggi di atas
-
-                      return {
-                        markLine: {
-                          silent: true,
-                          animation: false,
-                          symbol: ['none', 'none'],
-                          lineStyle: {
-                            color: '#8b5cf6',
-                            width: 2,
-                            type: 'solid',
-                            shadowColor: 'rgba(139,92,246,0.45)',
-                            shadowBlur: 8,
-                          },
-                          label: { show: false },
-                          data: [{ xAxis: planExhaustLabel }],
-                        },
-                        markPoint: {
-                          data: [
-                            {
-                              name: 'Plan Habis Label',
-                              coord: [planExhaustLabel, yPopup],
-                              symbol: 'roundRect',
-                              symbolSize: [90, 36],
-                              symbolOffset: [0, 0], 
-                              itemStyle: {
-                                color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
-                                borderColor: '#8b5cf6',
-                                borderWidth: 1.5,
-                                shadowColor: 'rgba(139,92,246,0.3)',
-                                shadowBlur: 10,
-                              },
-                              label: {
-                                show: true,
-                                position: 'inside',
-                                formatter: [
-                                  `{title|PLAN HABIS}`,
-                                  `{date|${planExhaustLabel}}`,
-                                ].join('\n'),
-                                rich: {
-                                  title: {
-                                    color: '#8b5cf6',
-                                    fontSize: 9,
-                                    fontWeight: '800',
-                                    fontFamily: 'inherit',
-                                    lineHeight: 14,
-                                    align: 'center',
-                                  },
-                                  date: {
-                                    color: isDark ? '#c084fc' : '#6b21a8',
-                                    fontSize: 10,
-                                    fontWeight: '800',
-                                    fontFamily: 'inherit',
-                                    lineHeight: 14,
-                                    align: 'center',
-                                  },
-                                },
-                                align: 'center',
-                              },
-                            },
-                            {
-                              name: 'Plan Habis Dot',
-                              coord: [planExhaustLabel, 0],
-                              symbol: 'circle',
-                              symbolSize: 14,
-                              itemStyle: {
-                                color: '#8b5cf6',
-                                borderColor: '#fff',
-                                borderWidth: 2.5,
-                                shadowColor: 'rgba(139,92,246,0.7)',
-                                shadowBlur: 10,
-                              },
-                              label: { show: false },
-                            },
-                          ],
-                        },
-                      };
-                    })() : {}),
+                    emphasis: { disabled: true },
+                    z: 4,
+                    data: visibleLines.plan ? chartData.plans : [],
                   },
                   {
                     name: chartViewMode === 'SALDO' ? 'Saldo Aktual' : 'Realisasi Aktual',
                     type: 'line',
                     smooth: true,
                     smoothMonotone: 'x',
-                    symbol: 'circle',
-                    symbolSize: 7,
+                    showSymbol: visibleLines.actual,
                     lineStyle: {
                       color: '#3b82f6',
                       width: 3,
+                      opacity: visibleLines.actual ? 1 : 0,
                       shadowColor: 'rgba(59,130,246,0.35)',
                       shadowBlur: 10,
                       shadowOffsetY: 4,
                     },
-                    areaStyle: {
+                    areaStyle: visibleLines.actual ? {
                       color: {
                         type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
                         colorStops: [
@@ -1719,7 +1992,7 @@ export default function CriticalStockPage() {
                           { offset: 1, color: 'rgba(59,130,246,0.02)' },
                         ],
                       },
-                    },
+                    } : { opacity: 0 },
                     itemStyle: {
                       color: '#3b82f6',
                       borderColor: '#fff',
@@ -1735,55 +2008,31 @@ export default function CriticalStockPage() {
                       },
                     },
                     z: 3,
-                    data: chartData.actuals,
+                    data: visibleLines.actual ? chartData.actuals : [],
                   },
                   {
                     name: chartViewMode === 'SALDO' ? 'Proyeksi Saldo (Terkoreksi)' : 'Plan Terkoreksi',
                     type: 'line',
-                    smooth: true,
-                    smoothMonotone: 'x',
+                    smooth: false,
                     symbol: 'circle',
-                    symbolSize: 5,
+                    symbolSize: 4,
+                    showSymbol: visibleLines.corrected,
                     lineStyle: {
                       color: '#f59e0b',
                       width: 2.5,
                       type: 'dashed',
-                      shadowColor: 'rgba(245,158,11,0.3)',
-                      shadowBlur: 8,
-                      shadowOffsetY: 3,
-                    },
-                    areaStyle: {
-                      color: {
-                        type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-                        colorStops: [
-                          { offset: 0, color: 'rgba(245,158,11,0.18)' },
-                          { offset: 1, color: 'rgba(245,158,11,0.01)' },
-                        ],
-                      },
+                      opacity: visibleLines.corrected ? 1 : 0,
                     },
                     itemStyle: {
                       color: '#f59e0b',
                       borderColor: '#fff',
-                      borderWidth: 2,
-                      shadowColor: 'rgba(245,158,11,0.4)',
-                      shadowBlur: 4,
+                      borderWidth: 1.5,
                     },
-                    emphasis: {
-                      scale: 1.3,
-                      itemStyle: {
-                        shadowBlur: 12,
-                        shadowColor: 'rgba(245,158,11,0.6)',
-                      },
-                    },
-                    z: 2,
-                    data: chartData.corrected,
+                    emphasis: { disabled: true },
+                    z: 6,
+                    data: visibleLines.corrected ? chartData.corrected : [],
                     ...(() => {
-                      const allVals = [
-                        ...chartData.plans,
-                        ...chartData.actuals.filter((v): v is number => v !== null),
-                        ...chartData.corrected,
-                      ].filter((v): v is number => typeof v === 'number' && v > 0);
-                      const yMax = allVals.length > 0 ? Math.max(...allVals) : 100;
+                      const yMax = yAxisMax;
 
                       const markLineData: any[] = [];
                       const markPointData: any[] = [];
@@ -1792,28 +2041,30 @@ export default function CriticalStockPage() {
                         // safety_stock sudah dihitung ulang di aggregatedData berdasarkan runRateLookback
                         const ss = referenceItem.safety_stock ?? 0;
 
-                        markLineData.push([
-                          {
-                            coord: [chartData.labels[0], ss],
-                            lineStyle: {
-                              color: '#ef4444',
-                              width: 1.5,
-                              type: 'dashed'
+                        if (visibleLines.safetyStock) {
+                          markLineData.push([
+                            {
+                              coord: [chartData.labels[0], ss],
+                              lineStyle: {
+                                color: '#ef4444',
+                                width: 1.5,
+                                type: 'dashed'
+                              },
+                              label: {
+                                show: true,
+                                position: 'insideEndTop',
+                                formatter: `Safety Stock: ${ss} Unit`,
+                                color: '#ef4444',
+                                fontWeight: 'bold',
+                                fontSize: 9,
+                                backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
+                                padding: [2, 4],
+                                borderRadius: 2
+                              }
                             },
-                            label: {
-                              show: true,
-                              position: 'insideEndTop',
-                              formatter: `Safety Stock: ${ss} Unit`,
-                              color: '#ef4444',
-                              fontWeight: 'bold',
-                              fontSize: 9,
-                              backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
-                              padding: [2, 4],
-                              borderRadius: 2
-                            }
-                          },
-                          { coord: [chartData.labels[chartData.labels.length - 1], ss] }
-                        ]);
+                            { coord: [chartData.labels[chartData.labels.length - 1], ss] }
+                          ]);
+                        }
 
                         // 1. Garis Vertikal saat Proyeksi Saldo (Kuning) memotong garis Safety Stock (Merah)
                         const todayLabelIdx = chartData.labels.findIndex(l => l.includes("Jul '26"));
@@ -1836,8 +2087,8 @@ export default function CriticalStockPage() {
                           : (safetyBreachIdx > startSearchIdx ? safetyBreachIdx - 1 : -1);
                         const ropExhaustLabel = ropIdx >= 0 ? chartData.labels[ropIdx] : null;
 
-                        if (ropExhaustLabel) {
-                          const yPopupRop = yMax * 0.50;
+                        if (ropExhaustLabel && visibleLines.rop) {
+                          const yPopupRop = yMax * 0.92;
                           markLineData.push([
                             {
                               coord: [ropExhaustLabel, 0],
@@ -1848,21 +2099,19 @@ export default function CriticalStockPage() {
                               },
                               label: { show: false }
                             },
-                            { coord: [ropExhaustLabel, yMax * 1.02] }
+                            { coord: [ropExhaustLabel, yMax] }
                           ]);
                           markPointData.push(
                             {
                               name: 'ROP Label',
                               coord: [ropExhaustLabel, yPopupRop],
-                              symbol: 'roundRect',
-                              symbolSize: [110, 36],
+                              symbol: 'rect',
+                              symbolSize: [98, 32],
                               symbolOffset: [0, 0],
                               itemStyle: {
-                                color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                color: isDark ? '#0f172a' : '#ffffff',
                                 borderColor: '#3b82f6',
                                 borderWidth: 1.5,
-                                shadowColor: 'rgba(59,130,246,0.3)',
-                                shadowBlur: 10,
                               },
                               label: {
                                 show: true,
@@ -1872,8 +2121,8 @@ export default function CriticalStockPage() {
                                   `{date|${ropExhaustLabel}}`,
                                 ].join('\n'),
                                 rich: {
-                                  title: { color: '#2563eb', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                  date: { color: isDark ? '#93c5fd' : '#1e40af', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                  title: { color: isDark ? '#60a5fa' : '#1d4ed8', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
+                                  date: { color: isDark ? '#ffffff' : '#0f172a', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                 },
                                 align: 'center',
                               }
@@ -1882,21 +2131,19 @@ export default function CriticalStockPage() {
                               name: 'ROP Dot',
                               coord: [ropExhaustLabel, 0],
                               symbol: 'circle',
-                              symbolSize: 14,
+                              symbolSize: 12,
                               itemStyle: {
-                                color: '#2563eb',
-                                borderColor: '#fff',
-                                borderWidth: 2.5,
-                                shadowColor: 'rgba(37,99,235,0.7)',
-                                shadowBlur: 10,
+                                color: '#3b82f6',
+                                borderColor: '#ffffff',
+                                borderWidth: 2,
                               },
                               label: { show: false }
                             }
                           );
                         }
 
-                        if (safetyBreachLabel && safetyBreachLabel !== ropExhaustLabel) {
-                          const yPopupSS = yMax * 0.32;
+                        if (safetyBreachLabel && safetyBreachLabel !== ropExhaustLabel && visibleLines.breach) {
+                          const yPopupSS = yMax * 0.58;
                           markLineData.push([
                             {
                               coord: [safetyBreachLabel, 0],
@@ -1907,21 +2154,19 @@ export default function CriticalStockPage() {
                               },
                               label: { show: false }
                             },
-                            { coord: [safetyBreachLabel, yMax * 1.02] }
+                            { coord: [safetyBreachLabel, yMax] }
                           ]);
                           markPointData.push(
                             {
                               name: 'Safety Stock Breach Label',
                               coord: [safetyBreachLabel, yPopupSS],
-                              symbol: 'roundRect',
-                              symbolSize: [115, 36],
+                              symbol: 'rect',
+                              symbolSize: [118, 34],
                               symbolOffset: [0, 0],
                               itemStyle: {
-                                color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                color: isDark ? '#0f172a' : '#ffffff',
                                 borderColor: '#d97706',
                                 borderWidth: 1.5,
-                                shadowColor: 'rgba(217,119,6,0.3)',
-                                shadowBlur: 10,
                               },
                               label: {
                                 show: true,
@@ -1931,8 +2176,8 @@ export default function CriticalStockPage() {
                                   `{date|${safetyBreachLabel}}`,
                                 ].join('\n'),
                                 rich: {
-                                  title: { color: '#d97706', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                  date: { color: isDark ? '#fde68a' : '#b45309', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                  title: { color: isDark ? '#fbbf24' : '#b45309', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
+                                  date: { color: isDark ? '#ffffff' : '#0f172a', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                 },
                                 align: 'center',
                               }
@@ -1941,13 +2186,11 @@ export default function CriticalStockPage() {
                               name: 'Safety Stock Breach Dot',
                               coord: [safetyBreachLabel, 0],
                               symbol: 'circle',
-                              symbolSize: 14,
+                              symbolSize: 12,
                               itemStyle: {
-                                color: '#f59e0b',
-                                borderColor: '#fff',
-                                borderWidth: 2.5,
-                                shadowColor: 'rgba(245,158,11,0.7)',
-                                shadowBlur: 10,
+                                color: '#d97706',
+                                borderColor: '#ffffff',
+                                borderWidth: 2,
                               },
                               label: { show: false }
                             }
@@ -1956,7 +2199,7 @@ export default function CriticalStockPage() {
 
                         const BULAN_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
                         const currentMonthLabel = `${BULAN_SHORT[currentTodayMonth - 1]} '${String(currentTodayYear).slice(2)}`;
-                        if (chartData.labels.includes(currentMonthLabel)) {
+                        if (visibleLines.today && chartData.labels.includes(currentMonthLabel)) {
                           markLineData.push([
                             {
                               coord: [currentMonthLabel, 0],
@@ -1973,27 +2216,38 @@ export default function CriticalStockPage() {
                                 color: isDark ? '#cbd5e1' : '#475569',
                                 fontSize: 10,
                                 fontWeight: 'bold',
-                                backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
+                                backgroundColor: isDark ? '#0f172a' : '#f8fafc',
+                                borderColor: isDark ? '#334155' : '#cbd5e1',
+                                borderWidth: 1,
                                 padding: [3, 6],
-                                borderRadius: 4
+                                borderRadius: 0
                               }
                             },
-                            { coord: [currentMonthLabel, yMax * 1.02] }
+                            { coord: [currentMonthLabel, yMax] }
                           ]);
                         }
 
-                        if (showChartWithPO) {
+                        if (showChartWithPO && visibleLines.gr) {
                           const activePOsToRender = (referenceItem.active_pos && referenceItem.active_pos.length > 0)
                             ? referenceItem.active_pos
                             : (poLabel ? [{ po_number: null, jumlah_dipesan: referenceItem.jumlah_dipesan || 0, tanggal_rencana_pengiriman: referenceItem.tanggal_rencana_pengiriman || null }] : []);
 
-                          activePOsToRender.forEach((po, poIdx) => {
+                          const poByMonthMap = new Map<string, { label: string; qty: number }>();
+                          activePOsToRender.forEach(po => {
                             if (!po.tanggal_rencana_pengiriman) return;
                             const dPO = new Date(po.tanggal_rencana_pengiriman);
                             const pLabel = `${BULAN_SHORT[dPO.getMonth()]} '${String(dPO.getFullYear()).slice(2)}`;
-                            if (!chartData.labels.includes(pLabel)) return;
+                            if (chartData.labels.includes(pLabel)) {
+                              if (!poByMonthMap.has(pLabel)) {
+                                poByMonthMap.set(pLabel, { label: pLabel, qty: 0 });
+                              }
+                              poByMonthMap.get(pLabel)!.qty += Number(po.jumlah_dipesan) || 0;
+                            }
+                          });
 
-                            const yPopupPO = yMax * (0.76 - (poIdx * 0.12));
+                          Array.from(poByMonthMap.values()).forEach((poGroup, poIdx) => {
+                            const pLabel = poGroup.label;
+                            const yPopupPO = yMax * (poIdx % 2 === 0 ? 0.82 : 0.68);
                             markLineData.push([
                               {
                                 coord: [pLabel, 0],
@@ -2004,32 +2258,30 @@ export default function CriticalStockPage() {
                                 },
                                 label: { show: false }
                               },
-                              { coord: [pLabel, yMax * 1.02] }
+                              { coord: [pLabel, yMax] }
                             ]);
                             markPointData.push(
                               {
                                 name: `PO Masuk Saldo Label ${poIdx}`,
                                 coord: [pLabel, yPopupPO],
-                                symbol: 'roundRect',
-                                symbolSize: [100, 36],
+                                symbol: 'rect',
+                                symbolSize: [96, 32],
                                 symbolOffset: [0, 0],
                                 itemStyle: {
-                                  color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                  color: isDark ? '#0f172a' : '#ffffff',
                                   borderColor: '#10b981',
                                   borderWidth: 1.5,
-                                  shadowColor: 'rgba(16,185,129,0.3)',
-                                  shadowBlur: 10,
                                 },
                                 label: {
                                   show: true,
                                   position: 'inside',
                                   formatter: [
                                     `{title|Rencana GR}`,
-                                    `{date|${pLabel} (+${po.jumlah_dipesan.toLocaleString('id-ID')})}`,
+                                    `{date|${pLabel} (+${poGroup.qty.toLocaleString('id-ID')})}`,
                                   ].join('\n'),
                                   rich: {
-                                    title: { color: '#059669', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                    date: { color: isDark ? '#a7f3d0' : '#047857', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                    title: { color: isDark ? '#34d399' : '#047857', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
+                                    date: { color: isDark ? '#ffffff' : '#0f172a', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                   },
                                   align: 'center',
                                 }
@@ -2038,13 +2290,11 @@ export default function CriticalStockPage() {
                                 name: `PO Masuk Saldo Dot ${poIdx}`,
                                 coord: [pLabel, 0],
                                 symbol: 'circle',
-                                symbolSize: 14,
+                                symbolSize: 12,
                                 itemStyle: {
                                   color: '#10b981',
-                                  borderColor: '#fff',
-                                  borderWidth: 2.5,
-                                  shadowColor: 'rgba(16,185,129,0.7)',
-                                  shadowBlur: 10,
+                                  borderColor: '#ffffff',
+                                  borderWidth: 2,
                                 },
                                 label: { show: false }
                               }
@@ -2052,7 +2302,82 @@ export default function CriticalStockPage() {
                           });
                         }
 
-                        if (safetyBreachLabel && poLabel && showChartWithPO && chartData.labels.includes(safetyBreachLabel) && chartData.labels.includes(poLabel)) {
+                        // 8. Riwayat Goods Receipt (Historis 101 ke C013) - Mode Saldo
+                        if (visibleLines.gr && referenceItem.gr_history && referenceItem.gr_history.length > 0) {
+                          const monthNamesGR = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+                          const grByMonthMap = new Map<string, { label: string; qty: number }>();
+                          referenceItem.gr_history.forEach(gr => {
+                            if (!gr.tanggal) return;
+                            const grDate = new Date(gr.tanggal);
+                            const grMo = grDate.getMonth();
+                            const grYr = grDate.getFullYear();
+                            const grLabel = `${monthNamesGR[grMo]} '${String(grYr).slice(2)}`;
+                            if (chartData.labels.includes(grLabel)) {
+                              if (!grByMonthMap.has(grLabel)) {
+                                grByMonthMap.set(grLabel, { label: grLabel, qty: 0 });
+                              }
+                              grByMonthMap.get(grLabel)!.qty += Math.abs(Number(gr.qty) || 0);
+                            }
+                          });
+
+                          Array.from(grByMonthMap.values()).forEach((grGroup, grIdx) => {
+                            const grLabel = grGroup.label;
+                            const yPopupGR = yMax * (grIdx % 2 === 0 ? 0.84 : 0.70);
+                            markLineData.push([
+                              {
+                                coord: [grLabel, 0],
+                                lineStyle: {
+                                  color: '#0284c7',
+                                  width: 2,
+                                  type: 'solid'
+                                },
+                                label: { show: false }
+                              },
+                              { coord: [grLabel, yMax] }
+                            ]);
+                            markPointData.push(
+                              {
+                                name: `Riwayat GR Saldo Label ${grIdx}`,
+                                coord: [grLabel, yPopupGR],
+                                symbol: 'rect',
+                                symbolSize: [96, 32],
+                                symbolOffset: [0, 0],
+                                itemStyle: {
+                                  color: isDark ? '#0f172a' : '#ffffff',
+                                  borderColor: '#0284c7',
+                                  borderWidth: 1.5,
+                                },
+                                label: {
+                                  show: true,
+                                  position: 'inside',
+                                  formatter: [
+                                    `{title|Riwayat GR}`,
+                                    `{date|${grLabel} (+${grGroup.qty.toLocaleString('id-ID')})}`,
+                                  ].join('\n'),
+                                  rich: {
+                                    title: { color: isDark ? '#38bdf8' : '#0369a1', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
+                                    date: { color: isDark ? '#ffffff' : '#0f172a', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                  },
+                                  align: 'center',
+                                }
+                              },
+                              {
+                                name: `Riwayat GR Saldo Dot ${grIdx}`,
+                                coord: [grLabel, 0],
+                                symbol: 'circle',
+                                symbolSize: 12,
+                                itemStyle: {
+                                  color: '#0284c7',
+                                  borderColor: '#ffffff',
+                                  borderWidth: 2,
+                                },
+                                label: { show: false }
+                              }
+                            );
+                          });
+                        }
+
+                        if (visibleLines.gr && safetyBreachLabel && poLabel && showChartWithPO && chartData.labels.includes(safetyBreachLabel) && chartData.labels.includes(poLabel)) {
                           const yGap = yMax * 0.48;
                           const idxStart = chartData.labels.indexOf(safetyBreachLabel);
                           const idxEnd = chartData.labels.indexOf(poLabel);
@@ -2077,9 +2402,7 @@ export default function CriticalStockPage() {
                                 fontSize: 8.5,
                                 fontFamily: 'inherit',
                                 padding: [1.5, 4],
-                                borderRadius: 6,
-                                shadowBlur: 8,
-                                shadowColor: 'rgba(239, 68, 68, 0.4)',
+                                borderRadius: 0,
                               }
                             },
                             {
@@ -2090,19 +2413,28 @@ export default function CriticalStockPage() {
                           ]);
                         }
                       } else {
-                        if (showChartWithPO) {
+                        if (showChartWithPO && visibleLines.gr) {
                           const BULAN_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
                           const activePOsToRender = (referenceItem.active_pos && referenceItem.active_pos.length > 0)
                             ? referenceItem.active_pos
                             : (poLabel ? [{ po_number: null, jumlah_dipesan: referenceItem.jumlah_dipesan || 0, tanggal_rencana_pengiriman: referenceItem.tanggal_rencana_pengiriman || null }] : []);
 
-                          activePOsToRender.forEach((po, poIdx) => {
+                          const poByMonthMap = new Map<string, { label: string; qty: number }>();
+                          activePOsToRender.forEach(po => {
                             if (!po.tanggal_rencana_pengiriman) return;
                             const dPO = new Date(po.tanggal_rencana_pengiriman);
                             const pLabel = `${BULAN_SHORT[dPO.getMonth()]} '${String(dPO.getFullYear()).slice(2)}`;
-                            if (!chartData.labels.includes(pLabel)) return;
+                            if (chartData.labels.includes(pLabel)) {
+                              if (!poByMonthMap.has(pLabel)) {
+                                poByMonthMap.set(pLabel, { label: pLabel, qty: 0 });
+                              }
+                              poByMonthMap.get(pLabel)!.qty += Number(po.jumlah_dipesan) || 0;
+                            }
+                          });
 
-                            const yPopupPO = yMax * (0.76 - (poIdx * 0.12));
+                          Array.from(poByMonthMap.values()).forEach((poGroup, poIdx) => {
+                            const pLabel = poGroup.label;
+                            const yPopupPO = yMax * (poIdx % 2 === 0 ? 0.82 : 0.68);
                             markLineData.push([
                               {
                                 coord: [pLabel, 0],
@@ -2113,32 +2445,30 @@ export default function CriticalStockPage() {
                                 },
                                 label: { show: false }
                               },
-                              { coord: [pLabel, yMax * 1.02] }
+                              { coord: [pLabel, yMax] }
                             ]);
                             markPointData.push(
                               {
                                 name: `PO Masuk Label ${poIdx}`,
                                 coord: [pLabel, yPopupPO],
-                                symbol: 'roundRect',
-                                symbolSize: [100, 36],
+                                symbol: 'rect',
+                                symbolSize: [96, 32],
                                 symbolOffset: [0, 0],
                                 itemStyle: {
-                                  color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                  color: isDark ? '#0f172a' : '#ffffff',
                                   borderColor: '#10b981',
                                   borderWidth: 1.5,
-                                  shadowColor: 'rgba(16,185,129,0.3)',
-                                  shadowBlur: 10,
                                 },
                                 label: {
                                   show: true,
                                   position: 'inside',
                                   formatter: [
                                     `{title|Rencana GR}`,
-                                    `{date|${pLabel} (+${po.jumlah_dipesan.toLocaleString('id-ID')})}`,
+                                    `{date|${pLabel} (+${poGroup.qty.toLocaleString('id-ID')})}`,
                                   ].join('\n'),
                                   rich: {
-                                    title: { color: '#059669', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                    date: { color: isDark ? '#a7f3d0' : '#047857', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                    title: { color: isDark ? '#34d399' : '#047857', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
+                                    date: { color: isDark ? '#ffffff' : '#0f172a', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                   },
                                   align: 'center',
                                 }
@@ -2147,13 +2477,11 @@ export default function CriticalStockPage() {
                                 name: `PO Masuk Dot ${poIdx}`,
                                 coord: [pLabel, 0],
                                 symbol: 'circle',
-                                symbolSize: 14,
+                                symbolSize: 12,
                                 itemStyle: {
                                   color: '#10b981',
-                                  borderColor: '#fff',
-                                  borderWidth: 2.5,
-                                  shadowColor: 'rgba(16,185,129,0.7)',
-                                  shadowBlur: 10,
+                                  borderColor: '#ffffff',
+                                  borderWidth: 2,
                                 },
                                 label: { show: false }
                               }
@@ -2161,8 +2489,85 @@ export default function CriticalStockPage() {
                           });
                         }
 
-                        const currentMonthLabel = "Jul '26";
-                        if (chartData.labels.includes(currentMonthLabel)) {
+                        // 8. Riwayat Goods Receipt (Historis 101 ke C013)
+                        if (visibleLines.gr && referenceItem.gr_history && referenceItem.gr_history.length > 0) {
+                          const monthNamesGR = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+                          const grByMonthMap = new Map<string, { label: string; qty: number }>();
+                          referenceItem.gr_history.forEach(gr => {
+                            if (!gr.tanggal) return;
+                            const grDate = new Date(gr.tanggal);
+                            const grMo = grDate.getMonth();
+                            const grYr = grDate.getFullYear();
+                            const grLabel = `${monthNamesGR[grMo]} '${String(grYr).slice(2)}`;
+                            if (chartData.labels.includes(grLabel)) {
+                              if (!grByMonthMap.has(grLabel)) {
+                                grByMonthMap.set(grLabel, { label: grLabel, qty: 0 });
+                              }
+                              grByMonthMap.get(grLabel)!.qty += Math.abs(Number(gr.qty) || 0);
+                            }
+                          });
+
+                          Array.from(grByMonthMap.values()).forEach((grGroup, grIdx) => {
+                            const grLabel = grGroup.label;
+                            const yPopupGR = yMax * (grIdx % 2 === 0 ? 0.84 : 0.70);
+                            markLineData.push([
+                              {
+                                coord: [grLabel, 0],
+                                lineStyle: {
+                                  color: '#0284c7',
+                                  width: 2,
+                                  type: 'solid'
+                                },
+                                label: { show: false }
+                              },
+                              { coord: [grLabel, yMax] }
+                            ]);
+                            markPointData.push(
+                              {
+                                name: `Riwayat GR Label ${grIdx}`,
+                                coord: [grLabel, yPopupGR],
+                                symbol: 'rect',
+                                symbolSize: [96, 32],
+                                symbolOffset: [0, 0],
+                                itemStyle: {
+                                  color: isDark ? '#0f172a' : '#ffffff',
+                                  borderColor: '#0284c7',
+                                  borderWidth: 1.5,
+                                },
+                                label: {
+                                  show: true,
+                                  position: 'inside',
+                                  formatter: [
+                                    `{title|Riwayat GR}`,
+                                    `{date|${grLabel} (+${grGroup.qty.toLocaleString('id-ID')})}`,
+                                  ].join('\n'),
+                                  rich: {
+                                    title: { color: isDark ? '#38bdf8' : '#0369a1', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
+                                    date: { color: isDark ? '#ffffff' : '#0f172a', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                  },
+                                  align: 'center',
+                                }
+                              },
+                              {
+                                name: `Riwayat GR Dot ${grIdx}`,
+                                coord: [grLabel, 0],
+                                symbol: 'circle',
+                                symbolSize: 12,
+                                itemStyle: {
+                                  color: '#0284c7',
+                                  borderColor: '#ffffff',
+                                  borderWidth: 2,
+                                },
+                                label: { show: false }
+                              }
+                            );
+                          });
+                        }
+
+                        const nowMonthDate = new Date();
+                        const monthNamesToday = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'];
+                        const currentMonthLabel = `${monthNamesToday[nowMonthDate.getMonth()]} '${String(nowMonthDate.getFullYear()).slice(2)}`;
+                        if (visibleLines.today && chartData.labels.includes(currentMonthLabel)) {
                           markLineData.push([
                             {
                               coord: [currentMonthLabel, 0],
@@ -2179,42 +2584,98 @@ export default function CriticalStockPage() {
                                 color: isDark ? '#cbd5e1' : '#475569',
                                 fontSize: 10,
                                 fontWeight: 'bold',
-                                backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
+                                backgroundColor: isDark ? '#0f172a' : '#f8fafc',
+                                borderColor: isDark ? '#334155' : '#cbd5e1',
+                                borderWidth: 1,
                                 padding: [3, 6],
-                                borderRadius: 4
+                                borderRadius: 0
                               }
                             },
-                            { coord: [currentMonthLabel, yMax * 1.02] }
+                            { coord: [currentMonthLabel, yMax] }
                           ]);
                         }
 
-                        if (exhaustLabel) {
-                          const yPopupEx = yMax * 0.62;
+                        // 9. PLAN HABIS (Garis Vertikal Ungu + Label)
+                        if (planExhaustLabel && visibleLines.plan && visibleLines.breach && chartData.labels.includes(planExhaustLabel)) {
+                          const yPopupPlan = yMax * 0.94;
+                          markLineData.push([
+                            {
+                              coord: [planExhaustLabel, 0],
+                              lineStyle: {
+                                color: '#8b5cf6',
+                                width: 2,
+                                type: 'solid',
+                              },
+                              label: { show: false }
+                            },
+                            { coord: [planExhaustLabel, yMax] }
+                          ]);
+                          markPointData.push(
+                            {
+                              name: 'Plan Habis Label',
+                              coord: [planExhaustLabel, yPopupPlan],
+                              symbol: 'rect',
+                              symbolSize: [88, 32],
+                              symbolOffset: [0, 0],
+                              itemStyle: {
+                                color: isDark ? '#0f172a' : '#ffffff',
+                                borderColor: '#8b5cf6',
+                                borderWidth: 1.5,
+                              },
+                              label: {
+                                show: true,
+                                position: 'inside',
+                                formatter: [
+                                  `{title|PLAN HABIS}`,
+                                  `{date|${planExhaustLabel}}`,
+                                ].join('\n'),
+                                rich: {
+                                  title: { color: isDark ? '#c084fc' : '#7e22ce', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
+                                  date: { color: isDark ? '#ffffff' : '#0f172a', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                },
+                                align: 'center',
+                              }
+                            },
+                            {
+                              name: 'Plan Habis Dot',
+                              coord: [planExhaustLabel, 0],
+                              symbol: 'circle',
+                              symbolSize: 12,
+                              itemStyle: {
+                                color: '#8b5cf6',
+                                borderColor: '#ffffff',
+                                borderWidth: 2,
+                              },
+                              label: { show: false }
+                            }
+                          );
+                        }
+
+                        if (exhaustLabel && visibleLines.breach) {
+                          const yPopupEx = yMax * 0.60;
                           markLineData.push([
                             {
                               coord: [exhaustLabel, 0],
                               lineStyle: {
-                                color: '#ef4444',
+                                color: '#e11d48',
                                 width: 2,
                                 type: 'solid'
                               },
                               label: { show: false }
                             },
-                            { coord: [exhaustLabel, yMax * 1.02] }
+                            { coord: [exhaustLabel, yMax] }
                           ]);
                           markPointData.push(
                             {
                               name: 'Stok Habis Label',
                               coord: [exhaustLabel, yPopupEx],
-                              symbol: 'roundRect',
-                              symbolSize: [90, 36],
+                              symbol: 'rect',
+                              symbolSize: [88, 32],
                               symbolOffset: [0, 0],
                               itemStyle: {
-                                color: isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.99)',
+                                color: isDark ? '#0f172a' : '#ffffff',
                                 borderColor: '#e11d48',
                                 borderWidth: 1.5,
-                                shadowColor: 'rgba(225,29,72,0.3)',
-                                shadowBlur: 10,
                               },
                               label: {
                                 show: true,
@@ -2224,8 +2685,8 @@ export default function CriticalStockPage() {
                                   `{date|${exhaustLabel}}`,
                                 ].join('\n'),
                                 rich: {
-                                  title: { color: '#e11d48', fontSize: 9, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' },
-                                  date: { color: isDark ? '#fca5a5' : '#be123c', fontSize: 10, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
+                                  title: { color: isDark ? '#fb7185' : '#be123c', fontSize: 8.5, fontWeight: '700', fontFamily: 'inherit', lineHeight: 12, align: 'center' },
+                                  date: { color: isDark ? '#ffffff' : '#0f172a', fontSize: 9.5, fontWeight: '800', fontFamily: 'inherit', lineHeight: 14, align: 'center' }
                                 },
                                 align: 'center',
                               }
@@ -2234,21 +2695,19 @@ export default function CriticalStockPage() {
                               name: 'Stok Habis Dot',
                               coord: [exhaustLabel, 0],
                               symbol: 'circle',
-                              symbolSize: 14,
+                              symbolSize: 12,
                               itemStyle: {
                                 color: '#e11d48',
-                                borderColor: '#fff',
-                                borderWidth: 2.5,
-                                shadowColor: 'rgba(225,29,72,0.7)',
-                                shadowBlur: 10,
+                                borderColor: '#ffffff',
+                                borderWidth: 2,
                               },
                               label: { show: false }
                             }
                           );
                         }
 
-                        if (exhaustLabel && poLabel && showChartWithPO && chartData.labels.includes(exhaustLabel) && chartData.labels.includes(poLabel)) {
-                          const yGap = yMax * 0.48;
+                        if (visibleLines.gr && exhaustLabel && poLabel && showChartWithPO && chartData.labels.includes(exhaustLabel) && chartData.labels.includes(poLabel)) {
+                          const yGap = yMax * 0.44;
                           const idxStart = chartData.labels.indexOf(exhaustLabel);
                           const idxEnd = chartData.labels.indexOf(poLabel);
                           const displayGap = (idxStart >= 0 && idxEnd >= 0) ? Math.abs(idxEnd - idxStart) : Math.abs(gapMonths ?? 1);
@@ -2272,9 +2731,7 @@ export default function CriticalStockPage() {
                                 fontSize: 8.5,
                                 fontFamily: 'inherit',
                                 padding: [1.5, 4],
-                                borderRadius: 6,
-                                shadowBlur: 8,
-                                shadowColor: 'rgba(239, 68, 68, 0.4)',
+                                borderRadius: 0,
                               }
                             },
                             {
@@ -2304,21 +2761,24 @@ export default function CriticalStockPage() {
                   {
                     name: 'Plan Terkoreksi (Non-Saldo)',
                     type: 'line',
-                    smooth: true,
-                    smoothMonotone: 'x',
-                    symbol: 'none',
+                    smooth: false,
+                    showSymbol: visibleLines.correctedNonSaldo,
+                    symbol: 'circle',
+                    symbolSize: 4,
                     lineStyle: {
                       color: '#ef4444',
-                      width: 2,
+                      width: 2.5,
                       type: 'dashed',
-                      shadowColor: 'rgba(239,68,68,0.3)',
-                      shadowBlur: 4,
-                      shadowOffsetY: 2,
+                      opacity: visibleLines.correctedNonSaldo ? 1 : 0,
                     },
-                    itemStyle: { color: '#ef4444' },
+                    itemStyle: {
+                      color: '#ef4444',
+                      borderColor: '#ffffff',
+                      borderWidth: 1.5,
+                    },
                     emphasis: { disabled: true },
-                    z: 1,
-                    data: chartData.correctedNonSaldo,
+                    z: 4,
+                    data: visibleLines.correctedNonSaldo ? chartData.correctedNonSaldo : [],
                   },
                 ],
               }}
@@ -2326,6 +2786,8 @@ export default function CriticalStockPage() {
               className="chart-wrapper-el"
               opts={{ renderer: 'svg' }}
             />
+          );
+        })()}
           </div>
         </div>
 
@@ -2358,11 +2820,11 @@ export default function CriticalStockPage() {
             </div>
 
             <div
-              onClick={() => setFilterStatus(prev => prev.length === 1 && prev[0] === 'BELUM PO' ? [] : ['BELUM PO'])}
+              onClick={() => setFilterStatus([])}
               className="cursor-pointer transition-transform hover:scale-[1.02] active:scale-[0.98]"
-              title="Klik untuk memfilter status Belum PO"
+              title="Klik untuk menampilkan seluruh material"
             >
-              <KpiCard label="Belum PO" value={countReorder} borderColor="#3b82f6" ledStatus={countReorder > 0 ? "blue" : "green"} sparkData={[1, 2, 1, 3, 2, 2]} />
+              <KpiCard label="Total Material" value={aggregatedData.length} borderColor="var(--color-steel-border)" ledStatus="blue" sparkData={[10, 11, 12, 12, 13, 13]} />
             </div>
           </div>
 
@@ -2434,19 +2896,10 @@ export default function CriticalStockPage() {
                     itemHeight: 12,
                     textStyle: { color: ct.legendText, fontSize: 10.5, fontWeight: '700' },
                     formatter: (name: string) => {
-                      const itemVal = filteredData.filter(d => {
-                        const ss = d.safety_stock ?? 0;
-                        const rop = d.rop ?? 0;
-                        const sPo = (d as any).status_po;
-                        if (name === 'Kritis') return d.current_stock <= ss || sPo === 'KRITIS';
-                        if (name === 'Waspada') return d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
-                        if (name === 'Reorder') return d.current_stock <= rop && sPo === 'BELUM PO';
-                        const isKritis = d.current_stock <= ss || sPo === 'KRITIS';
-                        const isWaspada = d.current_stock > ss && (d.current_stock <= rop || sPo === 'WASPADA');
-                        const isReorder = d.current_stock <= rop && sPo === 'BELUM PO';
-                        return !isKritis && !isWaspada && !isReorder;
-                      }).length;
-                      return `${name}: ${itemVal}`;
+                      if (name === 'Kritis') return `Kritis: ${countKritis}`;
+                      if (name === 'Waspada') return `Waspada: ${countWaspada}`;
+                      if (name === 'Aman') return `Aman: ${countAman}`;
+                      return name;
                     }
                   },
                   series: [
@@ -2507,23 +2960,6 @@ export default function CriticalStockPage() {
                             shadowOffsetX: 2,
                             shadowOffsetY: 6,
                             shadowColor: 'rgba(211, 84, 0, 0.4)'
-                          },
-                        },
-                        {
-                          value: countReorder,
-                          name: 'Reorder',
-                          itemStyle: {
-                            color: {
-                              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-                              colorStops: [
-                                { offset: 0, color: '#60a5fa' },
-                                { offset: 1, color: '#2563eb' }
-                              ]
-                            },
-                            shadowBlur: 10,
-                            shadowOffsetX: 2,
-                            shadowOffsetY: 6,
-                            shadowColor: 'rgba(37, 99, 235, 0.4)'
                           },
                         },
                         {
@@ -2787,16 +3223,16 @@ export default function CriticalStockPage() {
             <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
               <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>2. Habis (Plan)</span>
               <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
-                Stok Saat Ini / Target Pemakaian Bulanan
+                Bulan GR Terakhir + (Qty GR / Target Plan Bulanan)
               </code>
-              Estimasi waktu stok habis jika pemakaian barang tepat sesuai target rencana perawatan baku.
+              Estimasi waktu stok habis dari penerimaan barang (GR) terakhir jika pemakaian tepat sesuai target rencana perawatan baku.
             </div>
             <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
               <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>3. Habis (Tanpa PO / Riwayat)</span>
               <code className="text-[10px] px-1 py-0.5 rounded font-mono block mb-1" style={{ backgroundColor: 'rgba(0,0,0,0.06)', color: 'var(--color-on-surface)' }}>
-                Stok Saat Ini / Rata-Rata Pemakaian Riil
+                Stok Saat Ini / Laju Konsumsi Riil (Run Rate)
               </code>
-              Estimasi waktu stok habis berdasarkan laju konsumsi barang yang pernah terjadi di lapangan tanpa tambahan barang baru.
+              Estimasi waktu stok habis berdasarkan saldo fisik saat ini dibagi rata-rata laju konsumsi aktual riil tanpa tambahan pesanan baru.
             </div>
             <div className="p-2.5 rounded-lg border" style={{ backgroundColor: 'var(--color-background-metallic)', borderColor: 'var(--color-steel-border)' }}>
               <span className="font-semibold block mb-1" style={{ color: 'var(--color-on-surface)' }}>4. Gap Defisit (Bulan)</span>

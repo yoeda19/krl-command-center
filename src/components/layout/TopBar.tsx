@@ -4,11 +4,11 @@ import type { ThemeMode } from '../../types';
 import { useAppStore } from '../../store/useAppStore';
 
 const pageLabels: Record<string, string> = {
-  '/critical-stock': 'Availability Stok',
-  '/anomaly-stock': 'Anomali Stok',
-  '/progress-po': 'Progres PO & Transit',
-  '/slow-moving': 'Analisa Usia Stok',
-  '/work-order': 'Perawatan KRL',
+  '/critical-stock': 'Safety Stock Alert',
+  '/anomaly-stock': 'Anomaly Stock',
+  '/progress-po': 'Stock In Transit & On PO',
+  '/slow-moving': 'Slow-Moving & Dead Stock',
+  '/work-order': 'Maintenance Order Integration',
   '/composition': 'Komposisi Rangkaian',
   '/admin-panel': 'Panel Admin',
   '/audit-log': 'Log Audit',

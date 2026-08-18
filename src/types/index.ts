@@ -7,18 +7,29 @@ export type ThemeMode = 'dark' | 'light';
 export type PropulsiType = 'VVVF' | 'Rheostatik';
 export type JenisKereta = 'TC' | 'M1' | 'M2' | 'T' | 'T6';
 export type SeriKereta = 'JR205' | 'CLI125' | 'CLI225' | 'Metro' | 'KFW' | 'EA203';
-export type TipePerawatan = 'P1' | 'P3' | 'P6' | 'P12' | 'P24' | 'P48' | 'PB Ganti Keping' | 'PB Bubut Roda' | 'GCU' | 'PB PLH';
-export type PelaksanaanStatus = 'Rencana' | 'Sedang Dirawat' | 'Selesai';
+export type TipePerawatan = 'P1-1' | 'P1-2' | 'P1-3' | 'P1-4' | 'P1-5' | 'P1' | 'P3' | 'P6' | 'P12' | 'P24' | 'P48' | 'PB Ganti Keping' | 'PB Bubut Roda' | 'GCU' | 'PB PLH';
+export type PelaksanaanStatus = 'Rencana' | 'Proses Perawatan' | 'Sedang Dirawat' | 'Selesai';
 export type PemenuhStatus = 'Outstanding' | 'Fulfilled';
 export type ProcurementStatus =
   | 'Dalam Pengadaan'
   | 'Proses Evaluasi'
   | 'Proses PR & Approval'
   | 'Proses PO'
+  | 'Partially GR'
   | 'Goods Inspection'
   | 'Goods Receipt (GR)';
 export type RisikoLevel = 'Rendah' | 'Sedang' | 'Tinggi';
 export type AgingKategori = 'Fresh' | 'Slow-Moving' | 'At Risk' | 'Dead Stock' | 'Stock Out';
+
+export interface ProcurementTermin {
+  id?: string;
+  termin_ke: number;
+  tanggal: string; // YYYY-MM-DD
+  qty: number;
+  nomor_gr?: string | null;
+  status: 'Diterima' | 'Rencana Tiba';
+  keterangan?: string;
+}
 
 // ── Interfaces ────────────────────────────────────────────
 
@@ -56,7 +67,8 @@ export interface CriticalStockItem {
   rencana_awal: number[];
   realisasi: (number | null)[];
   all_plans?: { tahun: number; bulan: number; plan_qty: number }[];
-  all_history?: { qty: number; tanggal: string | null; gudang?: string; order_no?: string | null }[];
+  all_history?: { qty: number; tanggal: string | null; gudang?: string; order_no?: string | null; movement_type?: string | null }[];
+  gr_history?: { tanggal: string; qty: number; order_no?: string | null }[];
   jumlah_dipesan?: number;
   safety_stock?: number;
   safety_stock_manual?: number;
@@ -140,6 +152,9 @@ export interface ProcurementItem {
   gr_release_date?: string | null;
   duration?: number | null;
   cost?: number | null;
+  termin_list?: ProcurementTermin[];
+  total_gr_qty?: number;
+  remaining_po_qty?: number;
 }
 
 export interface SlowMovingItem {

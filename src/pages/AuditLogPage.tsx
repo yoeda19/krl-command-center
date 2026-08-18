@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import PageWrapper from '../components/layout/PageWrapper';
 import ExportButton from '../components/ui/ExportButton';
+import TableScrollWrapper from '../components/ui/TableScrollWrapper';
 import { getAuditLogs } from '../services/supabaseService';
 import { formatDateTime } from '../utils/calculations';
 import type { AuditLog } from '../types';
@@ -178,7 +179,7 @@ export default function AuditLogPage() {
 
       {/* Full Table */}
       <div className="tactile-card rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
+        <TableScrollWrapper maxHeight="600px">
           <table className="w-full text-left border-collapse min-w-[1000px] data-table">
             <thead>
               <tr style={{ backgroundColor: 'var(--color-primary-container)' }}>
@@ -221,7 +222,7 @@ export default function AuditLogPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </TableScrollWrapper>
         <div className="h-4 border-t" style={{ borderColor: 'var(--color-steel-border)', backgroundColor: 'var(--color-background-metallic)' }} />
       </div>
     </PageWrapper>

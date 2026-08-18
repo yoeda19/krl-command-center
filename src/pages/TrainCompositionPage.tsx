@@ -150,7 +150,7 @@ export default function TrainCompositionPage() {
   });
 
   // Get active selected KRL Trainset
-  const selectedTrain = filteredTrainsets.find(t => t.id === selectedTrainId);
+  const selectedTrain = filteredTrainsets.find(t => t.id === selectedTrainId) || filteredTrainsets[0];
   const coaches = selectedTrain 
     ? equipment.filter(e => e.level === 2 && e.parent_id === selectedTrain.id)
     : [];

@@ -207,6 +207,30 @@ body {
 }
 .data-table tbody tr:hover { background-color: var(--color-surface-container-high) !important; }
 
+/* Sticky Table Headers (Semua Tabel) */
+thead,
+table thead {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background-color: var(--color-primary-container);
+}
+
+thead th,
+table thead th,
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background-color: inherit;
+}
+
+thead th[class*="sticky"],
+table thead th[class*="sticky"],
+.data-table thead th[class*="sticky"] {
+  z-index: 30 !important;
+}
+
 .badge-kritis { background-color: rgba(220,38,38,0.08); border: 1px solid rgba(220,38,38,0.25); color: #dc2626; font-weight: 600; }
 .badge-waspada { background-color: rgba(217,119,6,0.08); border: 1px solid rgba(217,119,6,0.25); color: #d97706; font-weight: 600; }
 .badge-aman { background-color: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.25); color: #059669; font-weight: 600; }

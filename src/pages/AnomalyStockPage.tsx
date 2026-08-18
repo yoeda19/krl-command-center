@@ -272,8 +272,11 @@ export default function AnomalyStockPage() {
         }
         totalPlan += pQty;
 
-        // Actual (up to July 2026)
-        const isFuture = m.year > 2026 || (m.year === 2026 && m.month > 7);
+        // Actual (dinamis hingga bulan berjalan)
+        const now = new Date();
+        const nowYear = now.getFullYear();
+        const nowMonth = now.getMonth() + 1;
+        const isFuture = m.year > nowYear || (m.year === nowYear && m.month > nowMonth);
         if (!isFuture) {
           const hist = refItem.all_history?.filter(h => {
             if (!h.tanggal) return false;
@@ -363,8 +366,11 @@ export default function AnomalyStockPage() {
           const pQty = p ? p.plan_qty : 0;
           totalPlan += pQty;
 
-          // Actual (up to July 2026)
-          const isFuture = m.year > 2026 || (m.year === 2026 && m.month > 7);
+          // Actual (dinamis hingga bulan berjalan)
+          const now = new Date();
+          const nowYear = now.getFullYear();
+          const nowMonth = now.getMonth() + 1;
+          const isFuture = m.year > nowYear || (m.year === nowYear && m.month > nowMonth);
           if (!isFuture) {
             const hist = refItem.all_history?.filter(h => {
               if (!h.tanggal) return false;
@@ -407,8 +413,11 @@ export default function AnomalyStockPage() {
         plan_qty = p ? p.plan_qty : 0;
       }
 
-      // Actual (null for future months)
-      const isFuture = m.year > 2026 || (m.year === 2026 && m.month > 7);
+      // Actual (null untuk bulan yang akan datang)
+      const now = new Date();
+      const nowYear = now.getFullYear();
+      const nowMonth = now.getMonth() + 1;
+      const isFuture = m.year > nowYear || (m.year === nowYear && m.month > nowMonth);
       let actual_qty: number | null = null;
       if (!isFuture) {
         const hist = referenceItem.all_history?.filter(h => {
@@ -461,8 +470,11 @@ export default function AnomalyStockPage() {
     });
 
     const actuals = rangeMonths.map(m => {
-      // Future month (after July 2026)
-      if (m.year > 2026 || (m.year === 2026 && m.month > 7)) {
+      // Future month (after current month)
+      const now = new Date();
+      const nowYear = now.getFullYear();
+      const nowMonth = now.getMonth() + 1;
+      if (m.year > nowYear || (m.year === nowYear && m.month > nowMonth)) {
         return null;
       }
       
@@ -1126,21 +1138,25 @@ export default function AnomalyStockPage() {
                     data: chartData.actuals,
                     ...(() => {
                       const markLineData: any[] = [];
-                      const currentMonthLabel = "Jul '26";
+                      const now = new Date();
+                      const BULAN_SHORT = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Ags','Sep','Okt','Nov','Des'];
+                      const currentMonthLabel = `${BULAN_SHORT[now.getMonth()]} '${String(now.getFullYear()).slice(2)}`;
                       if (chartData.labels.includes(currentMonthLabel)) {
                         markLineData.push({
                           xAxis: currentMonthLabel,
-                          lineStyle: { color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.3)', width: 1, type: 'dashed' },
+                          lineStyle: { color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.4)', width: 1.5, type: 'solid' },
                           label: {
                             show: true,
                             position: 'end',
-                            formatter: 'Bulan Ini',
+                            formatter: 'Hari Ini',
                             color: isDark ? '#cbd5e1' : '#475569',
                             fontSize: 10,
                             fontWeight: 'bold',
-                            backgroundColor: isDark ? 'rgba(30,41,59,0.85)' : 'rgba(241,245,249,0.85)',
-                            padding: [2, 4],
-                            borderRadius: 2
+                            backgroundColor: isDark ? '#0f172a' : '#f8fafc',
+                            borderColor: isDark ? '#334155' : '#cbd5e1',
+                            borderWidth: 1,
+                            padding: [3, 6],
+                            borderRadius: 0
                           }
                         });
                       }

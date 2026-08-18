@@ -3,7 +3,7 @@ import type {
   FleetMetrics, CriticalStockItem, SafetyStockItem,
   ProcurementItem, SlowMovingItem, MaintenanceSchedule,
   WorkOrder, AuditLog, AdminParameter, MonthlyPlan, MaintenanceBomConfig,
-  RestockItem, AgingKategori, ProcurementStatus
+  RestockItem, AgingKategori, ProcurementStatus, ProcurementTermin
 } from '../types';
 
 // ── IndexedDB Cache Helper (High Capacity Storage) ────────
@@ -58,17 +58,61 @@ async function idbSet(key: string, value: any): Promise<boolean> {
   }
 }
 
+const RECENT_HISTORY_CACHE_KEY = 'skcd_recent_history_cache_v16';
+
 export async function clearIndexedDBCache(): Promise<void> {
   cachedEquipmentData = null;
-  const cacheKey = 'skcd_recent_history_cache_v13';
+  const keys = [
+    'skcd_recent_history_cache_v10',
+    'skcd_recent_history_cache_v11',
+    'skcd_recent_history_cache_v12',
+    'skcd_recent_history_cache_v13',
+    'skcd_recent_history_cache_v14',
+    'skcd_recent_history_cache_v15',
+    'skcd_recent_history_cache_v16',
+    'skcd_equipment_master_cache'
+  ];
   try {
     const db = await getIDB();
     const tx = db.transaction(STORE_NAME, 'readwrite');
-    tx.objectStore(STORE_NAME).delete(cacheKey);
+    const store = tx.objectStore(STORE_NAME);
+    keys.forEach(k => store.delete(k));
   } catch {}
   if (typeof window !== 'undefined') {
-    localStorage.removeItem(cacheKey);
+    keys.forEach(k => localStorage.removeItem(k));
   }
+}
+
+export async function fetchAllRows<T = any>(
+  tableName: string,
+  selectCols: string = '*',
+  queryBuilder?: (query: any) => any
+): Promise<T[]> {
+  let allRows: T[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    let query = supabase.from(tableName).select(selectCols);
+    if (queryBuilder) {
+      query = queryBuilder(query);
+    }
+    const { data, error } = await query.range(from, to);
+    if (error || !data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allRows = allRows.concat(data as T[]);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
+  }
+  return allRows;
 }
 
 // ── 1. FLEET METRICS ──────────────────────────────────────
@@ -91,18 +135,17 @@ export async function getFleetMetrics(): Promise<FleetMetrics> {
       };
     }
 
-    const { data: allEquipment } = await supabase
-      .from('equipment_master')
-      .select('id, parent_id, level');
+    const allEquipment = await getAllEquipment();
 
-    const { data: activeOrders } = await supabase
-      .from('orders')
-      .select('equipment_id')
-      .not('status', 'eq', 'Selesai')
-      .not('status', 'eq', 'Closed')
-      .not('status', 'eq', 'Completed')
-      .not('status', 'eq', 'CLSD')
-      .not('status', 'eq', 'TECO');
+    const activeOrders = await fetchAllRows<{ equipment_id: string }>(
+      'orders',
+      'equipment_id',
+      q => q.not('status', 'eq', 'Selesai')
+            .not('status', 'eq', 'Closed')
+            .not('status', 'eq', 'Completed')
+            .not('status', 'eq', 'CLSD')
+            .not('status', 'eq', 'TECO')
+    );
 
     if (!allEquipment || allEquipment.length === 0) {
       return { total_fleet: 0, siap_dinas: 0, in_maintenance: 0, tidak_beroperasi: 0, efisiensi_perawatan: 0 };
@@ -200,14 +243,14 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
 
   const { data: adminParams } = await supabase
     .from('procurement_progress')
-    .select('nomor_material, plan_lead_time, tanggal_rencana_pengiriman, jumlah_dipesan, status, tanggal_gr, gr_release_date, po_release_date, tanggal_po, po_number, nomor_po');
+    .select('*');
 
   // Caching mechanism for recent_history (cutoff dari Januari 2025)
-  let history: { id: number; nomor_material: string; qty: number; tanggal: string | null; gudang: string; order_no: string | null; harga_satuan?: number }[] = [];
+  let history: { id: number; nomor_material: string; qty: number; tanggal: string | null; gudang: string; order_no: string | null; harga_satuan?: number; movement_type?: string | null }[] = [];
   const cutoffStr = '2025-01-01';
 
   try {
-    const cacheKey = 'skcd_recent_history_cache_v13';
+    const cacheKey = RECENT_HISTORY_CACHE_KEY;
     let cachedData: any[] = [];
     const idbCached = await idbGet<any[]>(cacheKey);
     if (idbCached && Array.isArray(idbCached)) {
@@ -253,7 +296,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
           const to = from + pageSize - 1;
           const { data: pageData, error: dbErr } = await supabase
             .from('recent_history')
-            .select('id, nomor_material, qty, tanggal, gudang, order_no, harga_satuan')
+            .select('id, nomor_material, qty, tanggal, gudang, order_no, harga_satuan, movement_type')
             .gte('tanggal', queryStartStr)
             .in('nomor_material', chunk)
             .range(from, to);
@@ -317,7 +360,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
       const to = from + pageSize - 1;
       const { data: pageData, error: dbErr } = await supabase
         .from('recent_history')
-        .select('id, nomor_material, qty, tanggal, gudang, order_no, harga_satuan')
+        .select('id, nomor_material, qty, tanggal, gudang, order_no, harga_satuan, movement_type')
         .gte('tanggal', cutoffStr)
         .range(from, to);
 
@@ -336,9 +379,32 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
     history = fallbackData;
   }
 
-  const { data: monthlyPlans } = await supabase
-    .from('monthly_absorption_plans')
-    .select('*');
+  // Fetch all monthly absorption plans using pagination loop (to bypass default 1000 limit)
+  let allMonthlyPlans: any[] = [];
+  let planPage = 0;
+  const planPageSize = 1000;
+  let hasMorePlans = true;
+
+  while (hasMorePlans) {
+    const from = planPage * planPageSize;
+    const to = from + planPageSize - 1;
+    const { data: pagePlans, error: planErr } = await supabase
+      .from('monthly_absorption_plans')
+      .select('*')
+      .range(from, to);
+
+    if (planErr || !pagePlans || pagePlans.length === 0) {
+      hasMorePlans = false;
+    } else {
+      allMonthlyPlans = allMonthlyPlans.concat(pagePlans);
+      if (pagePlans.length < planPageSize) {
+        hasMorePlans = false;
+      } else {
+        planPage++;
+      }
+    }
+  }
+  const monthlyPlans = allMonthlyPlans;
 
   const result: CriticalStockItem[] = [];
 
@@ -347,7 +413,19 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
     const activeParams = adminParams?.filter(p => p.nomor_material === mat.nomor_material && p.status !== 'Goods Receipt (GR)') || [];
     const anyParams = adminParams?.filter(p => p.nomor_material === mat.nomor_material) || [];
     const paramsToUse = activeParams.length > 0 ? activeParams : anyParams;
-    const totalJumlahDipesan = activeParams.reduce((sum, p) => sum + (Number(p.jumlah_dipesan) || 0), 0);
+
+    const totalJumlahDipesan = activeParams.reduce((sum, p) => {
+      let termin_list: any[] = [];
+      if (Array.isArray(p.termin_list)) {
+        termin_list = p.termin_list;
+      } else if (p.keterangan && typeof p.keterangan === 'string' && p.keterangan.trim().startsWith('[')) {
+        try { termin_list = JSON.parse(p.keterangan); } catch(e) {}
+      }
+      const totalDipesan = Number(p.jumlah_dipesan) || 0;
+      const totalGR = termin_list.filter(t => t.status === 'Diterima').reduce((s, t) => s + (Number(t.qty) || 0), 0);
+      const remaining = Number(p.remaining_po_qty) || Math.max(0, totalDipesan - totalGR);
+      return sum + (totalGR > 0 ? remaining : totalDipesan);
+    }, 0);
 
     let deliveryDateStr: string | null = null;
     activeParams.forEach(p => {
@@ -426,15 +504,23 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
 
     const now = new Date();
 
+    // Ekstrak riwayat Goods Receipt (GR 101 ke C013) untuk material ini
+    const matGRs = matHistory.filter(h => h.movement_type === '101' || (h.gudang === 'C013' && Number(h.qty) > 0));
+    const grHistory = matGRs.map(h => ({
+      tanggal: h.tanggal || '',
+      qty: Math.abs(Number(h.qty) || 0),
+      order_no: h.order_no
+    }));
+
     warehouses.forEach(wh => {
-      // History spesifik gudang ini
-      const whHistory = matHistory.filter(h => h.gudang === wh.gudang);
+      // History penyerapan spesifik gudang ini (abaikan mutasi penerimaan 101)
+      const whHistory = matHistory.filter(h => h.gudang === wh.gudang && h.movement_type !== '101');
 
       // Hitung Laju Konsumsi Aktual (CR_actual) per gudang dari history 12 bulan terakhir
       const cutoff12 = new Date();
       cutoff12.setMonth(cutoff12.getMonth() - 12);
       const whHistory12 = whHistory.filter(h => h.tanggal && new Date(h.tanggal) >= cutoff12);
-      const totalQty = whHistory12.reduce((sum, h) => sum + (h.qty || 0), 0);
+      const totalQty = whHistory12.reduce((sum, h) => sum + Math.abs(h.qty || 0), 0);
       const cr_actual = totalQty > 0 ? Math.round((totalQty / 12) * 10) / 10 : 0;
 
       // Plan bulanan untuk bulan ini (dengan fallback jika bukan C013)
@@ -505,7 +591,7 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
             const txDate = new Date(h.tanggal);
             return txDate.getFullYear() === targetYr && (txDate.getMonth() + 1) === targetMo;
           });
-          const sumQty = matchedTx.reduce((s, h) => s + (h.qty || 0), 0);
+          const sumQty = matchedTx.reduce((s, h) => s + Math.abs(h.qty || 0), 0);
           monthlyRealisasi[idx] = sumQty > 0 ? sumQty : null;
         }
       }
@@ -549,15 +635,28 @@ export async function getCriticalStockData(): Promise<CriticalStockItem[]> {
             };
           });
         })(),
-        all_history: whHistory.map(h => ({ qty: h.qty, tanggal: h.tanggal, gudang: h.gudang, order_no: h.order_no })),
+        all_history: whHistory.map(h => ({ qty: Math.abs(h.qty), tanggal: h.tanggal, gudang: h.gudang, order_no: h.order_no, movement_type: h.movement_type })),
+        gr_history: grHistory,
         tanggal_rencana_pengiriman: deliveryDateStr,
         jumlah_dipesan: totalJumlahDipesan || (paramsToUse[0]?.jumlah_dipesan ? Number(paramsToUse[0]?.jumlah_dipesan) : 0),
-        active_pos: activeParams.map(p => ({
-          po_number: p.nomor_po || p.po_number || null,
-          jumlah_dipesan: Number(p.jumlah_dipesan) || 0,
-          tanggal_rencana_pengiriman: p.tanggal_rencana_pengiriman || p.tanggal_gr || p.gr_release_date || p.po_release_date || p.tanggal_po || null,
-          status: p.status || 'Dalam Pengadaan'
-        })),
+        active_pos: activeParams.map(p => {
+          let termin_list: any[] = [];
+          if (Array.isArray(p.termin_list)) {
+            termin_list = p.termin_list;
+          } else if (p.keterangan && typeof p.keterangan === 'string' && p.keterangan.trim().startsWith('[')) {
+            try { termin_list = JSON.parse(p.keterangan); } catch(e) {}
+          }
+          const totalDipesan = Number(p.jumlah_dipesan) || 0;
+          const totalGR = termin_list.filter(t => t.status === 'Diterima').reduce((s, t) => s + (Number(t.qty) || 0), 0);
+          const remaining = Number(p.remaining_po_qty) || Math.max(0, totalDipesan - totalGR);
+
+          return {
+            po_number: p.nomor_po || p.po_number || null,
+            jumlah_dipesan: totalGR > 0 ? remaining : totalDipesan,
+            tanggal_rencana_pengiriman: p.tanggal_rencana_pengiriman || p.tanggal_gr || p.gr_release_date || p.po_release_date || p.tanggal_po || null,
+            status: p.status || 'Dalam Pengadaan'
+          };
+        }),
       });
     });
   });
@@ -666,6 +765,33 @@ export async function getProcurementData(): Promise<ProcurementItem[]> {
       }
     }
 
+    let termin_list: ProcurementTermin[] = [];
+    if (item.keterangan && typeof item.keterangan === 'string' && item.keterangan.trim().startsWith('[')) {
+      try {
+        termin_list = JSON.parse(item.keterangan);
+      } catch (e) {}
+    } else if (Array.isArray(item.termin_list)) {
+      termin_list = item.termin_list;
+    }
+
+    const totalDipesan = Number(item.jumlah_dipesan) || 0;
+    let total_gr_qty = 0;
+    if (termin_list.length > 0) {
+      total_gr_qty = termin_list
+        .filter(t => t.status === 'Diterima')
+        .reduce((sum, t) => sum + (Number(t.qty) || 0), 0);
+    } else if (gr_release_date) {
+      total_gr_qty = totalDipesan;
+    }
+
+    const remaining_po_qty = Math.max(0, totalDipesan - total_gr_qty);
+
+    if (totalDipesan > 0 && total_gr_qty > 0 && remaining_po_qty > 0) {
+      status = 'Partially GR';
+    } else if (totalDipesan > 0 && total_gr_qty >= totalDipesan) {
+      status = 'Goods Receipt (GR)';
+    }
+
     return {
       ...item,
       vendor_sap,
@@ -674,7 +800,10 @@ export async function getProcurementData(): Promise<ProcurementItem[]> {
       po_release_date,
       gr_release_date,
       tanggal_rencana_pengiriman,
-      status
+      status,
+      termin_list,
+      total_gr_qty,
+      remaining_po_qty
     };
   }) as ProcurementItem[];
 }
@@ -717,7 +846,7 @@ export async function getSlowMovingData(): Promise<SlowMovingItem[]> {
 
   if (!materials) return [];
 
-  let history: any[] | null = await idbGet<any[]>('skcd_recent_history_cache_v13');
+  let history: any[] | null = await idbGet<any[]>(RECENT_HISTORY_CACHE_KEY);
   if (!history || history.length === 0) {
     const matNos = materials.map(m => String(m.nomor_material).trim());
     if (matNos.length > 0) {
@@ -823,19 +952,44 @@ export async function getSlowMovingData(): Promise<SlowMovingItem[]> {
 export async function getRestockData(): Promise<RestockItem[]> {
   const { data: materials } = await supabase
     .from('master_materials')
-    .select('nomor_material');
+    .select('nomor_material, nama_material, satuan');
 
   if (!materials || materials.length === 0) return [];
+  const matMap = new Map(materials.map(m => [m.nomor_material, m]));
+
+  // 1 Pintu: Ambil data riwayat Restock (101 / GR) langsung dari recent_history
+  const grData = await fetchAllRows(
+    'recent_history',
+    '*',
+    q => q.or('movement_type.eq.101,and(gudang.eq.C013,qty.gt.0)').order('tanggal', { ascending: false })
+  );
+
+  if (grData && grData.length > 0) {
+    return grData.map((h: any) => {
+      const mat = matMap.get(h.nomor_material);
+      return {
+        id: h.id,
+        tanggal: h.tanggal,
+        nomor_material: h.nomor_material,
+        nama_material: mat?.nama_material || h.nomor_material,
+        qty: Math.abs(Number(h.qty) || 0),
+        satuan: mat?.satuan || 'PC',
+        amount: Number(h.amount) || 0,
+        gudang: h.gudang || 'C013'
+      };
+    }) as RestockItem[];
+  }
+
+  // Fallback ke tabel restock legacy jika belum ada transaksi 101 di recent_history
   const matIds = materials.map(m => m.nomor_material);
+  const legacyData = await fetchAllRows(
+    'restock',
+    '*',
+    q => q.in('nomor_material', matIds).order('tanggal', { ascending: false })
+  );
 
-  const { data, error } = await supabase
-    .from('restock')
-    .select('*')
-    .in('nomor_material', matIds)
-    .order('tanggal', { ascending: false });
-
-  if (error || !data) return [];
-  return data as RestockItem[];
+  if (!legacyData || legacyData.length === 0) return [];
+  return legacyData as RestockItem[];
 }
 
 export interface MaterialTransactionSummary {
@@ -923,9 +1077,44 @@ export async function getMaterialTransactionSummaryMap(): Promise<Record<string,
 
 // ── 6. MAINTENANCE SCHEDULE & WORK ORDERS ──────────────────
 export async function getMaintenanceSchedule(): Promise<MaintenanceSchedule[]> {
+  let allData: MaintenanceSchedule[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from('maintenance_schedule')
+      .select('*')
+      .order('tanggal_rencana', { ascending: true })
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+
+    if (error || !data || data.length === 0) {
+      hasMore = false;
+    } else {
+      allData = allData.concat(data as MaintenanceSchedule[]);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    }
+  }
+
+  return allData;
+}
+
+export async function getMaintenanceScheduleForMonth(month: number, year: number): Promise<MaintenanceSchedule[]> {
+  const mStr = String(month + 1).padStart(2, '0');
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const startDate = `${year}-${mStr}-01`;
+  const endDate = `${year}-${mStr}-${String(lastDay).padStart(2, '0')}`;
+
   const { data, error } = await supabase
     .from('maintenance_schedule')
     .select('*')
+    .gte('tanggal_rencana', startDate)
+    .lte('tanggal_rencana', endDate)
     .order('tanggal_rencana', { ascending: true });
 
   if (error || !data) return [];
@@ -1076,6 +1265,24 @@ export async function getRealSAPOrders(): Promise<{ order_no: string; descriptio
     .select('order_no, description')
     .order('order_no', { ascending: true })
     .limit(200); // limit to prevent large payloads
+  if (error || !data) return [];
+  return data;
+}
+
+export async function getRealOrdersForMonth(month: number, year: number): Promise<{ order_no: string; description: string; description2?: string; order_date?: string; status?: string }[]> {
+  const startStr = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const nextMonth = month === 11 ? 0 : month + 1;
+  const nextYear = month === 11 ? year + 1 : year;
+  const endStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-01`;
+
+  const { data, error } = await supabase
+    .from('orders')
+    .select('order_no, description, description2, order_date, status')
+    .gte('order_date', startStr)
+    .lt('order_date', endStr)
+    .order('order_date', { ascending: true })
+    .limit(2000);
+
   if (error || !data) return [];
   return data;
 }
